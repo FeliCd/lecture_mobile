@@ -1,0 +1,7 @@
+{
+  "APP_ENV": "production",
+  "APPS_SCRIPT_URL": "",
+  "GOOGLE_SERVER_CLIENT_ID": "",
+  "GOOGLE_IOS_CLIENT_ID": "",
+  "STUDENT_CHECKIN_URL": ""
+}
