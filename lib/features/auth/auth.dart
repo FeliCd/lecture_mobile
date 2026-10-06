@@ -32,15 +32,28 @@ class GoogleIdentity implements IdentityProvider {
   Future<void> _initialize() =>
       _initialization ??= GoogleSignIn.instance.initialize(
         serverClientId: AppConfig.serverClientId,
-        clientId: AppConfig.iosClientId.isEmpty ? null : AppConfig.iosClientId,
+        clientId:
+            defaultTargetPlatform == TargetPlatform.iOS &&
+                AppConfig.iosClientId.isNotEmpty
+            ? AppConfig.iosClientId
+            : null,
       );
   @override
   Future<String?> signIn({bool silently = false}) async {
     await _initialize();
+    if (kDebugMode) debugPrint('[GoogleAuth] Sign-in started');
     final account = silently
         ? await GoogleSignIn.instance.attemptLightweightAuthentication()
         : await GoogleSignIn.instance.authenticate();
-    return account?.authentication.idToken;
+    if (account == null) return null;
+    final idToken = account.authentication.idToken;
+    if (idToken == null || idToken.isEmpty) {
+      throw const AppFailure(
+        'Google did not return an identity token. Check the Web/server client ID configuration.',
+      );
+    }
+    if (kDebugMode) debugPrint('[GoogleAuth] Google credential received');
+    return idToken;
   }
 
   @override
@@ -126,10 +139,12 @@ class AuthController extends ChangeNotifier {
       }
       if (candidate == null) throw const AppFailure('Sign-in was cancelled.');
       _token = candidate;
+      if (kDebugMode) debugPrint('[GoogleAuth] Backend verification requested');
       final verified = await repository!.profile();
       if (generation != _generation) return;
       await vault.write(candidate);
       lecturer = verified;
+      if (kDebugMode) debugPrint('[Auth] Verified lecturer session created');
     } catch (e) {
       _token = null;
       lecturer = null;

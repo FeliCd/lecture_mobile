@@ -112,6 +112,11 @@ class AppsScriptApi implements ApplicationApi {
 }
 
 AppFailure mapBackendError(String raw) {
+  if (raw.contains('Email chưa có trong Lecturers')) {
+    return const AppFailure(
+      'Your Google account is not registered as a lecturer, or its lecturer record is duplicated. Contact your administrator.',
+    );
+  }
   if (raw.contains('Phiên Google') || raw.contains('Cần đăng nhập')) {
     return const AppFailure(
       'Your session expired. Sign in again.',

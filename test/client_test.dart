@@ -6,6 +6,16 @@ import 'package:lecturer_companion/api/client.dart';
 import 'package:lecturer_companion/core/config.dart';
 
 void main() {
+  test(
+    'Unregistered lecturer rejection remains distinct from resource permissions',
+    () {
+      final error = mapBackendError(
+        'Email chưa có trong Lecturers hoặc hồ sơ bị trùng. Liên hệ trưởng nhóm.',
+      );
+      expect(error.message, contains('not registered as a lecturer'));
+      expect(error.unauthenticated, false);
+    },
+  );
   const url = 'https://script.google.com/macros/s/test/exec';
   AppsScriptApi api(
     http.Client client, {

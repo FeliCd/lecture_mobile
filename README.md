@@ -16,7 +16,7 @@ Nếu cấu hình API/OAuth còn trống, app hiện **Setup required**. Điền
 
 ## Readiness
 
-The app and compatible API client are implemented. A build without configuration shows **Setup required**, never invented production data. Live sign-in needs a configured deployment and compatible native OAuth audience; these were not supplied. The backend currently verifies one lecturer OAuth audience. See [reference audit](docs/REFERENCE_AUDIT.md) before provisioning mobile access so desktop sign-in remains compatible.
+The app and compatible API client are implemented. A build without configuration shows **Setup required**. Android Debug and Web OAuth clients have been provisioned in the dedicated Cloud project. The new Apps Script backend is deployed with the mobile audience, and invalid-token rejection is verified live. Real school lecturer login remains untested; the new spreadsheet requires an authorized Lecturers record. See the [current setup report](docs/GOOGLE_AUTH_SETUP_REPORT.md) for verified configuration, tests and remaining work.
 
 ## Technology and architecture
 
@@ -53,7 +53,7 @@ OAuth client IDs and public URLs are configuration, not secrets. **Never put a G
 ## Authentication setup
 
 1. Register Android package `vn.edu.fpt.lecturer_companion` and the appropriate debug/release SHA fingerprints with Google OAuth. Use a web/server client for the token audience.
-2. The reference `authenticate_` accepts `GOOGLE_CLIENT_ID` only. Verify that this is a suitable server audience, or arrange a separately reviewed backend allowed-audience change. Do not replace the desktop audience blindly. The mobile repository does not modify that backend.
+2. The supplied `backend/apps_script/Code.gs` accepts the existing `GOOGLE_CLIENT_ID` and an additional `GOOGLE_MOBILE_CLIENT_ID`. Set the latter to the mobile Web client in the setup report and publish the updated Apps Script deployment. Keep the desktop and student client properties unchanged.
 3. Native Google Sign-In obtains an ID token. `profile` verifies it against Google and the Lecturers sheet. No local email/role determines access.
 4. After verification, the short-lived ID token is saved using platform secure storage (Android encrypted preferences/KeyStore, iOS Keychain). Restart restores only an unexpired token **and re-verifies the profile**. Expiry requests sign-in again; this MVP does not implement its own refresh-token exchange.
 5. Logout clears app credentials and native Google sign-in. HTTP 401 and recognized backend session-expiry errors remove all private routes. Failed secure deletion displays a retry message.
