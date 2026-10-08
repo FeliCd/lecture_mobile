@@ -116,6 +116,15 @@ class LoginScreen extends StatelessWidget {
                     onPressed: auth.busy ? null : auth.logout,
                     child: const Text('Clear saved sign-in'),
                   ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: auth.busy ? null : auth.loginDevDemo,
+                    icon: const Icon(Icons.developer_mode),
+                    label: const Text('Dev Demo Mode (Bypass Sign-In)'),
+                  ),
+                ),
                 const SizedBox(height: 20),
                 const Text(
                   'Access is verified by your institution. Only registered lecturers can continue.',
