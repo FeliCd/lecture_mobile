@@ -4,6 +4,10 @@ import '../api/repository.dart';
 import '../core/widgets.dart';
 import '../features/auth/auth.dart';
 import '../features/classes/class_screen.dart';
+import '../features/classes/roster_import_screen.dart';
+import '../features/schedule/fap_portal_screen.dart';
+import '../features/schedule/manual_schedule_sheet.dart';
+import '../features/schedule/ocr_scan_screen.dart';
 import '../features/sessions/session_screen.dart';
 import '../models/domain.dart';
 
@@ -68,6 +72,168 @@ class _LecturerShellState extends State<LecturerShell>
     if (mounted) setState(() => revision++);
   }
 
+  void showAddScheduleOptions(String term) {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Thêm thời khóa biểu',
+                style: Theme.of(ctx).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Theme.of(ctx).colorScheme.primaryContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.edit_note, color: Colors.deepOrange),
+                ),
+                title: const Text('Nhập thủ công', style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Điền mã môn, lớp, slot và phòng học'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  final added = await ManualScheduleSheet.show(
+                    context,
+                    repo: repo,
+                    lecturer: lecturer,
+                    defaultSemester: term,
+                  );
+                  if (added == true && mounted) setState(() => revision++);
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.document_scanner, color: Colors.teal),
+                ),
+                title: const Text('Quét ảnh lịch (OCR On-Device)',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Chụp từ camera hoặc ảnh màn hình lịch FAP'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  final added = await Navigator.of(context).push<bool>(
+                    MaterialPageRoute(
+                      builder: (_) => OcrScanScreen(
+                        repo: repo,
+                        lecturer: lecturer,
+                        semester: term,
+                      ),
+                    ),
+                  );
+                  if (added == true && mounted) setState(() => revision++);
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.language, color: Colors.blue),
+                ),
+                title: const Text('Nhập trực tiếp từ FAP Web',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Đăng nhập và trích xuất tự động qua WebView'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  final added = await Navigator.of(context).push<bool>(
+                    MaterialPageRoute(
+                      builder: (_) => FapPortalScreen(
+                        repo: repo,
+                        lecturer: lecturer,
+                        semester: term,
+                      ),
+                    ),
+                  );
+                  if (added == true && mounted) setState(() => revision++);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> confirmDeleteSchedule(Schedule s) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Xác nhận xóa lịch dạy'),
+        content: Text(
+          'Bạn có chắc chắn muốn xóa buổi học ${s.subjectCode} - Lớp ${s.classCode} vào Slot ${s.slot} không?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Xóa'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await repo.deleteSchedule(s.scheduleId);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Đã xóa buổi học ${s.subjectCode} - ${s.classCode}'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          setState(() => revision++);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Không thể xóa: ${e.toString().replaceAll("AppFailure: ", "")}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     const titles = [
@@ -81,6 +247,29 @@ class _LecturerShellState extends State<LecturerShell>
       appBar: AppBar(
         title: Text(titles[tab]),
         actions: [
+          if (tab == 1)
+            IconButton(
+              tooltip: 'Thêm thời khóa biểu',
+              icon: const Icon(Icons.add),
+              onPressed: () => showAddScheduleOptions(semester),
+            ),
+          if (tab == 2)
+            IconButton(
+              tooltip: 'Nhập SV từ file',
+              icon: const Icon(Icons.file_upload_outlined),
+              onPressed: () async {
+                final imported = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(
+                    builder: (_) => RosterImportScreen(
+                      repo: repo,
+                      lecturer: lecturer,
+                      defaultSemester: semester,
+                    ),
+                  ),
+                );
+                if (imported == true && mounted) setState(() => revision++);
+              },
+            ),
           if (tab != 4)
             IconButton(
               tooltip: 'Refresh',
@@ -245,13 +434,25 @@ class _LecturerShellState extends State<LecturerShell>
       now.day,
     ).subtract(Duration(days: week ? now.weekday - 1 : 0));
     return [
-      SegmentedButton<bool>(
-        segments: const [
-          ButtonSegment(value: false, label: Text('Today')),
-          ButtonSegment(value: true, label: Text('Week')),
+      Row(
+        children: [
+          Expanded(
+            child: SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('Today')),
+                ButtonSegment(value: true, label: Text('Week')),
+              ],
+              selected: {week},
+              onSelectionChanged: (value) => setState(() => week = value.single),
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            onPressed: () => showAddScheduleOptions(term),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Thêm lịch'),
+          ),
         ],
-        selected: {week},
-        onSelectionChanged: (value) => setState(() => week = value.single),
       ),
       const SizedBox(height: 16),
       const Text(
@@ -317,37 +518,67 @@ class _LecturerShellState extends State<LecturerShell>
               '${row.startTime} – ${row.endTime} · Slot ${row.slot}\n${row.room}',
             ),
             const SizedBox(height: 12),
-            if (sessions.length == 1)
-              FilledButton(
-                onPressed: cls == null
-                    ? null
-                    : () => openSession(cls, sessions.single),
-                child: Text('Open attendance · ${sessions.single.status}'),
-              )
-            else if (sessions.length > 1)
-              const Text(
-                'Multiple sessions found. Ask your administrator to resolve this conflict.',
-              )
-            else
-              FilledButton(
-                onPressed: cls == null
-                    ? null
-                    : () async {
-                        await Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => StartSessionScreen(
-                              repo: repo,
-                              lecturer: lecturer,
-                              cls: cls,
-                              schedule: row,
-                              date: date,
-                            ),
-                          ),
-                        );
-                        if (mounted) setState(() => revision++);
-                      },
-                child: const Text('Start attendance'),
-              ),
+            Row(
+              children: [
+                if (sessions.length == 1)
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: cls == null
+                          ? null
+                          : () => openSession(cls, sessions.single),
+                      child: Text('Open attendance · ${sessions.single.status}'),
+                    ),
+                  )
+                else if (sessions.length > 1)
+                  const Expanded(
+                    child: Text(
+                      'Multiple sessions found. Ask your administrator to resolve this conflict.',
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: cls == null
+                          ? null
+                          : () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => StartSessionScreen(
+                                    repo: repo,
+                                    lecturer: lecturer,
+                                    cls: cls,
+                                    schedule: row,
+                                    date: date,
+                                  ),
+                                ),
+                              );
+                              if (mounted) setState(() => revision++);
+                            },
+                      child: const Text('Start attendance'),
+                    ),
+                  ),
+                const SizedBox(width: 8),
+                IconButton.outlined(
+                  tooltip: 'Sửa lịch',
+                  icon: const Icon(Icons.edit_outlined, size: 20),
+                  onPressed: () async {
+                    final updated = await ManualScheduleSheet.show(
+                      context,
+                      repo: repo,
+                      lecturer: lecturer,
+                      defaultSemester: row.semester,
+                      initialSchedule: row,
+                    );
+                    if (updated == true && mounted) setState(() => revision++);
+                  },
+                ),
+                IconButton.outlined(
+                  tooltip: 'Xóa lịch',
+                  icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                  onPressed: () => confirmDeleteSchedule(row),
+                ),
+              ],
+            ),
             if (cls == null)
               const Text(
                 'A unique class mapping is required. Import the class roster in the attendance system.',
@@ -421,12 +652,35 @@ class _LecturerShellState extends State<LecturerShell>
         )
         .toList();
     return [
-      TextField(
-        decoration: const InputDecoration(
-          labelText: 'Search classes',
-          prefixIcon: Icon(Icons.search),
-        ),
-        onChanged: (v) => setState(() => query = v),
+      Row(
+        children: [
+          Expanded(
+            child: TextField(
+              decoration: const InputDecoration(
+                labelText: 'Search classes',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (v) => setState(() => query = v),
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.tonalIcon(
+            onPressed: () async {
+              final imported = await Navigator.of(context).push<bool>(
+                MaterialPageRoute(
+                  builder: (_) => RosterImportScreen(
+                    repo: repo,
+                    lecturer: lecturer,
+                    defaultSemester: semester,
+                  ),
+                ),
+              );
+              if (imported == true && mounted) setState(() => revision++);
+            },
+            icon: const Icon(Icons.file_upload_outlined, size: 18),
+            label: const Text('Nhập SV'),
+          ),
+        ],
       ),
       const SizedBox(height: 20),
       if (filtered.isEmpty) const MessagePanel(message: 'No classes found.'),
@@ -438,7 +692,36 @@ class _LecturerShellState extends State<LecturerShell>
             subtitle: Text(
               '${cls.semester}\n${data.sessions.where((s) => s.classId == cls.classId).length} attendance sessions',
             ),
-            trailing: const Icon(Icons.chevron_right),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: 'Nhập SV cho lớp này',
+                  icon: const Icon(Icons.file_upload_outlined),
+                  onPressed: () async {
+                    final target = ClassTarget(
+                      semester: cls.semester,
+                      subjectCode: cls.subjectCode,
+                      classCode: cls.classCode,
+                      subjectName: cls.subjectName,
+                      classId: cls.classId,
+                    );
+                    final imported = await Navigator.of(context).push<bool>(
+                      MaterialPageRoute(
+                        builder: (_) => RosterImportScreen(
+                          repo: repo,
+                          lecturer: lecturer,
+                          preselectedTarget: target,
+                          defaultSemester: cls.semester,
+                        ),
+                      ),
+                    );
+                    if (imported == true && mounted) setState(() => revision++);
+                  },
+                ),
+                const Icon(Icons.chevron_right),
+              ],
+            ),
             onTap: () => openClass(cls),
           ),
         ),

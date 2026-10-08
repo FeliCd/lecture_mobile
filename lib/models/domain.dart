@@ -1,8 +1,9 @@
 typedef Json = Map<String, dynamic>;
 String text(Json j, String key) => '${j[key] ?? ''}'.trim();
 int number(Json j, String key) => int.tryParse(text(j, key)) ?? 0;
+String normalizeCode(String value) => value.trim().toUpperCase();
 String mappingKey(String semester, String subject, String code) =>
-    [semester, subject, code].map((s) => s.trim().toUpperCase()).join('_');
+    [semester, subject, code].map(normalizeCode).join('_');
 
 class Lecturer {
   final String lecturerId, lecturerCode, fullName, email, department;
@@ -14,27 +15,48 @@ class Lecturer {
       department = text(j, 'department');
 }
 
-class TeachingClass {
+class ClassModel {
   final String classId,
       semester,
       subjectCode,
       subjectName,
       classCode,
       lecturerId;
-  TeachingClass.fromJson(Json j)
+  ClassModel({
+    required this.classId,
+    required this.semester,
+    required this.subjectCode,
+    required this.subjectName,
+    required this.classCode,
+    required this.lecturerId,
+  });
+
+  ClassModel.fromJson(Json j)
     : classId = text(j, 'classId'),
       semester = text(j, 'semester'),
       subjectCode = text(j, 'subjectCode'),
       subjectName = text(j, 'subjectName'),
       classCode = text(j, 'classCode'),
       lecturerId = text(j, 'lecturerId');
+
   String get key => mappingKey(semester, subjectCode, classCode);
   Json get rosterTarget => {
     'semester': semester,
     'subjectCode': subjectCode,
     'classCode': classCode,
   };
+
+  Json toJson() => {
+    'classId': classId,
+    'semester': semester,
+    'subjectCode': subjectCode,
+    'subjectName': subjectName,
+    'classCode': classCode,
+    'lecturerId': lecturerId,
+  };
 }
+
+typedef TeachingClass = ClassModel;
 
 class Student {
   final String studentId, studentCode, fullName, schoolEmail;
@@ -43,6 +65,95 @@ class Student {
       studentCode = text(j, 'studentCode'),
       fullName = text(j, 'fullName'),
       schoolEmail = text(j, 'schoolEmail');
+}
+
+class RosterStudent {
+  final String classCode;
+  final String studentCode;
+  final String fullName;
+  final String schoolEmail;
+
+  RosterStudent({
+    required this.classCode,
+    required this.studentCode,
+    required this.fullName,
+    this.schoolEmail = '',
+  });
+
+  RosterStudent.fromJson(Json j)
+    : classCode = text(j, 'classCode'),
+      studentCode = text(j, 'studentCode').isNotEmpty
+          ? text(j, 'studentCode')
+          : text(j, 'rollNumber'),
+      fullName = text(j, 'fullName'),
+      schoolEmail = text(j, 'schoolEmail').isNotEmpty
+          ? text(j, 'schoolEmail')
+          : text(j, 'email');
+
+  Json toJson() => {
+    'classCode': classCode,
+    'studentCode': studentCode,
+    'fullName': fullName,
+    'schoolEmail': schoolEmail,
+  };
+}
+
+class ClassTarget {
+  final String semester;
+  final String subjectCode;
+  final String classCode;
+  final String subjectName;
+  final String? classId;
+
+  ClassTarget({
+    required this.semester,
+    required this.subjectCode,
+    required this.classCode,
+    required this.subjectName,
+    this.classId,
+  });
+
+  String get key => mappingKey(semester, subjectCode, classCode);
+
+  bool matches(String sem, String subj, String cls) =>
+      normalizeCode(semester) == normalizeCode(sem) &&
+      normalizeCode(subjectCode) == normalizeCode(subj) &&
+      normalizeCode(classCode) == normalizeCode(cls);
+
+  Json toJson() => {
+    'semester': semester,
+    'subjectCode': subjectCode,
+    'classCode': classCode,
+    'subjectName': subjectName,
+    if (classId != null && classId!.isNotEmpty) 'classId': classId,
+  };
+}
+
+class FapImportDto {
+  final String semester;
+  final String subjectCode;
+  final String subjectName;
+  final String classCode;
+  final List<Schedule> schedules;
+  final List<RosterStudent> students;
+
+  FapImportDto({
+    required this.semester,
+    required this.subjectCode,
+    required this.subjectName,
+    required this.classCode,
+    this.schedules = const [],
+    this.students = const [],
+  });
+
+  Json toJson() => {
+    'semester': semester,
+    'subjectCode': subjectCode,
+    'subjectName': subjectName,
+    'classCode': classCode,
+    'schedules': schedules.map((s) => s.toJson()).toList(),
+    'students': students.map((s) => s.toJson()).toList(),
+  };
 }
 
 class Schedule {
@@ -54,8 +165,25 @@ class Schedule {
       classCode,
       startTime,
       endTime,
-      room;
+      room,
+      sourceType;
   final int dayOfWeek, slot;
+
+  Schedule({
+    required this.scheduleId,
+    required this.lecturerId,
+    required this.semester,
+    required this.subjectCode,
+    required this.subjectName,
+    required this.classCode,
+    required this.dayOfWeek,
+    required this.slot,
+    required this.startTime,
+    required this.endTime,
+    required this.room,
+    this.sourceType = 'MANUAL',
+  });
+
   Schedule.fromJson(Json j)
     : scheduleId = text(j, 'scheduleId'),
       lecturerId = text(j, 'lecturerId'),
@@ -66,9 +194,54 @@ class Schedule {
       startTime = text(j, 'startTime'),
       endTime = text(j, 'endTime'),
       room = text(j, 'room'),
+      sourceType = text(j, 'sourceType').isNotEmpty ? text(j, 'sourceType') : 'MANUAL',
       dayOfWeek = number(j, 'dayOfWeek'),
       slot = number(j, 'slot');
+
   String get key => mappingKey(semester, subjectCode, classCode);
+
+  Json toJson() => {
+    'scheduleId': scheduleId,
+    'lecturerId': lecturerId,
+    'semester': semester,
+    'subjectCode': subjectCode,
+    'subjectName': subjectName,
+    'classCode': classCode,
+    'dayOfWeek': dayOfWeek,
+    'slot': slot,
+    'startTime': startTime,
+    'endTime': endTime,
+    'room': room,
+    'sourceType': sourceType,
+  };
+
+  Schedule copyWith({
+    String? scheduleId,
+    String? lecturerId,
+    String? semester,
+    String? subjectCode,
+    String? subjectName,
+    String? classCode,
+    int? dayOfWeek,
+    int? slot,
+    String? startTime,
+    String? endTime,
+    String? room,
+    String? sourceType,
+  }) => Schedule(
+    scheduleId: scheduleId ?? this.scheduleId,
+    lecturerId: lecturerId ?? this.lecturerId,
+    semester: semester ?? this.semester,
+    subjectCode: subjectCode ?? this.subjectCode,
+    subjectName: subjectName ?? this.subjectName,
+    classCode: classCode ?? this.classCode,
+    dayOfWeek: dayOfWeek ?? this.dayOfWeek,
+    slot: slot ?? this.slot,
+    startTime: startTime ?? this.startTime,
+    endTime: endTime ?? this.endTime,
+    room: room ?? this.room,
+    sourceType: sourceType ?? this.sourceType,
+  );
 }
 
 class TeachingSession {

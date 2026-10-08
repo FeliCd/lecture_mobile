@@ -3,6 +3,7 @@ import '../../api/repository.dart';
 import '../../core/widgets.dart';
 import '../../models/domain.dart';
 import '../sessions/session_screen.dart';
+import 'roster_import_screen.dart';
 
 class ClassData {
   final List<Student> roster;
@@ -43,7 +44,35 @@ class _ClassScreenState extends State<ClassScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(widget.cls.classCode)),
+    appBar: AppBar(
+      title: Text(widget.cls.classCode),
+      actions: [
+        IconButton(
+          tooltip: 'Nhập danh sách SV',
+          icon: const Icon(Icons.file_upload_outlined),
+          onPressed: () async {
+            final target = ClassTarget(
+              semester: widget.cls.semester,
+              subjectCode: widget.cls.subjectCode,
+              classCode: widget.cls.classCode,
+              subjectName: widget.cls.subjectName,
+              classId: widget.cls.classId,
+            );
+            final imported = await Navigator.of(context).push<bool>(
+              MaterialPageRoute(
+                builder: (_) => RosterImportScreen(
+                  repo: widget.repo,
+                  lecturer: widget.lecturer,
+                  preselectedTarget: target,
+                  defaultSemester: widget.cls.semester,
+                ),
+              ),
+            );
+            if (imported == true && context.mounted) setState(() {});
+          },
+        ),
+      ],
+    ),
     body: SafeArea(
       child: AsyncPanel<ClassData>(
         load: load,

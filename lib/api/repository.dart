@@ -102,6 +102,88 @@ class LecturerRepository {
     'getRoster',
     cls.rosterTarget,
   )).map(Student.fromJson).toList();
+
+  Future<List<Schedule>> batchUpdateSchedules(List<Schedule> schedules) async {
+    final result = await api.call('batchUpdate', {
+      'sheet': 'Schedules',
+      'rows': schedules.map((s) => s.toJson()).toList(),
+    });
+    if (result is! List) return schedules;
+    return result.map((r) => Schedule.fromJson(Json.from(r as Map))).toList();
+  }
+
+  Future<void> deleteSchedule(String scheduleId) async {
+    await api.call('deleteRow', {
+      'sheet': 'Schedules',
+      'id': scheduleId,
+    });
+  }
+
+  Future<List<RosterStudent>> getRosterByTarget({
+    required String semester,
+    required String subjectCode,
+    required String classCode,
+  }) async {
+    final list = await rows('getRoster', {
+      'semester': semester,
+      'subjectCode': subjectCode,
+      'classCode': classCode,
+    });
+    return list.map(RosterStudent.fromJson).toList();
+  }
+
+  Future<Map<String, dynamic>> importRoster({
+    required String semester,
+    required String subjectCode,
+    required String classCode,
+    required List<RosterStudent> students,
+  }) async {
+    final result = await api.call('importRoster', {
+      'semester': semester,
+      'subjectCode': subjectCode,
+      'classCode': classCode,
+      'students': students.map((s) => s.toJson()).toList(),
+    });
+    if (result is! Map) {
+      throw const AppFailure('The server returned an invalid response for roster import.');
+    }
+    return Map<String, dynamic>.from(result);
+  }
+
+  Future<List<ClassTarget>> classTargets(String owner) async {
+    final ov = await overview(owner);
+    final map = <String, ClassTarget>{};
+
+    for (final c in ov.classes) {
+      final key = c.key;
+      map[key] = ClassTarget(
+        semester: c.semester,
+        subjectCode: c.subjectCode,
+        classCode: c.classCode,
+        subjectName: c.subjectName,
+        classId: c.classId,
+      );
+    }
+
+    for (final s in ov.schedules) {
+      final key = s.key;
+      if (!map.containsKey(key)) {
+        map[key] = ClassTarget(
+          semester: s.semester,
+          subjectCode: s.subjectCode,
+          classCode: s.classCode,
+          subjectName: s.subjectName,
+          classId: null,
+        );
+      }
+    }
+
+    final targets = map.values.toList()
+      ..sort((a, b) => '${a.semester} ${a.subjectCode} ${a.classCode}'
+          .compareTo('${b.semester} ${b.subjectCode} ${b.classCode}'));
+    return targets;
+  }
+
   Future<List<AttendanceRecord>> history(TeachingClass cls) async =>
       (await rows('getClassHistory', {
         'classId': cls.classId,

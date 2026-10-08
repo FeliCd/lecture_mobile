@@ -118,6 +118,13 @@ class FixtureApi implements ApplicationApi {
         return {'saved': true};
       case 'rotateToken':
         return {'saved': true};
+      case 'batchUpdate':
+        return payload['rows'] ?? [];
+      case 'deleteRow':
+        return {'saved': true};
+      case 'importRoster':
+        final list = (payload['students'] as List? ?? []);
+        return {'added': list.length, 'existing': 0, 'classId': 'class-new'};
       default:
         throw StateError('Unexpected test action: $action');
     }

@@ -11,6 +11,13 @@ dependencies:
   google_sign_in: ^7.2.0
   flutter_secure_storage: 9.2.4
   qr_flutter: ^4.1.0
+  google_mlkit_text_recognition: ^0.17.1
+  image_picker: ^1.2.4
+  file_picker: ^11.0.3
+  archive: ^4.3.0
+  xml: ^7.1.0
+  csv: ^8.0.0
+  webview_flutter: ^4.14.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
