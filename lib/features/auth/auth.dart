@@ -2,8 +2,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import '../../api/client.dart';
-import '../../api/dev_mock_api.dart';
 import '../../api/repository.dart';
 import '../../core/config.dart';
 import '../../models/domain.dart';
@@ -162,54 +160,23 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  Future<void> loginDevDemo() async {
-    if (busy) return;
-    busy = true;
-    error = null;
-    notifyListeners();
-    try {
-      final mockApi = DevMockApi();
-      repository = LecturerRepository(mockApi);
-      final profile = await repository!.profile();
-      lecturer = profile;
-      _token = 'dev-demo-token';
-    } catch (e) {
-      error = safeMessage(e);
-    } finally {
-      busy = false;
-      notifyListeners();
-    }
-  }
-
   Future<void> logout() async {
     _generation++;
-    final wasDemo = _token == 'dev-demo-token';
     lecturer = null;
     _token = null;
     error = null;
     busy = true;
     notifyListeners();
-    if (wasDemo && AppConfig.configured) {
-      repository = LecturerRepository(
-        AppsScriptApi(
-          url: AppConfig.apiUrl,
-          tokenProvider: token,
-          onUnauthorized: logout,
-        ),
-      );
+    try {
+      await vault.clear();
+    } catch (_) {
+      error =
+          'Unable to clear secure credentials. Retry logout before leaving this device.';
     }
-    if (!wasDemo) {
-      try {
-        await vault.clear();
-      } catch (_) {
-        error =
-            'Unable to clear secure credentials. Retry logout before leaving this device.';
-      }
-      try {
-        await identity.signOut();
-      } catch (_) {
-        error ??= 'Google sign-out could not finish. Retry logout.';
-      }
+    try {
+      await identity.signOut();
+    } catch (_) {
+      error ??= 'Google sign-out could not finish. Retry logout.';
     }
     busy = false;
     notifyListeners();
