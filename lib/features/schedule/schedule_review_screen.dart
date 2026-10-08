@@ -24,6 +24,7 @@ class ScheduleReviewScreen extends StatefulWidget {
 class _ScheduleReviewScreenState extends State<ScheduleReviewScreen> {
   late List<ParsedScheduleItem> items;
   bool _confirmedChecked = false;
+  bool _overwriteDuplicates = true;
   bool _saving = false;
   String? _errorMessage;
 
@@ -63,6 +64,138 @@ class _ScheduleReviewScreenState extends State<ScheduleReviewScreen> {
     setState(() {
       items.removeAt(index);
     });
+  }
+
+  String get _currentSemester {
+    if (widget.semester.isNotEmpty) return widget.semester;
+    if (items.isNotEmpty && items.first.semester.isNotEmpty) return items.first.semester;
+    return 'FA24';
+  }
+
+  Future<void> _confirmClearSemesterOnly() async {
+    final sem = _currentSemester;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Xóa lịch cũ của kỳ này'),
+          ],
+        ),
+        content: Text(
+          'Bạn có chắc muốn xóa tất cả lịch học của kỳ $sem hiện có trên hệ thống không?\n\n'
+          'Thao tác này giúp bạn dọn sạch các bản ghi cũ trước khi lưu.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Xóa lịch cũ'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      setState(() {
+        _saving = true;
+        _errorMessage = null;
+      });
+      try {
+        final ov = await widget.repo.overview(widget.lecturer.email);
+        final oldInSem = ov.schedules
+            .where((s) => s.semester.toUpperCase() == sem.toUpperCase())
+            .toList();
+        for (final s in oldInSem) {
+          await widget.repo.deleteSchedule(s.scheduleId);
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Đã dọn dẹp ${oldInSem.length} buổi học cũ của kỳ $sem.'),
+              backgroundColor: Colors.green.shade700,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'Lỗi khi xóa lịch: ${e.toString().replaceAll("AppFailure: ", "")}';
+          });
+        }
+      } finally {
+        if (mounted) setState(() => _saving = false);
+      }
+    }
+  }
+
+  Future<void> _clearSemesterAndSave() async {
+    final sem = _currentSemester;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Xóa lịch cũ & Lưu mới'),
+        content: Text(
+          'Hệ thống sẽ xóa tất cả các buổi học hiện có trong kỳ $sem, sau đó lưu lại danh sách ${items.length} buổi học mới này.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Xóa & Lưu'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() {
+      _saving = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final ov = await widget.repo.overview(widget.lecturer.email);
+      final oldInSem = ov.schedules
+          .where((s) => s.semester.toUpperCase() == sem.toUpperCase())
+          .toList();
+      for (final s in oldInSem) {
+        await widget.repo.deleteSchedule(s.scheduleId);
+      }
+
+      final schedules = items.map((it) => it.toSchedule(lecturerId: widget.lecturer.lecturerId)).toList();
+      await widget.repo.batchUpdateSchedules(schedules);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Đã làm sạch lịch cũ và lưu thành công ${schedules.length} buổi học!'),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        Navigator.of(context).pop(true);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _errorMessage = e.toString().replaceAll('AppFailure: ', '').replaceAll('Exception: ', '');
+        });
+      }
+    }
   }
 
   Future<void> _saveAll() async {
@@ -110,6 +243,29 @@ class _ScheduleReviewScreenState extends State<ScheduleReviewScreen> {
 
     try {
       final schedules = items.map((it) => it.toSchedule(lecturerId: widget.lecturer.lecturerId)).toList();
+
+      // Nếu bật tính năng tự động ghi đè / xóa trùng
+      if (_overwriteDuplicates) {
+        try {
+          final ov = await widget.repo.overview(widget.lecturer.email);
+          final toDelete = <Schedule>[];
+          for (final s in schedules) {
+            final dupes = ov.schedules.where((old) {
+              final sameSemester = old.semester.trim().toUpperCase() == s.semester.trim().toUpperCase();
+              final sameDayAndSlot = old.dayOfWeek == s.dayOfWeek && old.slot == s.slot;
+              return sameSemester && sameDayAndSlot;
+            }).toList();
+            toDelete.addAll(dupes);
+          }
+          final uniqueToDelete = {for (final d in toDelete) d.scheduleId: d}.values.toList();
+          for (final d in uniqueToDelete) {
+            await widget.repo.deleteSchedule(d.scheduleId);
+          }
+        } catch (_) {
+          // Tiếp tục cố gắng lưu nếu lỗi lúc dọn dẹp
+        }
+      }
+
       await widget.repo.batchUpdateSchedules(schedules);
 
       if (mounted) {
@@ -149,6 +305,11 @@ class _ScheduleReviewScreenState extends State<ScheduleReviewScreen> {
         title: const Text('Kiểm tra & Xác nhận OCR'),
         actions: [
           IconButton(
+            tooltip: 'Xóa toàn bộ lịch cũ của kỳ này',
+            icon: const Icon(Icons.delete_sweep_outlined),
+            onPressed: _saving ? null : _confirmClearSemesterOnly,
+          ),
+          IconButton(
             tooltip: 'Thêm buổi học',
             icon: const Icon(Icons.add_circle_outline),
             onPressed: _saving ? null : _addNewItem,
@@ -182,15 +343,30 @@ class _ScheduleReviewScreenState extends State<ScheduleReviewScreen> {
                   color: Theme.of(context).colorScheme.errorContainer,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _errorMessage!,
-                        style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer),
+                    Row(
+                      children: [
+                        Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _errorMessage!,
+                            style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    FilledButton.tonalIcon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.red.shade100,
+                        foregroundColor: Colors.red.shade900,
                       ),
+                      onPressed: _saving ? null : _clearSemesterAndSave,
+                      icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+                      label: const Text('Xóa lịch cũ của kỳ này & Lưu lại ngay'),
                     ),
                   ],
                 ),
@@ -381,6 +557,21 @@ class _ScheduleReviewScreenState extends State<ScheduleReviewScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 child: Column(
                   children: [
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      value: _overwriteDuplicates,
+                      onChanged: (val) => setState(() => _overwriteDuplicates = val ?? true),
+                      title: const Text(
+                        'Tự động ghi đè / xóa lịch cũ bị trùng',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: const Text(
+                        'Xóa các buổi cũ có cùng Thứ & Slot trước khi lưu mới',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
                       dense: true,

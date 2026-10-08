@@ -198,6 +198,101 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 
+  Future<void> _confirmClearSemester() async {
+    final semesterSchedules = widget.overview.schedules
+        .where((s) => widget.selectedSemester.isEmpty || s.semester == widget.selectedSemester)
+        .toList();
+
+    if (semesterSchedules.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Không có buổi học nào trong kỳ ${widget.selectedSemester.isNotEmpty ? widget.selectedSemester : "này"}.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Xóa toàn bộ lịch kỳ này'),
+          ],
+        ),
+        content: Text(
+          'Bạn có chắc chắn muốn xóa toàn bộ ${semesterSchedules.length} buổi học của kỳ '
+          '${widget.selectedSemester.isNotEmpty ? widget.selectedSemester : "hiện tại"} không?\n\n'
+          'Thao tác này giúp bạn làm sạch lịch cũ trước khi lưu lịch mới từ OCR.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Xóa tất cả'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Đang xóa toàn bộ lịch cũ...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      try {
+        for (final s in semesterSchedules) {
+          await widget.repo.deleteSchedule(s.scheduleId);
+        }
+        if (mounted) {
+          Navigator.of(context).pop(); // dismiss loading dialog
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Đã xóa thành công ${semesterSchedules.length} buổi học cũ!'),
+              backgroundColor: Colors.green.shade700,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          widget.onRefreshNeeded();
+        }
+      } catch (e) {
+        if (mounted) {
+          Navigator.of(context).pop(); // dismiss loading dialog
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Lỗi khi xóa: ${e.toString().replaceAll("AppFailure: ", "")}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          widget.onRefreshNeeded();
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = CampusClock.now();
@@ -314,13 +409,43 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 'Lịch dạy: ${dayLabels.firstWhere((d) => d.$1 == _selectedDayOfWeek).$2} · $targetDateStr',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
-              FilledButton.tonalIcon(
-                onPressed: () => _showAddOptions(context),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Thêm lịch'),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: () => _showAddOptions(context),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Thêm lịch'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert),
+                    tooltip: 'Tùy chọn lịch',
+                    onSelected: (val) {
+                      if (val == 'clear_semester') {
+                        _confirmClearSemester();
+                      }
+                    },
+                    itemBuilder: (ctx) => [
+                      PopupMenuItem(
+                        value: 'clear_semester',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_sweep_outlined, color: Colors.red.shade700),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Xóa tất cả lịch kỳ ${widget.selectedSemester.isNotEmpty ? widget.selectedSemester : "này"}',
+                              style: TextStyle(color: Colors.red.shade700),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),
