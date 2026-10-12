@@ -1,6 +1,6 @@
 {
   "APP_ENV": "development",
-  "APPS_SCRIPT_URL": "",
+  "APPS_SCRIPT_URL": "https://script.google.com/macros/s/AKfycby7XA1wOgPmX6-bJ-zhuQ8PIJXvtaoUx1aWOSEjfJaTNihE1ItC_LjWScpPX_qQO4NLwA/exec",
   "GOOGLE_SERVER_CLIENT_ID": "",
   "GOOGLE_IOS_CLIENT_ID": "",
   "STUDENT_CHECKIN_URL": ""

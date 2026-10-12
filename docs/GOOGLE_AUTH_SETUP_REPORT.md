@@ -1,5 +1,7 @@
 # GOOGLE AUTH CONTINUATION REPORT
 
+> Source Mobile hiện hành 11/10/2026: Google-only, 4 tab Hôm nay/Lịch dạy/Lớp học/Cập nhật, phiên từ lịch với duration 5/10/15/20/30 phút và phòng hiệu lực. Xem [MOBILE_UI_UX_REDESIGN_REPORT](MOBILE_UI_UX_REDESIGN_REPORT.md). Mô tả email/password, form phiên thủ công và deployment cũ trong tài liệu này là lịch sử, không chứng minh source mới đã được triển khai cloud.
+
 Updated 2026-10-06. Live deployment v1 and rejection of an invalid Google token verified. Real Google/lecturer login remains NOT TESTED.
 
 ## 1. Current Google Cloud Project

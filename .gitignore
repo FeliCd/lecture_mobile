@@ -43,6 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/.kotlin/
 
 # Widget Preview related
 .widget_preview/
@@ -55,3 +56,16 @@ android/key.properties
 *.keystore
 ios/Flutter/Google.local.xcconfig
 artifacts/
+node_modules/
+functions/lib/
+.env
+.env.*
+!.env.example
+functions/.secret.local
+config/lab2.production.json
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.firebase/
+config/lab2.free.json
+/web_checkin/public/config.js

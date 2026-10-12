@@ -1,45 +1,90 @@
-# FPT LECTURER MOBILE ARCHITECTURE PLAN
+# Kiến trúc hiện hành — 11/10/2026
 
-This plan was stated before implementation in the conversation after the reference audit.
+Mobile giảng viên, Desktop và Student Web đọc/ghi cùng workbook Sheets qua cùng Apps Script deployment. Source tại máy đã refactor; deployment thật cần migration theo [IMPLEMENTATION_REPORT](IMPLEMENTATION_REPORT.md). Mô tả cũ lưu trong [ARCHITECTURE_LEGACY](ARCHITECTURE_LEGACY.md).
 
-Selected technology: Flutter and Dart. This preserves the existing UI ecosystem, http transport, secure-storage package, qr_flutter renderer, model terminology and server contracts. Native Android/iOS hosts replace Windows. The standalone package is `lecturer_companion`; Android identifier `vn.edu.fpt.lecturer_companion`; iOS `vn.edu.fpt.lecturerCompanion`.
-
-```text
-Mobile screens → LecturerRepository → ApplicationApi / AppsScriptApi
-                                    → HTTPS Apps Script → existing Google Sheets
-Native Google Sign-In → ID token → backend identity/lecturer verification
-Secure vault → short-lived ID token; no plaintext cache or password
+```mermaid
+flowchart LR
+  M[Flutter Mobile] --> A[Firebase Auth]
+  W[Student Web Google] --> A
+  M -->|ID token / lab2Call| B[Apps Script]
+  W -->|Identity / QR| B
+  D[Desktop] -->|Google token / actions cũ| B
+  B -->|ownership / lock / batch| S[Shared Sheets]
+  T[Trigger mỗi phút] --> B
+  B -->|NEWS| R[RSS / Atom]
+  B -->|RESEARCH| P[Crossref / OpenAlex]
+  M -->|UID riêng| F[Firestore Article Library]
 ```
 
-## File-by-file ownership
+## Client và dữ liệu
 
-| Files | Responsibility |
-|---|---|
-| lib/main.dart | Composition and configured production client |
-| lib/app/app.dart | Auth boundary and login; navigator recreated on logout |
-| lib/app/shell.dart | Home, today/week schedule, class index, report index, profile; five bottom destinations |
-| lib/features/auth/auth.dart | Native identity adapter, secure vault, backend-verified auth state |
-| lib/features/classes/class_screen.dart | Class details, roster search, saved summary, student class history |
-| lib/features/sessions/session_screen.dart | Date confirmation and session detail |
-| lib/features/attendance/attendance_view.dart | Search/filter, server-confirmed corrections, completion/retry, report view |
-| lib/features/attendance/qr_screen.dart | QR expiry, regeneration, secret mode, foreground polling |
-| lib/api/client.dart | Strict HTTPS endpoint, token body, redirect policy, timeouts, safe error mapping |
-| lib/api/repository.dart | Actual action contracts, owner filtering, duplicate guards, write acknowledgments |
-| lib/models/domain.dart | Compatible DTOs, mapping key, campus time/date helpers |
-| lib/core/* | Environment, exceptions, Material theme, loading/error/empty components |
-| config/*.example.json | Separate development/production build configuration without credentials |
-| android/, ios/ | Independent platform projects, signing and native configuration |
-| test/ | Contract, business-flow, auth and phone-layout tests; fixtures never imported by production |
-| docs/ | Audit, architecture, acceptance and known deployment gaps |
+`main.dart` khởi động Firebase rồi `lab2/app.dart`: Riverpod/GoRouter, lecturer guard. `CampusRepository` chọn shared mode bằng config compile-time; `DesktopSync` gửi JSON, kiểm HTTPS endpoint/redirect, đọc `{ok,data,error}`, cache snapshot theo account. Sign-out đổi generation/clear cache. Full snapshot authorized thông thường30s; mutation refresh. Live/content read không kéo full snapshot.
 
-State strategy: AuthController is ChangeNotifier; async loaders hold server snapshots; widget state holds selected tab, semester, filters and forms. No extra state library. Mutation completion reloads server data; returned child routes refresh parents. No offline write queue. Secure vault stores only the ID token and never authorizes by its decoded claims; backend profile verification is required on restart. Expiry requires sign-in again; native SDK manages its own credentials, no copied desktop refresh-token exchange or client secret.
+UI: Hôm nay, Lịch dạy, Lớp học, Cập nhật. Lớp: Sinh viên, Điểm danh, Buổi học, Thống kê. Avatar mở tài khoản/công cụ import. OCR ML Kit tại máy; Excel/CSV preview/validation rồi gửi backend có quyền. Firestore chỉ thư viện `articleLibraries/{firebaseUid}/articles/{hash}`: owner verified email CRUD. Article cũ đọc được; contentType optional. Không mirror Students/Attendance vào Firestore.
 
-Attendance belongs to a server session and enrolled student. CLOSED corrections are permitted by the reference. EXCUSED cannot be submitted. RESET cannot be edited. Finalization closes first and then marks missing enrolled records absent; partial failure has an explicit retry action. Reports are derived from exactly these records. Session reports label inferred missing-row absences; class summaries show saved counts only, avoiding unsupported historical rates.
+## Luồng gọi backend
 
-QR retains the existing student website and security protocol. No phone-side student login, camera scanning, scraping or bypass. Rotate only after lecturer action; expiry hides the code until regeneration. Poll every 15 seconds only while foreground, without overlapping requests; hide QR on network uncertainty. Secret is displayed separately and never embedded in the URL.
+| Luồng | Caller → handler | Kiểm tra / dữ liệu |
+|---|---|---|
+| Bootstrap | DesktopSync → lab2Snapshot → lab2Handle_ | Firebase verified identity, map Lecturer, lớp thuộc quyền |
+| Chi tiết buổi | getTeachingOccurrence → lab2OccurrenceView_ | Resolve Schedules + ScheduleExceptions, ownership, server state/time; reconcile expired, không tạo phiên |
+| Tạo phiên | createClassSession / Desktop createSession → lab2CreateFromOccurrence_ | Authoritative occurrence/window, duration, ownership, lock; frozen roster/deadline; batch Sessions + Lab2SessionMeta; trùng OPEN trả phiên cũ |
+| Live | getAttendanceSessionLive → lab2Live_ | Owner lớp, reconcile expired; roster phiên, counts, revision/timestamps; không token/secret |
+| QR | getQrToken / rotateAttendanceQr | Owner, OPEN/deadline; secret tách URL; token TTL không kéo dài phiên |
+| Student Google | studentSession / studentCheckIn → studentContext_ | Verified email duy nhất khớp roster, enrollment/frozen roster, token/secret/expiry; không trả cả lớp |
+| Student ghi | handleStudentCheckIn_ | Verify trước lock, reread sau lock, batch Attendance; retry receipt gốc |
+| Chốt | closeAttendanceSession / closeSession / trigger → lab2Finalize_ | Cùng lock; thêm ABSENT còn thiếu theo roster snapshot, CLOSED idempotent |
+| Sửa điểm danh | updateAttendanceRecord / updateAttendance → lab2Correct_ | Owner, reason, bốn trạng thái; Attendance + AttendanceAudit atomic; server actor |
+| Import | importTimetable / importClassStudents | Validate tất cả rows và quyền; upsert/idempotent; không xóa roster cũ |
+| Ngoại lệ | saveScheduleException → lab2SaveException_ | schedule/date, owner, conflict; chặn nếu có session; Schedules nguyên bản |
+| Sửa sinh viên | updateClassStudent → lab2UpdateStudent_ | Name/email whitelist; MSSV bất biến, email unique/domain; profile chung cần admin; RosterAudit |
+| Cập nhật | getSubjectTopics / getSubjectUpdates | Môn từ Classes authoritative trước cache/network; filters/cursor/provenance |
+| Bookmark | ArticleLibrary → Firestore SDK | Rules owner UID/verified email, optional validated contentType, legacy fields |
 
-Design: Material 3, dark orange controls from the reference palette, cream background, cards instead of tables, safe areas, 48+ dp actions, search, status text plus color, pull-to-refresh, keyboard-aware correction sheet. Network screens have explicit loading/error/retry/empty content. Campus time is UTC+7 in one utility; date-only strings never undergo local timezone conversion.
+```mermaid
+sequenceDiagram
+  participant L as Lecturer Mobile
+  participant B as Apps Script
+  participant S as Sheets
+  participant W as Student Web
+  L->>B: getTeachingOccurrence + slot selector / verified token
+  B-->>L: readonly occurrence + server state/time
+  L->>B: Xác nhận createClassSession + selector + durationMinutes
+  B->>S: locked batch Session + roster + deadline
+  B-->>L: sessionId
+  L->>B: getQrToken
+  B-->>L: Web URL + expiry (secret riêng)
+  W->>B: studentSession + Google identity + QR
+  B-->>W: dữ liệu chính sinh viên và buổi
+  W->>B: studentCheckIn + confirmPresent
+  B->>S: lock, reread, validate, write Attendance
+  B-->>W: receipt (retry không thêm row)
+  L->>B: getAttendanceSessionLive (8s foreground)
+  B-->>L: counts, roster, serverTime, revision
+  L->>B: closeAttendanceSession
+  B->>S: finalize missing ABSENT + CLOSED
+```
 
-Future: reliable reminders after dated schedule metadata exists; push only with a justified backend; notes isolated from attendance; remote Excel export; aggregate metrics once backend definitions exist. Offline attendance needs a separately designed queue, idempotency keys, conflict policy, enrollment checks and session-state reconciliation. It is not silently enabled.
+## Backend và tương thích
 
-Reference-only files and source evidence are catalogued in REFERENCE_AUDIT.md. All files in the reference remain read-only. There are no runtime filesystem imports, copies of desktop integrations or symlinks to that project.
+`Code.gs` giữ action/envelope Desktop; `Lab2Free.gs` nhận lab2Call/snapshot. `AttendanceSafety.gs`: correction/reconciliation/live dùng chung. `ClassTools.gs`: exception/roster. `SubjectInsights.gs`: pipeline feed độc lập attendance.
+
+Cột/ID bảng Desktop nguyên bản. Additive tables: Lab2SessionMeta, AttendanceAudit, RosterAudit, ScheduleExceptions, SubjectContentConfig, ContentSourceRegistry, SubjectContentCache; cache/share article legacy giữ lại. Initializer chỉ thêm bảng/header thiếu và validate, không sửa header hoặc suy diễn roster lịch sử.
+
+Writes: script lock + Advanced Sheets batch. Auth/source network ngoài write lock; trạng thái authoritative đọc lại trong lock. Trigger tối đa25 phiên/lần, scope script.scriptapp. Mobile và Desktop dùng cùng resolver occurrence. Mobile chọn 5/10/15/20/30 phút, Desktop mặc định 10 phút; opensAt là serverNow, closesAt không vượt scheduledEndAt. Chỉ mở trong ngày occurrence, từ 15 phút trước giờ học đến trước giờ kết thúc, còn ít nhất 1 phút; xử lý qua nửa đêm. Phiên cũ không metadata fallback thận trọng.
+
+PRESENT/LATE/ABSENT/EXCUSED giữ raw semantics. Policy từ Script Properties; unknown không tự tính tỷ lệ liên quan. Thống kê finalized-only. Desktop FAP bridge từ chối EXCUSED chưa ánh xạ; chưa quyết định thay người phụ trách. Desktop calendar chưa render exceptions; backend vẫn chặn create/reset buổi hủy/dời.
+
+## Subject Insights và hiệu năng
+
+Authorization → subject config → allowlisted source registry → cache → normalized metadata → filters/cursor → UI. NEWS RSS/Atom; RESEARCH Crossref/OpenAlex. Dedupe DOI/URL hash; sanitize excerpt; source-date-topic provenance. Không scraper/full text/AI summary; không gửi dữ liệu người dùng đến nguồn công khai.
+
+2 sources/call, timeout10s/source, 24 items/feed, <=45.000 ký tự, NEWS TTL6h/RESEARCH24h, cooldown120s, cap400 cache rows. Owner prune chỉ cache hết hạn >7 ngày. API không cho client bỏ cooldown. Nguồn lỗi có partial/stale, timestamp thật. Config version invalidates feed khi topic/source đổi.
+
+Live foreground8s, lỗi backoff16..60s, pause background, stop CLOSED. QR/roster tách call. Response nhỏ hơn snapshot nhưng Sheets đọc bảng tuyến tính; phải đo workbook thật trước tuyên bố SLA. Client timeout35s không đảm bảo tổng auth/Sheet/network luôn hoàn tất.
+
+## Chế độ phụ / giới hạn
+
+Functions/emulator source giữ cho regression, không phải backend chính shared. Quiz tắt; Mobile không có student workspace. FAP bridge là luồng Desktop riêng, Mobile không tự gửi FAP.
+
+Tests VM/widget/rules/emulator và APK được kiểm tại máy. Chưa có deployment refactor, real-account E2E/50 concurrent benchmark hay iOS device evidence. Xem báo cáo để biết checklist release.

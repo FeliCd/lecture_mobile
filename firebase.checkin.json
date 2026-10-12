@@ -1,0 +1,1 @@
+{"hosting":{"public":"web_checkin/public","ignore":["firebase.checkin.json","**/.*","**/node_modules/**"],"rewrites":[{"source":"**","destination":"/index.html"}],"headers":[{"source":"**","headers":[{"key":"Cross-Origin-Opener-Policy","value":"same-origin-allow-popups"},{"key":"Cache-Control","value":"no-store"},{"key":"Referrer-Policy","value":"no-referrer"}]}]}}

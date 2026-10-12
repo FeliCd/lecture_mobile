@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  function active() { return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true; }
+  function lecturer(c) { return active() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'lecturer' && request.auth.uid in get(/databases/$(database)/documents/classes/$(c)).data.lecturerUids; }
+  function member(c) { return active() && exists(/databases/$(database)/documents/classes/$(c)/members/$(request.auth.uid)) && get(/databases/$(database)/documents/classes/$(c)/members/$(request.auth.uid)).data.active == true; }
+  function access(c) { return lecturer(c) || member(c); }
+  match /users/{uid} { allow read: if active() && request.auth.uid == uid; }
+  match /subjects/{id} { allow read: if active() && id in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.subjectIds; }
+  match /schedules/{id} { allow read: if active() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'lecturer' && resource.data.lecturerUid == request.auth.uid; }
+  match /classes/{id} {
+   allow read: if active() && (request.auth.uid in resource.data.lecturerUids || request.auth.uid in resource.data.studentUids);
+   match /members/{uid} { allow read: if lecturer(id) || (member(id) && uid == request.auth.uid); }
+  }
+  match /classSessions/{id} { allow read: if access(resource.data.classId); }
+  match /attendanceSessions/{id} { allow read: if access(resource.data.classId); }
+  match /attendanceRecords/{id} { allow read: if lecturer(resource.data.classId) || (member(resource.data.classId) && resource.data.studentUid == request.auth.uid); }
+  match /attendanceAudit/{id} { allow read: if lecturer(resource.data.classId); }
+  match /sharedArticles/{id} { allow read: if access(resource.data.classId); }
+  match /quizzes/{id} { allow read: if access(resource.data.classId); }
+  match /quizResponses/{id} {
+   allow read: if lecturer(resource.data.classId) || (member(resource.data.classId) && resource.data.studentUid == request.auth.uid);
+   // Student can inspect whether its deterministic response exists before submit.
+   allow get: if active() && !exists(/databases/$(database)/documents/quizResponses/$(id)) && id.matches('.*_' + request.auth.uid);
+  }
+  match /quizStats/{id} { allow read: if lecturer(resource.data.classId); }
+  match /quizResults/{id} { allow read: if access(resource.data.classId) && get(/databases/$(database)/documents/quizzes/$(id)).data.status == 'published'; }
+    // Private lecturer library. App roles are verified against the Desktop roster.
+    // No authenticated user can access another account's articles or grant roles.
+    function owner(uid) {
+      return request.auth != null && request.auth.uid == uid
+        && request.auth.token.email_verified == true;
+    }
+    function articleValid() {
+      let d = request.resource.data;
+      return d.keys().hasAll(['title','url','doi','source','publisher','authors','publishedAt',
+        'subjectIds','sourceSummary','summary','savedAt','updatedAt'])
+        && d.keys().hasOnly(['contentType','title','url','doi','source','publisher','authors','publishedAt',
+        'subjectIds','sourceSummary','summary','savedAt','updatedAt'])
+        && (!('contentType' in d) || d.contentType in ['NEWS','RESEARCH'])
+        && d.title is string && d.title.size() > 0 && d.title.size() <= 1500
+        && d.url is string && d.url.size() <= 2000 && d.url.matches('https://.+')
+        && d.doi is string && d.doi.size() <= 500
+        && d.source is string && d.source.size() <= 100
+        && d.publisher is string && d.publisher.size() <= 1000
+        && d.authors is list && d.authors.size() <= 30
+        && d.subjectIds is list && d.subjectIds.size() <= 30
+        && d.publishedAt is string && d.publishedAt.size() <= 40
+        && d.summary is string && d.summary.size() <= 12000
+        && d.sourceSummary is string && d.sourceSummary.size() <= 12000
+        && d.savedAt is timestamp && d.updatedAt == request.time;
+    }
+    match /articleLibraries/{uid}/articles/{id} {
+      allow read, delete: if owner(uid);
+      allow create: if owner(uid) && articleValid() && request.resource.data.savedAt == request.time;
+      allow update: if owner(uid) && articleValid() && request.resource.data.savedAt == resource.data.savedAt;
+    }
+
+  // Everything else, including quizPrivate, caches, roles and all writes, denied.
+  match /{document=**} { allow read, write: if false; }
+ }
+}

@@ -2,12 +2,28 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Lecturer Companion (Android development)",
+      "name": "FAP Smart Lecturer (Miễn phí — dữ liệu Desktop)",
       "request": "launch",
       "type": "dart",
       "program": "lib/main.dart",
       "flutterMode": "debug",
-      "toolArgs": ["--dart-define-from-file=config/development.json"]
+      "toolArgs": ["--dart-define-from-file=config/lab2.free.json"]
+    },
+    {
+      "name": "FAP Smart Lecturer (Firebase Emulator)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "flutterMode": "debug",
+      "toolArgs": ["--dart-define-from-file=config/lab2.emulator.json"]
+    },
+    {
+      "name": "FAP Smart Lecturer (Firebase fap-attendance-88920)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "flutterMode": "debug",
+      "toolArgs": ["--dart-define-from-file=config/lab2.production.json"]
     }
   ]
 }

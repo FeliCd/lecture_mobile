@@ -89,7 +89,7 @@ function validateSchedule_(input, lecturer) {
   if (!/^[A-Z]{2,6}\d{3}[A-Z0-9]*$/.test(row.subjectCode)) throw new Error('Mã môn không hợp lệ.');
   if (!/^[1-7]$/.test(row.dayOfWeek) || !/^(?:[1-9]|1[0-2])$/.test(row.slot)) throw new Error('Thứ hoặc slot không hợp lệ.');
   const time = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
-  if (!time.test(row.startTime) || !time.test(row.endTime) || row.startTime >= row.endTime) throw new Error('Giờ học không hợp lệ.');
+  if (!time.test(row.startTime) || !time.test(row.endTime) || row.startTime === row.endTime) throw new Error('Giờ học không hợp lệ.');
   if (!['MANUAL', 'IMAGE'].includes(row.sourceType)) throw new Error('Nguồn lịch không hợp lệ.');
   return row;
 }
@@ -150,59 +150,44 @@ function handleSession_(book, cfg, lecturer, request) {
   if (!lock.tryLock(15000)) throw new Error('Máy chủ đang bận. Thử lại sau.');
   try {
     const sessions = read_(book, 'Sessions');
+    if(request.classId) lab2Class_(book,lab2DesktopActor_(lecturer),String(request.classId).trim(),true);
+    if(request.sessionId) {
+      const target=sessions.rows.find(s=>s.sessionId===request.sessionId);
+      if(!target) throw new Error('PERMISSION_DENIED');
+      lab2Class_(book,lab2DesktopActor_(lecturer),target.classId,true);
+    }
     if (request.action === 'resetSession') {
       const oldIndex = sessions.rows.findIndex(row => row.sessionId === request.sessionId);
       const old = sessions.rows[oldIndex];
       if (!old || old.createdBy !== lecturer.lecturerId) throw new Error('Không có quyền reset phiên này.');
-      const successor = sessions.rows.find(row => row.sessionId !== old.sessionId && row.classId === old.classId && row.date === old.date && row.slot === old.slot && row.status !== 'RESET');
-      if (old.status === 'RESET' && successor) return sessionView_(successor);
+      const successors = sessions.rows.filter(row => row.sessionId !== old.sessionId && row.classId === old.classId && row.date === old.date && row.slot === old.slot && row.status !== 'RESET');
+      if(successors.length>1) throw Error('INVALID_SHEET_IDS');
+      const successor=successors[0];
+      if (old.status === 'RESET' && successor) {
+        if(successor.status==='OPEN'&&lab2Meta_(book,successor).closesAt<=Date.now()) lab2Finalize_(book,successor);
+        const current=lab2Read_(book,'Sessions').find(s=>s.sessionId===successor.sessionId);
+        return {...sessionView_(current),...lab2SessionReceipt_(book,current)};
+      }
       if (old.status === 'RESET') throw new Error('Phiên đã reset. Tải lại danh sách phiên.');
       if (successor) throw new Error('Buổi học đang có nhiều phiên. Kiểm tra trước khi reset.');
-      const fresh = {...old, sessionId: Utilities.getUuid(), status: 'OPEN', currentToken: Utilities.getUuid(), tokenExpiredAt: new Date(Date.now() + 120000).toISOString()};
-      Sheets.Spreadsheets.batchUpdate({requests: [
-        {updateCells: {range: {sheetId: sessions.sheet.getSheetId(), startRowIndex: oldIndex + 1, endRowIndex: oldIndex + 2, startColumnIndex: 6, endColumnIndex: 7}, rows: [{values: [{userEnteredValue: {stringValue: 'RESET'}}]}], fields: 'userEnteredValue'}},
-        {appendCells: {sheetId: sessions.sheet.getSheetId(), rows: [{values: SCHEMA.Sessions.map(key => ({userEnteredValue: {stringValue: String(fresh[key] || '')}}))}], fields: 'userEnteredValue'}}
-      ]}, cfg.id);
-      return sessionView_(fresh);
+      const receipt=lab2CreateFromOccurrence_(book,lab2DesktopActor_(lecturer),{classId:old.classId,sessionDate:old.date,slot:old.slot,durationMinutes:10},
+        {token:Utilities.getUuid(),secret:'',expiresAt:Date.now()+120000},old);
+      return {...sessionView_(lab2Read_(book,'Sessions').find(s=>s.sessionId===receipt.sessionId)),...receipt};
     }
+
     if (request.action === 'createSession') {
       const classId = String(request.classId || '').trim();
       const slot = String(request.slot || '').trim();
       const date = String(request.date || '').trim();
-      const startTime = String(request.startTime || '').trim();
-      const endTime = String(request.endTime || '').trim();
       const token = String(request.currentToken || '').trim();
       const secret = String(request.currentSecretCode || '').trim();
       const expiredAt = String(request.tokenExpiredAt || '').trim();
 
-      if (!classId || !date || !slot) throw new Error('Thiếu thông tin tạo phiên điểm danh.');
-      if (!read_(book, 'Classes').rows.some(c => c.classId === classId && c.lecturerId === lecturer.lecturerId)) throw new Error('Lớp không thuộc giảng viên.');
-      const existing = sessions.rows.filter(r => r.classId === classId && r.date === date && r.slot === slot && r.status !== 'RESET');
-      if (existing.length > 1) throw new Error('Buổi học có nhiều phiên. Cần kiểm tra dữ liệu.');
-      if (existing.length) return sessionView_(existing[0]);
-      const sessionId = Utilities.getUuid();
-      const combinedToken = secret ? (token + '#' + secret) : token;
-
-      const newRow = {
-        sessionId: sessionId,
-        classId: classId,
-        date: date,
-        slot: slot,
-        startTime: startTime,
-        endTime: endTime,
-        status: 'OPEN',
-        currentToken: combinedToken,
-        tokenExpiredAt: expiredAt,
-        createdBy: lecturer.lecturerId
-      };
-
-      const sheet = sessions.sheet;
-      const columns = SCHEMA.Sessions;
-      sheet.appendRow(columns.map(k => String(newRow[k] || '')));
-      return {
-        ...newRow,
-        currentSecretCode: secret
-      };
+      if(!classId||!date||!slot||!token||token.length>256||(secret&&!/^\d{6}$/.test(secret))||!Number.isFinite(Date.parse(expiredAt))||Date.parse(expiredAt)<=Date.now()) throw Error('INVALID_INPUT');
+      const receipt=lab2CreateFromOccurrence_(book,lab2DesktopActor_(lecturer),{classId,sessionDate:date,slot,durationMinutes:request.durationMinutes==null?10:request.durationMinutes},
+        {token,secret,expiresAt:Date.parse(expiredAt)});
+      return {...sessionView_(lab2Read_(book,'Sessions').find(s=>s.sessionId===receipt.sessionId)),
+        opensAt:receipt.opensAt,closesAt:receipt.closesAt,effectiveDurationMinutes:receipt.effectiveDurationMinutes};
     }
 
     if (request.action === 'rotateToken') {
@@ -215,14 +200,14 @@ function handleSession_(book, cfg, lecturer, request) {
       if (index === -1) throw new Error('Không tìm thấy phiên điểm danh.');
       if (sessions.rows[index].createdBy !== lecturer.lecturerId) throw new Error('Không có quyền sửa phiên điểm danh này.');
       if (sessions.rows[index].status !== 'OPEN') throw new Error('Phiên không còn mở.');
+      lab2Class_(book,lab2DesktopActor_(lecturer),sessions.rows[index].classId,true);
+      const meta=lab2Meta_(book,sessions.rows[index]);
+      if(Date.now()>=meta.closesAt||!token||token.length>256||(secret&&!/^\d{6}$/.test(secret))||
+        !Number.isFinite(Date.parse(expiredAt))||Date.parse(expiredAt)<=Date.now()) throw new Error('INVALID_INPUT');
 
       const combinedToken = secret ? (token + '#' + secret) : token;
-      const rowIndex = index + 2;
-      const tokenCol = SCHEMA.Sessions.indexOf('currentToken') + 1;
-      const expCol = SCHEMA.Sessions.indexOf('tokenExpiredAt') + 1;
-
-      sessions.sheet.getRange(rowIndex, tokenCol).setValue(combinedToken);
-      sessions.sheet.getRange(rowIndex, expCol).setValue(expiredAt);
+      lab2Write_(book,[{table:'Sessions',row:{...sessions.rows[index],currentToken:combinedToken,
+        tokenExpiredAt:new Date(Math.min(Date.parse(expiredAt),meta.closesAt)).toISOString()}}]);
       return {saved: true};
     }
 
@@ -233,9 +218,9 @@ function handleSession_(book, cfg, lecturer, request) {
       if (sessions.rows[index].createdBy !== lecturer.lecturerId) throw new Error('Không có quyền kết thúc phiên điểm danh này.');
       if (sessions.rows[index].status === 'RESET') throw new Error('Phiên này đã được thay thế. Tải lại phiên hiện tại.');
 
-      const rowIndex = index + 2;
-      const statusCol = SCHEMA.Sessions.indexOf('status') + 1;
-      sessions.sheet.getRange(rowIndex, statusCol).setValue('CLOSED');
+      if(typeof lab2Finalize_ !== 'function') throw new Error('SHARED_BACKEND_SETUP_REQUIRED');
+      lab2Class_(book,lab2DesktopActor_(lecturer),sessions.rows[index].classId,true);
+      lab2Finalize_(book,sessions.rows[index]);
       return {closed: true};
     }
 
@@ -259,13 +244,16 @@ function handleSession_(book, cfg, lecturer, request) {
     if (request.action === 'getSessionsByClass') {
       const targetId = String(request.classId || '').trim().toUpperCase();
       if (!targetId) return [];
-      return sessions.rows.filter(r => {
+      for(const s of sessions.rows.filter(r=>String(r.classId).trim().toUpperCase()===targetId&&r.status==='OPEN')) {
+        if(lab2Meta_(book,s).closesAt<=Date.now()) lab2Finalize_(book,s);
+      }
+      return lab2Read_(book,'Sessions').filter(r => {
         const rowClassId = String(r.classId || '').trim().toUpperCase();
         if (!rowClassId) return false;
         const matchesLecturer = (r.createdBy === lecturer.lecturerId || !r.createdBy);
         const matchesClass = rowClassId === targetId && r.status !== 'RESET';
         return matchesLecturer && matchesClass;
-      });
+      }).map(r=>({...r,...lab2SessionReceipt_(book,r)}));
     }
 
     if (request.action === 'getClassHistory') {
@@ -302,17 +290,9 @@ function handleSession_(book, cfg, lecturer, request) {
       if (index === -1) throw new Error('Không tìm thấy bản ghi điểm danh.');
 
       const owned = sessions.rows.find(s => s.sessionId === attendance.rows[index].sessionId && s.createdBy === lecturer.lecturerId && s.status !== 'RESET');
-      if (!owned || !['PRESENT', 'LATE', 'ABSENT'].includes(status)) throw new Error('Không có quyền sửa bản ghi hoặc trạng thái không hợp lệ.');
-      const rowIndex = index + 2;
-      const statusCol = SCHEMA.Attendance.indexOf('status') + 1;
-      const noteCol = SCHEMA.Attendance.indexOf('note') + 1;
-      const timeCol = SCHEMA.Attendance.indexOf('updatedAt') + 1;
-      const byCol = SCHEMA.Attendance.indexOf('updatedBy') + 1;
-
-      attendance.sheet.getRange(rowIndex, statusCol).setValue(status);
-      attendance.sheet.getRange(rowIndex, noteCol).setValue(note);
-      attendance.sheet.getRange(rowIndex, timeCol).setValue(nowIso);
-      attendance.sheet.getRange(rowIndex, byCol).setValue(updatedBy);
+      if (!owned || !['PRESENT', 'LATE', 'ABSENT', 'EXCUSED'].includes(status)) throw new Error('Không có quyền sửa bản ghi hoặc trạng thái không hợp lệ.');
+      if(typeof lab2Correct_ !== 'function') throw new Error('SHARED_BACKEND_SETUP_REQUIRED');
+      lab2Correct_(book,lab2DesktopActor_(lecturer),owned,attendance.rows[index].studentId,status,note,attendance.rows[index]);
       return {saved: true};
     }
 
@@ -322,7 +302,9 @@ function handleSession_(book, cfg, lecturer, request) {
       const markedBy = lecturer.email;
       const owned = sessions.rows.find(s => s.sessionId === sessionId && s.createdBy === lecturer.lecturerId && s.status === 'CLOSED');
       if (!owned) throw new Error('Chỉ chốt vắng cho phiên đã đóng của bạn.');
-      const enrollmentIds = new Set(read_(book, 'Enrollments').rows.filter(e => e.classId === owned.classId).map(e => e.studentId));
+      lab2Class_(book,lab2DesktopActor_(lecturer),owned.classId,true);
+      const frozen=lab2Meta_(book,owned).eligibleStudentIds;
+      const enrollmentIds = new Set(frozen||read_(book, 'Attendance').rows.filter(e=>e.sessionId===owned.sessionId).map(e=>e.studentId));
       const nowIso = new Date().toISOString();
 
       const attendance = read_(book, 'Attendance');
@@ -384,18 +366,54 @@ function authenticateStudent_(idToken, cfg, book) {
   if (matches.length !== 1) throw new Error('Email trường chưa có trong danh sách sinh viên hoặc đang bị trùng. Liên hệ giảng viên.');
   return matches[0];
 }
-function studentContext_(request, cfg, book, byCode = false) {
+// Mobile-created sessions keep an explicit deadline and frozen roster.
+// Apply these checks on the public web path too, before showing or recording a lesson.
+function assertMobileQrSession_(book, session, request, student) {
+  const sheet = book.getSheetByName('Lab2SessionMeta');
+  if (!sheet) return;
+  const values = sheet.getDataRange().getDisplayValues();
+  const header = values[0] || [], id = header.indexOf('sessionId');
+  const row = values.slice(1).find(r => r[id] === session.sessionId);
+  if (!row) return; // Desktop legacy behavior stays in its own handler.
+  const deadline = Number(row[header.indexOf('closesAt')]);
+  const expiry = Date.parse(session.tokenExpiredAt), view = sessionView_(session);
+  if (!Number.isFinite(deadline) || Date.now() >= deadline || !Number.isFinite(expiry) || Date.now() >= expiry)
+    throw new Error('Phiên điểm danh đã hết hạn. Quét mã của phiên mới.');
+  if (!view.currentToken || String(request.token || '') !== view.currentToken)
+    throw new Error('Mã QR đã thay đổi. Quét mã mới đang hiển thị.');
+  if (student) {
+    let eligible;
+    try { eligible = JSON.parse(row[header.indexOf('eligibleStudentIds')]); } catch (_) { throw new Error('Không đọc được danh sách phiên. Liên hệ giảng viên.'); }
+    if (!Array.isArray(eligible) || !eligible.includes(student.studentId))
+      throw new Error('Sinh viên không thuộc danh sách lớp tại thời điểm mở phiên.');
+  }
+}
+function authenticateFirebaseStudent_(idToken, cfg, book) {
+  if (typeof lab2FirebaseIdentity_ !== 'function') throw new Error('Máy chủ chưa cập nhật xác thực Firebase.');
+  const identity = lab2FirebaseIdentity_(idToken);
+  if (!cfg.domains.includes(identity.email.split('@')[1])) throw new Error('Chỉ tài khoản Google email trường được phép điểm danh.');
+  const matches = read_(book, 'Students').rows.filter(s => String(s.schoolEmail).trim().toLowerCase() === identity.email);
+  if (matches.length !== 1) throw new Error('Email trường chưa có trong danh sách sinh viên hoặc đang bị trùng. Liên hệ giảng viên.');
+  return matches[0];
+}
+function studentContext_(request, cfg, book, byCode = false, verifiedStudent = null) {
   let student;
   if (byCode) {
+    // Legacy route can only be used with verified Google identity, even when enabled.
+    if(PropertiesService.getScriptProperties().getProperty('ALLOW_VERIFIED_STUDENT_CODE')!=='true')
+      throw new Error('Điểm danh bằng MSSV đã tắt. Đăng nhập Google hoặc liên hệ giảng viên.');
+    const verified=verifiedStudent||(request.firebaseAuth===true?authenticateFirebaseStudent_(request.idToken,cfg,book):authenticateStudent_(request.idToken,cfg,book));
     const code = String(request.studentCode || '').trim().toUpperCase();
     if (!/^[A-Z0-9]{5,20}$/.test(code)) throw new Error('Vui lòng nhập MSSV hợp lệ.');
     const matches = read_(book, 'Students').rows.filter(s => String(s.studentCode).trim().toUpperCase() === code);
     if (matches.length !== 1) throw new Error('MSSV chưa có hoặc bị trùng trong danh sách sinh viên.');
     student = matches[0];
-  } else student = authenticateStudent_(request.idToken, cfg, book);
+    if(student.studentId!==verified.studentId) throw new Error('MSSV không thuộc tài khoản đã xác minh.');
+  } else student = verifiedStudent || (request.firebaseAuth === true ? authenticateFirebaseStudent_(request.idToken, cfg, book) : authenticateStudent_(request.idToken, cfg, book));
   const session = read_(book, 'Sessions').rows.find(s => s.sessionId === request.sessionId);
   if (!session) throw new Error('Phiên điểm danh không tồn tại.');
   if (session.status !== 'OPEN') throw new Error('Phiên đã kết thúc hoặc được reset. Quét mã mới.');
+  assertMobileQrSession_(book, session, request, student);
   if (!read_(book, 'Enrollments').rows.some(e => e.classId === session.classId && e.studentId === student.studentId)) throw new Error('Sinh viên không thuộc danh sách lớp của buổi học này.');
   const cls = read_(book, 'Classes').rows.find(c => c.classId === session.classId);
   if (!cls) throw new Error('Không tìm thấy lớp học.');
@@ -410,10 +428,16 @@ function handleStudentSession_(request) {
       secretEnabled: !!sessionView_(session).currentSecretCode}};
 }
 function handleStudentCodeSession_(request) {
+  if(PropertiesService.getScriptProperties().getProperty('ALLOW_VERIFIED_STUDENT_CODE')!=='true')
+    throw new Error('Điểm danh bằng MSSV đã tắt. Đăng nhập Google hoặc liên hệ giảng viên.');
+  return handleStudentSession_(request);
+}
+function legacyStudentCodeSessionView_(request) {
   const book = SpreadsheetApp.openById(config_().id);
   const session = read_(book, 'Sessions').rows.find(s => s.sessionId === request.sessionId);
   if (!session) throw new Error('Phiên điểm danh không tồn tại.');
   if (session.status !== 'OPEN') throw new Error('Phiên đã kết thúc hoặc được reset. Quét mã mới.');
+  assertMobileQrSession_(book, session, request);
   const view = sessionView_(session);
   
   
@@ -426,10 +450,15 @@ function handleStudentCodeSession_(request) {
 function handleStudentCheckIn_(request, byCode = false) {
   if (request.confirmPresent !== true) throw new Error('Bạn phải xác nhận đang có mặt trong lớp để điểm danh.');
   const cfg = config_(), book = SpreadsheetApp.openById(cfg.id);
+  if(byCode&&PropertiesService.getScriptProperties().getProperty('ALLOW_VERIFIED_STUDENT_CODE')!=='true')
+    throw new Error('Điểm danh bằng MSSV đã tắt. Đăng nhập Google hoặc liên hệ giảng viên.');
+  // Verify over the network before acquiring the write lock; reread session/roster inside it.
+  const verified=request.firebaseAuth===true?authenticateFirebaseStudent_(request.idToken,cfg,book):authenticateStudent_(request.idToken,cfg,book);
+  lab2Limit_(verified.studentId,'studentCheckIn');
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(15000)) throw new Error('Hệ thống đang bận. Thử lại.');
   try {
-    const {student, session} = studentContext_(request, cfg, book, byCode);
+    const {student, session} = studentContext_(request, cfg, book, byCode, verified);
     const view = sessionView_(session);
     const expires = new Date(session.tokenExpiredAt).getTime();
     if (!byCode && (!Number.isFinite(expires) || Date.now() >= expires)) throw new Error('Mã điểm danh đã hết hạn. Quét mã mới hoặc nhập Secret Code hiện tại.');
@@ -440,13 +469,18 @@ function handleStudentCheckIn_(request, byCode = false) {
       if (!view.currentToken || String(request.token || '') !== view.currentToken) throw new Error('Mã QR không hợp lệ hoặc đã thay đổi. Quét mã mới.');
     }
     const attendance = read_(book, 'Attendance');
-    if (attendance.rows.some(a => a.sessionId === session.sessionId && a.studentId === student.studentId)) throw new Error('Bạn đã điểm danh trong phiên này.');
+    const previous=attendance.rows.filter(a=>a.sessionId===session.sessionId&&a.studentId===student.studentId);
+    if(previous.length>1) throw new Error('INVALID_SHEET_IDS');
+    if(previous.length) {
+      if(!['PRESENT','LATE'].includes(previous[0].status)) throw new Error('Điểm danh đã được giảng viên điều chỉnh. Liên hệ giảng viên.');
+      return {status:previous[0].status,checkInTime:previous[0].checkInTime,studentCode:student.studentCode,fullName:student.fullName,alreadyRecorded:true};
+    }
     const nowIso = new Date().toISOString();
     const record = {attendanceId: Utilities.getUuid(), sessionId: session.sessionId, studentId: student.studentId,
       status: 'PRESENT', checkInTime: nowIso, updatedAt: nowIso,
       note: byCode ? 'Student code; presence confirmed' : 'Google verified; presence confirmed',
       updatedBy: byCode ? student.studentCode : student.schoolEmail};
-    attendance.sheet.appendRow(SCHEMA.Attendance.map(key => String(record[key] || '')));
+    lab2Write_(book,[{table:'Attendance',row:record}]);
     return {status: record.status, checkInTime: nowIso, studentCode: student.studentCode, fullName: student.fullName};
   } finally { lock.releaseLock(); }
 }
@@ -574,7 +608,9 @@ function doPost(e) {
     if (!text || text.length > 200000) throw new Error('Yêu cầu trống hoặc quá lớn.');
     const request = JSON.parse(text);
     if (!request || typeof request !== 'object' || Array.isArray(request)) throw new Error('Yêu cầu không hợp lệ.');
-    if (request.action === 'studentCodeSessionInfo') {
+    if (['lab2Health', 'lab2Snapshot', 'lab2Call'].includes(request.action)) {
+      result = {ok: true, data: lab2Handle_(request)};
+    } else if (request.action === 'studentCodeSessionInfo') {
       result = {ok: true, data: handleStudentCodeSession_(request)};
     } else if (request.action === 'studentCodeCheckIn') {
       result = {ok: true, data: handleStudentCheckIn_(request, true)};
