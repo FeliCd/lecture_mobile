@@ -24,6 +24,7 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
   bool loading = false, writing = false, foreground = true;
   int errors = 0, offset = 0;
   bool accessDenied = false;
+  final searchController = TextEditingController();
   String search = '', filter = 'all';
   bool get open => live?['status'] == 'OPEN';
   DateTime get serverNow => DateTime.now().add(Duration(milliseconds: offset));
@@ -33,6 +34,9 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
       foreground &&
       live != null &&
       DateTime.parse(live!['expiresAt']).isAfter(serverNow);
+  bool get qrCurrent =>
+      qr != null &&
+      (qr!['expiresAt'] as num) > serverNow.millisecondsSinceEpoch;
 
   @override
   void initState() {
@@ -48,6 +52,7 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
   void dispose() {
     poll?.cancel();
     clock?.cancel();
+    searchController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -126,7 +131,7 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
       });
       qr = null;
       await refresh();
-    });
+    }, mutation: true);
     if (mounted) setState(() => writing = false);
   }
 
@@ -156,6 +161,15 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
       appBar: AppBar(
         title: const Text('Phiên điểm danh'),
         actions: [
+          const CampusHelpButton(
+            title: 'Hướng dẫn điểm danh',
+            message:
+                'Sinh viên quét QR và đăng nhập Google trên trang điểm danh. '
+                'Nếu bật mã xác nhận, cung cấp thêm mã đang hiển thị. Đổi QR không kéo dài phiên. '
+                'Khi mất kết nối, QR được ẩn và số liệu có thể đã cũ. '
+                'Kết thúc phiên sẽ chốt vắng những sinh viên còn chờ. '
+                'Mọi điều chỉnh sau đó cần lý do.',
+          ),
           IconButton(
             tooltip: 'Cập nhật phiên',
             onPressed: loading ? null : refresh,
@@ -208,7 +222,7 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Chưa đồng bộ được. Số liệu bên dưới có thể đã cũ.',
+                      'Chưa đồng bộ được. Số liệu bên dưới có thể đã cũ. QR tạm ẩn để tránh dùng thông tin cũ.',
                     ),
                     Text(errorMessage(failure!)),
                     TextButton(
@@ -259,11 +273,13 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                 runSpacing: 4,
                 children: [
                   Text('Có mặt ${counts['present'] ?? 0}'),
-                  Text('Trễ ${counts['late'] ?? 0}'),
+                  Text('Đi trễ ${counts['late'] ?? 0}'),
                   Text('Còn chờ ${counts['pending'] ?? 0}'),
+                  Text('Vắng ${counts['absent'] ?? 0}'),
+                  Text('Vắng có phép ${counts['excused'] ?? 0}'),
                 ],
               ),
-              if (canCheckIn && qr != null) ...[
+              if (canCheckIn && qrCurrent) ...[
                 const SizedBox(height: 16),
                 Center(
                   child: ConstrainedBox(
@@ -289,7 +305,10 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                   children: [
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Yêu cầu Secret Code'),
+                      title: const Text('Yêu cầu mã xác nhận'),
+                      subtitle: const Text(
+                        'Sinh viên nhập thêm mã bạn cung cấp.',
+                      ),
                       value: qr!['secretEnabled'] == true,
                       onChanged: writing || loading
                           ? null
@@ -306,6 +325,13 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                   ],
                 ),
               ],
+              if (canCheckIn && !qrCurrent)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    'Đang chờ mã QR mới. Mã hết hạn được ẩn; bạn có thể bấm Cập nhật phiên.',
+                  ),
+                ),
               Text(
                 'Lần đọc từ máy chủ: ${localDate(DateTime.parse(live!['serverTime']))}',
                 style: Theme.of(context).textTheme.bodySmall,
@@ -317,6 +343,7 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                 ),
               const CampusSectionHeader(title: 'Sinh viên trong phiên'),
               CampusSearchField(
+                controller: searchController,
                 hint: 'Tìm tên hoặc MSSV',
                 onChanged: (v) =>
                     setState(() => search = v.trim().toLowerCase()),
@@ -350,7 +377,19 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                 ),
               ),
               if (visible.isEmpty)
-                const EmptyState('Không có sinh viên phù hợp.'),
+                EmptyState(
+                  rows.isEmpty
+                      ? 'Chưa có sinh viên trong phiên.'
+                      : 'Không có sinh viên phù hợp với tìm kiếm hoặc trạng thái đã chọn.',
+                  actionLabel: search.isNotEmpty || filter != 'all'
+                      ? 'Xóa bộ lọc'
+                      : null,
+                  onAction: () => setState(() {
+                    searchController.clear();
+                    search = '';
+                    filter = 'all';
+                  }),
+                ),
               for (final r in visible)
                 CampusStudentRow(
                   name: '${r['displayName']}',

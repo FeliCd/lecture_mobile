@@ -136,9 +136,16 @@ class _SubjectUpdatesPageState extends ConsumerState<SubjectUpdatesPage> {
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    Text(
-                      'Cập nhật kiến thức',
-                      style: Theme.of(context).textTheme.titleLarge,
+                    const CampusSectionHeader(
+                      title: 'Cập nhật kiến thức',
+                      action: CampusHelpButton(
+                        title: 'Hướng dẫn Cập nhật',
+                        message:
+                            'Chọn môn đang giảng dạy, loại nội dung và bộ lọc. '
+                            'Bài viết giữ nguồn và ngày cập nhật để bạn đối chiếu. '
+                            'Lưu bài và ghi chú vào thư viện riêng qua Lưu / ghi chú. '
+                            'Nếu không có kết quả, thử xóa bộ lọc; nếu nguồn chưa cấu hình, liên hệ quản trị viên.',
+                      ),
                     ),
                     if (subjects.isEmpty)
                       const EmptyState('Chưa có môn được phân công.'),
@@ -168,6 +175,7 @@ class _SubjectUpdatesPageState extends ConsumerState<SubjectUpdatesPage> {
                         decoration: InputDecoration(
                           labelText: 'Lọc từ khóa (tùy chọn)',
                           suffixIcon: IconButton(
+                            tooltip: 'Tìm theo từ khóa',
                             onPressed: () => load(),
                             icon: const Icon(Icons.search),
                           ),
@@ -176,6 +184,7 @@ class _SubjectUpdatesPageState extends ConsumerState<SubjectUpdatesPage> {
                       ),
                       if (sources.isNotEmpty)
                         DropdownButtonFormField<String>(
+                          key: ValueKey('source-$source'),
                           isExpanded: true,
                           initialValue: source,
                           decoration: const InputDecoration(labelText: 'Nguồn'),
@@ -208,6 +217,7 @@ class _SubjectUpdatesPageState extends ConsumerState<SubjectUpdatesPage> {
                         ],
                       ),
                       DropdownButtonFormField<String>(
+                        key: ValueKey('sort-$sort'),
                         isExpanded: true,
                         initialValue: sort,
                         decoration: const InputDecoration(labelText: 'Sắp xếp'),
@@ -230,6 +240,21 @@ class _SubjectUpdatesPageState extends ConsumerState<SubjectUpdatesPage> {
                         onPressed: busy ? null : () => load(),
                         icon: const Icon(Icons.refresh),
                         label: const Text('Làm mới'),
+                      ),
+                      TextButton.icon(
+                        onPressed: busy
+                            ? null
+                            : () {
+                                query.clear();
+                                setState(() {
+                                  source = '';
+                                  days = 30;
+                                  sort = 'LATEST';
+                                });
+                                load();
+                              },
+                        icon: const Icon(Icons.filter_alt_off_outlined),
+                        label: const Text('Đặt lại bộ lọc'),
                       ),
                       if (busy) const LinearProgressIndicator(),
                       if (error != null) ErrorState(error!, () => load()),

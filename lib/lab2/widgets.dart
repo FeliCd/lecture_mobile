@@ -182,21 +182,33 @@ class CampusCard extends StatelessWidget {
 class AppPrimaryButton extends StatelessWidget {
   final String label;
   final bool busy;
+  final String busyLabel;
   final VoidCallback? onPressed;
   const AppPrimaryButton({
     super.key,
     required this.label,
     this.busy = false,
+    this.busyLabel = 'Đang xử lý…',
     this.onPressed,
   });
   @override
   Widget build(BuildContext context) => FilledButton(
     onPressed: busy ? null : onPressed,
     child: busy
-        ? const SizedBox(
-            width: 22,
-            height: 22,
-            child: CircularProgressIndicator(strokeWidth: 2),
+        ? Semantics(
+            liveRegion: true,
+            child: Wrap(
+              spacing: 10,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                Text(busyLabel),
+              ],
+            ),
           )
         : Text(label),
   );
@@ -239,7 +251,9 @@ class StatusBadge extends StatelessWidget {
 
 class EmptyState extends StatelessWidget {
   final String message;
-  const EmptyState(this.message, {super.key});
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  const EmptyState(this.message, {super.key, this.actionLabel, this.onAction});
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.all(24),
@@ -249,6 +263,8 @@ class EmptyState extends StatelessWidget {
         const Icon(Icons.inbox_outlined, size: 40),
         const SizedBox(height: 12),
         Text(message, textAlign: TextAlign.center),
+        if (actionLabel != null && onAction != null)
+          TextButton(onPressed: onAction, child: Text(actionLabel!)),
       ],
     ),
   );
@@ -257,14 +273,25 @@ class EmptyState extends StatelessWidget {
 class ErrorState extends StatelessWidget {
   final Object error;
   final VoidCallback retry;
-  const ErrorState(this.error, this.retry, {super.key});
+  final String actionLabel;
+  const ErrorState(
+    this.error,
+    this.retry, {
+    super.key,
+    this.actionLabel = 'Thử lại',
+  });
   @override
   Widget build(BuildContext context) => CampusCard(
     child: Column(
       children: [
-        Text(errorMessage(error)),
+        const Icon(Icons.error_outline),
+        const SizedBox(height: 8),
+        Semantics(
+          liveRegion: true,
+          child: Text(errorMessage(error), textAlign: TextAlign.center),
+        ),
         const SizedBox(height: 12),
-        OutlinedButton(onPressed: retry, child: const Text('Thử lại')),
+        OutlinedButton(onPressed: retry, child: Text(actionLabel)),
       ],
     ),
   );
@@ -307,12 +334,7 @@ class _LiveListState extends State<LiveList> {
         );
       }
       if (!s.hasData) {
-        return const Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: CircularProgressIndicator(),
-          ),
-        );
+        return const Center(child: CampusLoadingState());
       }
       if (s.data!.isEmpty && !widget.buildEmpty) {
         return widget.hideEmpty
@@ -326,15 +348,18 @@ class _LiveListState extends State<LiveList> {
 
 Future<void> runAction(
   BuildContext context,
-  Future<void> Function() action,
-) async {
+  Future<void> Function() action, {
+  bool mutation = false,
+}) async {
   try {
     await action();
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(errorMessage(e))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(mutation ? mutationErrorMessage(e) : errorMessage(e)),
+        ),
+      );
     }
   }
 }
@@ -411,7 +436,7 @@ class CampusStatusChip extends StatelessWidget {
   }
 }
 
-class CampusSearchField extends StatelessWidget {
+class CampusSearchField extends StatefulWidget {
   final String hint;
   final ValueChanged<String> onChanged;
   final TextEditingController? controller;
@@ -422,14 +447,111 @@ class CampusSearchField extends StatelessWidget {
     this.controller,
   });
   @override
-  Widget build(BuildContext context) => TextField(
-    controller: controller,
-    decoration: InputDecoration(
-      labelText: hint,
-      prefixIcon: const Icon(Icons.search),
-      isDense: true,
+  State<CampusSearchField> createState() => _CampusSearchFieldState();
+}
+
+class _CampusSearchFieldState extends State<CampusSearchField> {
+  late final owned = TextEditingController();
+  TextEditingController get controller => widget.controller ?? owned;
+  @override
+  void dispose() {
+    owned.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      ValueListenableBuilder<TextEditingValue>(
+        valueListenable: controller,
+        builder: (context, value, _) => TextField(
+          controller: controller,
+          decoration: InputDecoration(
+            labelText: widget.hint,
+            prefixIcon: const Icon(Icons.search),
+            isDense: true,
+            suffixIcon: value.text.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Xóa tìm kiếm',
+                    onPressed: () {
+                      controller.clear();
+                      widget.onChanged('');
+                    },
+                    icon: const Icon(Icons.close),
+                  ),
+          ),
+          onChanged: widget.onChanged,
+        ),
+      );
+}
+
+class CampusHelpButton extends StatelessWidget {
+  final String title, message;
+  const CampusHelpButton({
+    super.key,
+    required this.title,
+    required this.message,
+  });
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: title,
+    icon: const Icon(Icons.help_outline),
+    onPressed: () => showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (c) => CampusActionSheet(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Đã hiểu'),
+          ),
+        ],
+      ),
     ),
-    onChanged: onChanged,
+  );
+}
+
+/// Protects local drafts; never implies that a server mutation can be undone.
+class CampusDraftGuard extends StatefulWidget {
+  final bool dirty, busy;
+  final Widget child;
+  const CampusDraftGuard({
+    super.key,
+    required this.dirty,
+    required this.busy,
+    required this.child,
+  });
+  @override
+  State<CampusDraftGuard> createState() => _CampusDraftGuardState();
+}
+
+class _CampusDraftGuardState extends State<CampusDraftGuard> {
+  bool leaving = false, asking = false;
+  @override
+  Widget build(BuildContext context) => PopScope(
+    canPop: !widget.busy && (!widget.dirty || leaving),
+    onPopInvokedWithResult: (didPop, result) async {
+      if (didPop || widget.busy || asking) return;
+      asking = true;
+      final discard = await campusConfirm(
+        context,
+        title: 'Bỏ thay đổi chưa lưu?',
+        message:
+            'Dữ liệu bạn đang nhập sẽ bị bỏ. Chọn Hủy để tiếp tục chỉnh sửa.',
+        confirm: 'Bỏ thay đổi',
+        destructive: true,
+      );
+      asking = false;
+      if (!discard || !mounted) return;
+      setState(() => leaving = true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.of(context).pop(result);
+      });
+    },
+    child: widget.child,
   );
 }
 

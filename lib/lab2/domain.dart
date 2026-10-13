@@ -144,6 +144,22 @@ String localDate(DateTime value) {
   return '${two(v.day)}/${two(v.month)}/${v.year} ${two(v.hour)}:${two(v.minute)}';
 }
 
+String mutationErrorMessage(Object error) {
+  final value = error.toString().toLowerCase();
+  if ([
+    'timeout',
+    'deadline-exceeded',
+    'network',
+    'unavailable',
+    'socket',
+    'connection',
+  ].any(value.contains)) {
+    return 'Chưa xác nhận được kết quả lưu do kết nối gián đoạn. '
+        'Tải lại dữ liệu để kiểm tra thao tác đã được ghi nhận chưa trước khi gửi lại.';
+  }
+  return errorMessage(error);
+}
+
 String errorMessage(Object error) {
   if (error is GoogleSignInException) {
     return switch (error.code) {

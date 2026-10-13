@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'domain.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'lecturer_reminders.dart';
 import 'package:http/http.dart' as http;
 import 'desktop_sync.dart';
 
@@ -241,6 +242,7 @@ class CampusRepository {
   }
 
   Future<void> logout() async {
+    await LecturerReminders.instance.activate(null);
     sharedDesktop.reset();
     await FirebaseAuth.instance.signOut();
     if (googleInitialized) await GoogleSignIn.instance.signOut();

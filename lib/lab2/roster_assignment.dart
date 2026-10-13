@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'data_import.dart';
 import 'domain.dart';
 import 'repository.dart';
+import 'widgets.dart';
 
 class RosterAssignmentPage extends ConsumerStatefulWidget {
   final List<Data> classes;
@@ -66,6 +67,7 @@ class _RosterAssignmentPageState extends ConsumerState<RosterAssignmentPage> {
       if (!mounted) return;
       setState(() {
         workbook = book;
+        saved.clear();
         filename = file.name;
         sheet = book.keys.first;
         suggestClass();
@@ -109,7 +111,7 @@ class _RosterAssignmentPageState extends ConsumerState<RosterAssignmentPage> {
         ),
       );
     } catch (e) {
-      if (mounted) setState(() => error = errorMessage(e));
+      if (mounted) setState(() => error = mutationErrorMessage(e));
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -118,115 +120,137 @@ class _RosterAssignmentPageState extends ConsumerState<RosterAssignmentPage> {
   @override
   Widget build(BuildContext context) {
     final data = preview;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Gán sinh viên từ Excel')),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          const Text(
-            'Lịch đã lưu. Chọn file, sheet và lớp tương ứng để nhập danh sách sinh viên.',
-          ),
-          const SizedBox(height: 16),
-          OutlinedButton.icon(
-            onPressed: busy ? null : pick,
-            icon: const Icon(Icons.upload_file),
-            label: const Text('Chọn Excel / CSV sinh viên'),
-          ),
-          if (filename != null) Text(filename!),
-          if (busy) const LinearProgressIndicator(),
-          if (workbook.isNotEmpty) ...[
+    return CampusDraftGuard(
+      dirty: workbook.isNotEmpty && !saved.contains('$sheet|$classId'),
+      busy: busy,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Gán sinh viên từ Excel'),
+          actions: const [
+            CampusHelpButton(
+              title: 'Hướng dẫn gán sinh viên',
+              message:
+                  'Chọn file Excel/CSV tối đa 5 MB, chọn trang dữ liệu và lớp nhận sinh viên. '
+                  'Đối chiếu mã lớp, môn và học kỳ trước khi xác nhận. '
+                  'Sửa các lỗi trong file rồi chọn lại file. Cột điểm không được nhập. '
+                  'Sinh viên đã có được đối chiếu, danh sách hiện tại không bị xóa.',
+            ),
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            const Text(
+              'Lịch đã lưu. Chọn file, sheet và lớp tương ứng để nhập danh sách sinh viên.',
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: busy ? null : pick,
+              icon: const Icon(Icons.upload_file),
+              label: const Text('Chọn Excel / CSV sinh viên'),
+            ),
+            if (filename != null) Text(filename!),
+            if (busy) const LinearProgressIndicator(),
+            if (workbook.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                key: ValueKey('sheet-$sheet-${workbook.length}'),
+                initialValue: sheet,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Sheet trong file',
+                ),
+                items: [
+                  for (final name in workbook.keys)
+                    DropdownMenuItem(
+                      value: name,
+                      child: Text(name, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: busy
+                    ? null
+                    : (v) => setState(() {
+                        sheet = v;
+                        error = null;
+                        suggestClass();
+                      }),
+              ),
+            ],
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              key: ValueKey('sheet-$sheet-${workbook.length}'),
-              initialValue: sheet,
+              key: ValueKey('class-$classId'),
+              initialValue: classId,
               isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Sheet trong file'),
+              decoration: const InputDecoration(
+                labelText: 'Lớp nhận sinh viên',
+              ),
               items: [
-                for (final name in workbook.keys)
+                for (final c in widget.classes)
                   DropdownMenuItem(
-                    value: name,
-                    child: Text(name, overflow: TextOverflow.ellipsis),
+                    value: '${c['id']}',
+                    child: Text(
+                      '${c['classCode']} • ${c['subjectId']} • ${c['term']}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
               ],
               onChanged: busy
                   ? null
                   : (v) => setState(() {
-                      sheet = v;
+                      classId = v;
                       error = null;
-                      suggestClass();
                     }),
             ),
-          ],
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            key: ValueKey('class-$classId'),
-            initialValue: classId,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Lớp nhận sinh viên'),
-            items: [
-              for (final c in widget.classes)
-                DropdownMenuItem(
-                  value: '${c['id']}',
-                  child: Text(
-                    '${c['classCode']} • ${c['subjectId']} • ${c['term']}',
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-            ],
-            onChanged: busy
-                ? null
-                : (v) => setState(() {
-                    classId = v;
-                    error = null;
-                  }),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Hỗ trợ bảng markbook có cột Class, RollNumber, FullName, Email và hàng tiêu đề ở giữa sheet. Chỉ nhập hàng thuộc lớp đã chọn; cột điểm không được nhập.',
-          ),
-          if (data != null) ...[
-            const SizedBox(height: 16),
-            Text(
-              '${data.rows.length} sinh viên của lớp đã chọn',
-              style: Theme.of(context).textTheme.titleMedium,
+            const SizedBox(height: 12),
+            const Text(
+              'Hỗ trợ bảng markbook có cột Class, RollNumber, FullName, Email và hàng tiêu đề ở giữa sheet. Chỉ nhập hàng thuộc lớp đã chọn; cột điểm không được nhập.',
             ),
-            for (final e in data.errors)
+            if (data != null) ...[
+              const SizedBox(height: 16),
               Text(
-                e,
+                '${data.rows.length} sinh viên của lớp đã chọn',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              for (final e in data.errors)
+                Text(
+                  e,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              for (final row in data.rows.take(10))
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('${row['studentCode']} • ${row['fullName']}'),
+                  subtitle: Text('${row['schoolEmail']}'),
+                ),
+              if (data.rows.length > 10)
+                Text('Và ${data.rows.length - 10} sinh viên khác.'),
+              if (saved.contains('$sheet|$classId'))
+                const Text('Đã nhập sheet này cho lớp đang chọn.'),
+            ],
+            if (error != null)
+              Text(
+                error!,
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
-            for (final row in data.rows.take(10))
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text('${row['studentCode']} • ${row['fullName']}'),
-                subtitle: Text('${row['schoolEmail']}'),
-              ),
-            if (data.rows.length > 10)
-              Text('Và ${data.rows.length - 10} sinh viên khác.'),
-            if (saved.contains('$sheet|$classId'))
-              const Text('Đã nhập sheet này cho lớp đang chọn.'),
-          ],
-          if (error != null)
-            Text(
-              error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            const SizedBox(height: 16),
+            AppPrimaryButton(
+              onPressed:
+                  busy ||
+                      data == null ||
+                      data.rows.isEmpty ||
+                      data.errors.isNotEmpty
+                  ? null
+                  : save,
+              busy: busy,
+              busyLabel: 'Đang xử lý danh sách…',
+              label: 'Xác nhận gán sinh viên vào lớp',
             ),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed:
-                busy ||
-                    data == null ||
-                    data.rows.isEmpty ||
-                    data.errors.isNotEmpty
-                ? null
-                : save,
-            child: const Text('Xác nhận gán sinh viên vào lớp'),
-          ),
-          TextButton(
-            onPressed: busy ? null : () => Navigator.pop(context),
-            child: const Text('Hoàn tất / Nhập sinh viên sau'),
-          ),
-        ],
+            TextButton(
+              onPressed: busy ? null : () => Navigator.maybePop(context),
+              child: const Text('Hoàn tất / Nhập sinh viên sau'),
+            ),
+          ],
+        ),
       ),
     );
   }

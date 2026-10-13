@@ -3,6 +3,7 @@ import 'desktop_session_dialog.dart';
 import 'timetable_domain.dart';
 import 'widgets.dart';
 import 'theme.dart';
+import 'lecturer_workspace.dart';
 
 String roomLabel(String? room) => room == null || room.trim().isEmpty
     ? 'Chưa cập nhật phòng'
@@ -150,6 +151,7 @@ class TeachingPeriodCard extends StatelessWidget {
                       const Icon(Icons.chevron_right, size: 20),
                     ],
                   ),
+                LessonNotebookButton(period: period),
               ],
             ),
           ),

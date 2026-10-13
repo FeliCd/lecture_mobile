@@ -21,6 +21,7 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
   final warnings = <List<String>>[];
   String? imagePath, error;
   bool busy = false, useNvhTimes = true, confirmed = false;
+  bool saved = false;
   static const labels = {
     'subjectCode': 'Mã môn',
     'subjectName': 'Tên môn',
@@ -128,6 +129,7 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
     try {
       final repo = ref.read(repositoryProvider);
       await repo.call('importTimetable', {'schedules': result.rows});
+      if (mounted) setState(() => saved = true);
       final user = ref.read(profileProvider).value!;
       final classes = await repo.classes(user).first;
       final imported = classes
@@ -155,164 +157,184 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
         ),
       );
     } catch (e) {
-      if (mounted) setState(() => error = errorMessage(e));
+      if (mounted) setState(() => error = mutationErrorMessage(e));
     } finally {
       if (mounted) setState(() => busy = false);
     }
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Nhập lịch từ ảnh')),
-    body: ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        const Text(
-          '1. Ảnh → văn bản OCR → duyệt lịch',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        const Text('2. Lưu lịch → nhập Excel → gán sinh viên cho lớp'),
-        const SizedBox(height: 16),
-        TextField(
-          controller: semester,
-          enabled: !busy,
-          onChanged: (_) => setState(() => confirmed = false),
-          decoration: const InputDecoration(
-            labelText: 'Học kỳ',
-            hintText: 'Ví dụ: FA26',
+  Widget build(BuildContext context) => CampusDraftGuard(
+    dirty:
+        !saved &&
+        (raw.text.isNotEmpty || semester.text.isNotEmpty || rows.isNotEmpty),
+    busy: busy,
+    child: Scaffold(
+      appBar: AppBar(
+        title: const Text('Nhập lịch từ ảnh'),
+        actions: const [
+          CampusHelpButton(
+            title: 'Hướng dẫn nhập lịch',
+            message:
+                'Nhập học kỳ, chọn ảnh hoặc dán văn bản, rồi phân tích lịch. '
+                'Đối chiếu từng dòng với ảnh gốc, đặc biệt thứ, giờ, lớp và phòng. '
+                'OCR có thể đọc sai ký tự. Chỉ xác nhận lưu sau khi đã kiểm tra. '
+                'Nếu lưu báo lỗi, nội dung vẫn được giữ để sửa.',
           ),
-        ),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: busy ? null : pick,
-          icon: const Icon(Icons.image_search_outlined),
-          label: const Text('Chọn ảnh và đọc OCR'),
-        ),
-        if (busy) const LinearProgressIndicator(),
-        if (imagePath != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.file(
-                File(imagePath!),
-                height: 180,
-                fit: BoxFit.contain,
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          const Text(
+            '1. Ảnh → văn bản OCR → duyệt lịch',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const Text('2. Lưu lịch → nhập Excel → gán sinh viên cho lớp'),
+          const SizedBox(height: 16),
+          TextField(
+            controller: semester,
+            enabled: !busy,
+            onChanged: (_) => setState(() => confirmed = false),
+            decoration: const InputDecoration(
+              labelText: 'Học kỳ',
+              hintText: 'Ví dụ: FA26',
+            ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: busy ? null : pick,
+            icon: const Icon(Icons.image_search_outlined),
+            label: const Text('Chọn ảnh và đọc OCR'),
+          ),
+          if (busy) const LinearProgressIndicator(),
+          if (imagePath != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.file(
+                  File(imagePath!),
+                  height: 180,
+                  fit: BoxFit.contain,
+                ),
               ),
             ),
-          ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: raw,
-          enabled: !busy,
-          minLines: 4,
-          maxLines: 10,
-          onChanged: (_) => setState(() => confirmed = false),
-          decoration: const InputDecoration(
-            labelText: 'Văn bản OCR (có thể sửa / dán)',
-            hintText: 'MON Slot 1 PRM393 SE1928 07:00 09:15 NVH 201',
-          ),
-        ),
-        CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          value: useNvhTimes,
-          title: const Text('Điền giờ còn thiếu theo khung NVH'),
-          subtitle: const Text(
-            'Slot 1–4: 07:00, 09:30, 12:30, 15:00. Cần đối chiếu ảnh.',
-          ),
-          onChanged: busy
-              ? null
-              : (v) => setState(() {
-                  useNvhTimes = v!;
-                  confirmed = false;
-                }),
-        ),
-        OutlinedButton(
-          onPressed: busy ? null : parse,
-          child: const Text('Phân tích văn bản thành lịch'),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          '${rows.length} dòng lịch cần duyệt',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        for (var i = 0; i < rows.length; i++)
-          CampusCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Dòng ${i + 1}',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Xóa dòng',
-                      onPressed: busy
-                          ? null
-                          : () => setState(() {
-                              for (final c in rows.removeAt(i).values) {
-                                c.dispose();
-                              }
-                              warnings.removeAt(i);
-                              confirmed = false;
-                            }),
-                      icon: const Icon(Icons.delete_outline),
-                    ),
-                  ],
-                ),
-                for (final note in warnings[i])
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Text(
-                      note,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                for (final key in labels.keys)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: TextField(
-                      controller: rows[i][key],
-                      enabled: !busy,
-                      onChanged: (_) => setState(() => confirmed = false),
-                      decoration: InputDecoration(labelText: labels[key]),
-                    ),
-                  ),
-              ],
+          const SizedBox(height: 12),
+          TextField(
+            controller: raw,
+            enabled: !busy,
+            minLines: 4,
+            maxLines: 10,
+            onChanged: (_) => setState(() => confirmed = false),
+            decoration: const InputDecoration(
+              labelText: 'Văn bản OCR (có thể sửa / dán)',
+              hintText: 'MON Slot 1 PRM393 SE1928 07:00 09:15 NVH 201',
             ),
           ),
-        TextButton.icon(
-          onPressed: busy || rows.length >= 100
-              ? null
-              : () => setState(() {
-                  addRow({});
-                  confirmed = false;
-                }),
-          icon: const Icon(Icons.add),
-          label: const Text('Thêm dòng lịch'),
-        ),
-        if (rows.isNotEmpty)
           CheckboxListTile(
             contentPadding: EdgeInsets.zero,
-            value: confirmed,
-            title: const Text('Tôi đã đối chiếu lịch với ảnh gốc'),
-            onChanged: busy ? null : (v) => setState(() => confirmed = v!),
+            value: useNvhTimes,
+            title: const Text('Điền giờ còn thiếu theo khung NVH'),
+            subtitle: const Text(
+              'Slot 1–4: 07:00, 09:30, 12:30, 15:00. Cần đối chiếu ảnh.',
+            ),
+            onChanged: busy
+                ? null
+                : (v) => setState(() {
+                    useNvhTimes = v!;
+                    confirmed = false;
+                  }),
           ),
-        if (error != null)
+          OutlinedButton(
+            onPressed: busy ? null : parse,
+            child: const Text('Phân tích văn bản thành lịch'),
+          ),
+          const SizedBox(height: 16),
           Text(
-            error!,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+            '${rows.length} dòng lịch cần duyệt',
+            style: Theme.of(context).textTheme.titleMedium,
           ),
-        const SizedBox(height: 12),
-        FilledButton(
-          onPressed: busy || !confirmed || rows.isEmpty ? null : save,
-          child: const Text('Lưu lịch và tiếp tục nhập Excel'),
-        ),
-      ],
+          for (var i = 0; i < rows.length; i++)
+            CampusCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Dòng ${i + 1}',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Xóa dòng',
+                        onPressed: busy
+                            ? null
+                            : () => setState(() {
+                                for (final c in rows.removeAt(i).values) {
+                                  c.dispose();
+                                }
+                                warnings.removeAt(i);
+                                confirmed = false;
+                              }),
+                        icon: const Icon(Icons.delete_outline),
+                      ),
+                    ],
+                  ),
+                  for (final note in warnings[i])
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(
+                        note,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  for (final key in labels.keys)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: TextField(
+                        controller: rows[i][key],
+                        enabled: !busy,
+                        onChanged: (_) => setState(() => confirmed = false),
+                        decoration: InputDecoration(labelText: labels[key]),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          TextButton.icon(
+            onPressed: busy || rows.length >= 100
+                ? null
+                : () => setState(() {
+                    addRow({});
+                    confirmed = false;
+                  }),
+            icon: const Icon(Icons.add),
+            label: const Text('Thêm dòng lịch'),
+          ),
+          if (rows.isNotEmpty)
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: confirmed,
+              title: const Text('Tôi đã đối chiếu lịch với ảnh gốc'),
+              onChanged: busy ? null : (v) => setState(() => confirmed = v!),
+            ),
+          if (error != null)
+            Text(
+              error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          const SizedBox(height: 12),
+          AppPrimaryButton(
+            onPressed: busy || !confirmed || rows.isEmpty ? null : save,
+            busy: busy,
+            busyLabel: 'Đang xử lý lịch…',
+            label: 'Lưu lịch và tiếp tục nhập Excel',
+          ),
+        ],
+      ),
     ),
   );
 }

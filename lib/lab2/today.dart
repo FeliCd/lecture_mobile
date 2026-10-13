@@ -6,6 +6,7 @@ import 'timetable_card.dart';
 import 'timetable_domain.dart';
 import 'widgets.dart';
 import 'timetable.dart';
+import 'lecturer_workspace.dart';
 
 class TodayPanel extends ConsumerStatefulWidget {
   final UserProfile user;
@@ -22,13 +23,25 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
     final repo = ref.read(repositoryProvider), day = campusDay(DateTime.now());
     final exceptions = ref.watch(teachingExceptionsProvider(widget.user.uid));
     if (exceptions.hasError) {
-      return ErrorState(
-        exceptions.error!,
-        () => ref.invalidate(teachingExceptionsProvider(widget.user.uid)),
+      return ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          WorkspaceShortcut(user: widget.user),
+          ErrorState(
+            exceptions.error!,
+            () => ref.invalidate(teachingExceptionsProvider(widget.user.uid)),
+          ),
+        ],
       );
     }
     if (!exceptions.hasValue) {
-      return const Center(child: CircularProgressIndicator());
+      return ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          WorkspaceShortcut(user: widget.user),
+          const Center(child: CircularProgressIndicator()),
+        ],
+      );
     }
     return CampusRefreshList(
       padding: const EdgeInsets.all(20),
@@ -38,6 +51,7 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         Text('${teachingDayName(day.weekday)}, ${timetableDate(day)}'),
+        WorkspaceShortcut(user: widget.user),
         OutlinedButton(
           onPressed: widget.onTimetable,
           child: const Text('Xem thời khóa biểu'),

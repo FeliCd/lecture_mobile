@@ -18,6 +18,8 @@ import 'today.dart';
 import 'live_attendance.dart';
 import 'import_page.dart';
 import 'roster_assignment.dart';
+import 'lecturer_workspace.dart';
+import 'lecturer_reminders.dart';
 
 final themeProvider = NotifierProvider<ThemeSettings, ThemeMode>(
   ThemeSettings.new,
@@ -102,6 +104,13 @@ class _CampusAppState extends ConsumerState<CampusApp> {
               : AttendanceHost(sessionId: s.pathParameters['id']!),
         ),
         GoRoute(path: '/settings', builder: (_, _) => const SettingsPage()),
+        GoRoute(
+          path: '/workspace',
+          builder: (_, s) => LecturerWorkspacePage(
+            user: ref.read(profileProvider).value!,
+            selectedTask: s.uri.queryParameters['task'],
+          ),
+        ),
       ],
     );
   }
@@ -115,7 +124,18 @@ class _CampusAppState extends ConsumerState<CampusApp> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(profileProvider, (_, _) => refresh.value++);
+    ref.listen(profileProvider, (previous, next) {
+      refresh.value++;
+      if (next.isLoading) return;
+      final uid = next.value?.uid;
+      if (uid != previous?.value?.uid) {
+        LecturerReminders.instance.onOpen = (id) =>
+            router.go('/workspace?task=${Uri.encodeQueryComponent(id)}');
+        LecturerReminders.instance
+            .activate(next.value?.isLecturer == true ? uid : null)
+            .catchError((Object _) {});
+      }
+    });
     return MaterialApp.router(
       title: 'FAP Attendance',
       debugShowCheckedModeBanner: false,
@@ -537,6 +557,7 @@ class SettingsPage extends ConsumerWidget {
             },
           ),
           const SizedBox(height: 16),
+          if (u?.isLecturer == true) WorkspaceShortcut(user: u!),
           CampusOutlineAction(
             onPressed: () => openImport(context),
             icon: Icons.document_scanner_outlined,

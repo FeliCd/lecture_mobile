@@ -14,29 +14,30 @@ Future<void> editAttendance(
 }) async {
   final input = await showDialog<Data>(
     context: context,
-    builder: (_) => AttendanceEditDialog(status: status, notes: notes),
+    barrierDismissible: false,
+    builder: (_) => AttendanceEditDialog(
+      status: status,
+      notes: notes,
+      onSave: (input) => ref.read(repositoryProvider).call(
+        'updateAttendanceRecord',
+        {'attendanceSessionId': sessionId, 'studentUid': studentUid, ...input},
+      ),
+    ),
   );
   if (input == null || !context.mounted) return;
-  await runAction(context, () async {
-    await ref.read(repositoryProvider).call('updateAttendanceRecord', {
-      'attendanceSessionId': sessionId,
-      'studentUid': studentUid,
-      ...input,
-    });
-    if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Đã cập nhật điểm danh.')));
-    }
-  });
+  ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(const SnackBar(content: Text('Đã cập nhật điểm danh.')));
 }
 
 class AttendanceEditDialog extends StatefulWidget {
   final String status, notes;
+  final Future<Data> Function(Data)? onSave;
   const AttendanceEditDialog({
     super.key,
     required this.status,
     this.notes = '',
+    this.onSave,
   });
   @override
   State<AttendanceEditDialog> createState() => _AttendanceEditDialogState();
@@ -47,7 +48,41 @@ class _AttendanceEditDialogState extends State<AttendanceEditDialog> {
   late String status = attendanceStatus(widget.status) == 'pending'
       ? 'present'
       : attendanceStatus(widget.status);
+  late final initialStatus = status;
   late final notes = TextEditingController(text: widget.notes);
+  bool busy = false, saved = false;
+  Object? error;
+  bool get dirty => status != initialStatus || notes.text != widget.notes;
+  Future<void> save() async {
+    if (busy || !form.currentState!.validate()) return;
+    final input = <String, dynamic>{
+      'status': status,
+      'notes': notes.text.trim(),
+    };
+    setState(() {
+      busy = true;
+      error = null;
+    });
+    try {
+      await widget.onSave?.call(input);
+      if (!mounted) return;
+      setState(() {
+        saved = true;
+        busy = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.pop(context, input);
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          error = e;
+          busy = false;
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
     notes.dispose();
@@ -55,57 +90,67 @@ class _AttendanceEditDialogState extends State<AttendanceEditDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Cập nhật điểm danh'),
-    content: Form(
-      key: form,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<String>(
-              isExpanded: true,
-              initialValue: status,
-              decoration: const InputDecoration(labelText: 'Trạng thái'),
-              items: ['present', 'late', 'absent', 'excused']
-                  .map(
-                    (s) => DropdownMenuItem(
-                      value: s,
-                      child: Text(StatusBadge.label(s)),
+  Widget build(BuildContext context) => CampusDraftGuard(
+    dirty: !saved && dirty,
+    busy: busy,
+    child: AlertDialog(
+      title: const Text('Cập nhật điểm danh'),
+      content: Form(
+        key: form,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                initialValue: status,
+                decoration: const InputDecoration(labelText: 'Trạng thái'),
+                items: ['present', 'late', 'absent', 'excused']
+                    .map(
+                      (s) => DropdownMenuItem(
+                        value: s,
+                        child: Text(StatusBadge.label(s)),
+                      ),
+                    )
+                    .toList(),
+                onChanged: busy ? null : (v) => setState(() => status = v!),
+              ),
+              TextFormField(
+                controller: notes,
+                enabled: !busy,
+                onChanged: (_) => setState(() {}),
+                maxLength: 500,
+                maxLines: 3,
+                decoration: const InputDecoration(labelText: 'Lý do / ghi chú'),
+                validator: (v) => v == null || v.trim().isEmpty
+                    ? 'Nhập lý do điều chỉnh.'
+                    : null,
+              ),
+              const Text('Thay đổi được lưu kèm lý do và người điều chỉnh.'),
+              if (error != null)
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    '${mutationErrorMessage(error!)}\nNội dung nhập vẫn được giữ.',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
                     ),
-                  )
-                  .toList(),
-              onChanged: (v) => status = v!,
-            ),
-            TextFormField(
-              controller: notes,
-              maxLength: 500,
-              maxLines: 3,
-              decoration: const InputDecoration(labelText: 'Lý do / ghi chú'),
-              validator: (v) => v == null || v.trim().isEmpty
-                  ? 'Nhập lý do điều chỉnh.'
-                  : null,
-            ),
-          ],
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
+      actions: [
+        TextButton(
+          onPressed: busy ? null : () => Navigator.maybePop(context),
+          child: const Text('Hủy'),
+        ),
+        FilledButton(
+          onPressed: busy ? null : save,
+          child: Text(busy ? 'Đang lưu…' : 'Lưu'),
+        ),
+      ],
     ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Hủy'),
-      ),
-      FilledButton(
-        onPressed: () {
-          if (form.currentState!.validate()) {
-            Navigator.pop(context, {
-              'status': status,
-              'notes': notes.text.trim(),
-            });
-          }
-        },
-        child: const Text('Lưu'),
-      ),
-    ],
   );
 }

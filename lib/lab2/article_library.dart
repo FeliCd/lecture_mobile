@@ -111,111 +111,133 @@ class _ArticleDetailsPageState extends ConsumerState<ArticleDetailsPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Chi tiết bài báo')),
-    body: StreamBuilder<Data?>(
-      stream: saved,
-      builder: (context, snapshot) {
-        if (!initialized &&
-            snapshot.connectionState != ConnectionState.waiting) {
-          initialized = true;
-          if (!dirty && snapshot.data != null) {
-            summary.text = snapshot.data!['summary'] ?? '';
+  Widget build(BuildContext context) => CampusDraftGuard(
+    dirty: dirty,
+    busy: busy,
+    child: Scaffold(
+      appBar: AppBar(title: const Text('Chi tiết bài báo')),
+      body: StreamBuilder<Data?>(
+        stream: saved,
+        builder: (context, snapshot) {
+          if (!initialized &&
+              snapshot.connectionState != ConnectionState.waiting) {
+            initialized = true;
+            if (!dirty && snapshot.data != null) {
+              summary.text = snapshot.data!['summary'] ?? '';
+            }
           }
-        }
-        final article = widget.article;
-        return ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            Text(
-              '${article['title']}',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 12),
-            Text('${article['source'] ?? ''} • ${article['publisher'] ?? ''}'),
-            Text((article['authors'] as List? ?? []).join(', ')),
-            if ('${article['publishedAt'] ?? ''}'.isNotEmpty)
-              Text('${article['publishedAt']}'),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.open_in_new),
-              label: const Text('Đọc bài gốc'),
-              onPressed: () => runAction(context, () async {
-                final url = Uri.tryParse('${article['url']}');
-                if (url == null ||
-                    url.scheme != 'https' ||
-                    url.userInfo.isNotEmpty) {
-                  throw StateError('INVALID_INPUT');
-                }
-                if (!await launchUrl(
-                  url,
-                  mode: LaunchMode.externalApplication,
-                )) {
-                  throw StateError('unavailable');
-                }
-              }),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Tóm tắt của bạn',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Sử dụng tóm tắt từ nguồn hoặc chỉnh sửa nội dung để lưu vào thư viện riêng.',
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: summary,
-              minLines: 6,
-              maxLines: 18,
-              maxLength: 12000,
-              onChanged: (_) => dirty = true,
-              decoration: const InputDecoration(
-                hintText: 'Bài báo chưa có tóm tắt. Bạn có thể nhập tại đây.',
+          final article = widget.article;
+          return ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              Text(
+                '${article['title']}',
+                style: Theme.of(context).textTheme.headlineSmall,
               ),
-            ),
-            if (snapshot.hasError) Text(errorMessage(snapshot.error!)),
-            const SizedBox(height: 16),
-            AppPrimaryButton(
-              label: snapshot.data == null
-                  ? 'Lưu bài báo và tóm tắt'
-                  : 'Cập nhật tóm tắt',
-              busy: busy,
-              onPressed: snapshot.connectionState == ConnectionState.waiting
-                  ? null
-                  : () async {
-                      setState(() => busy = true);
-                      await runAction(context, () async {
-                        await ref
-                            .read(articleLibraryProvider)
-                            .save(article, summary.text);
-                        dirty = false;
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Đã lưu vào thư viện của bạn.'),
-                            ),
-                          );
-                        }
-                      });
-                      if (mounted) setState(() => busy = false);
-                    },
-            ),
-            if (snapshot.data != null)
-              TextButton.icon(
-                icon: const Icon(Icons.bookmark_remove_outlined),
-                label: const Text('Bỏ lưu bài viết'),
-                onPressed: busy
+              const SizedBox(height: 12),
+              Text(
+                '${article['source'] ?? ''} • ${article['publisher'] ?? ''}',
+              ),
+              Text((article['authors'] as List? ?? []).join(', ')),
+              if ('${article['publishedAt'] ?? ''}'.isNotEmpty)
+                Text('${article['publishedAt']}'),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.open_in_new),
+                label: const Text('Đọc bài gốc'),
+                onPressed: () => runAction(context, () async {
+                  final url = Uri.tryParse('${article['url']}');
+                  if (url == null ||
+                      url.scheme != 'https' ||
+                      url.userInfo.isNotEmpty) {
+                    throw StateError('INVALID_INPUT');
+                  }
+                  if (!await launchUrl(
+                    url,
+                    mode: LaunchMode.externalApplication,
+                  )) {
+                    throw StateError('unavailable');
+                  }
+                }),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Tóm tắt của bạn',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Sử dụng tóm tắt từ nguồn hoặc chỉnh sửa nội dung để lưu vào thư viện riêng.',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: summary,
+                enabled: !busy,
+                minLines: 6,
+                maxLines: 18,
+                maxLength: 12000,
+                onChanged: (_) => setState(() => dirty = true),
+                decoration: const InputDecoration(
+                  hintText: 'Bài báo chưa có tóm tắt. Bạn có thể nhập tại đây.',
+                ),
+              ),
+              if (snapshot.hasError) Text(errorMessage(snapshot.error!)),
+              const SizedBox(height: 16),
+              AppPrimaryButton(
+                label: snapshot.data == null
+                    ? 'Lưu bài báo và tóm tắt'
+                    : 'Cập nhật tóm tắt',
+                busy: busy,
+                onPressed: snapshot.connectionState == ConnectionState.waiting
                     ? null
-                    : () => runAction(context, () async {
-                        await ref.read(articleLibraryProvider).remove(article);
-                        if (context.mounted) Navigator.pop(context);
-                      }),
+                    : () async {
+                        setState(() => busy = true);
+                        await runAction(context, () async {
+                          await ref
+                              .read(articleLibraryProvider)
+                              .save(article, summary.text);
+                          dirty = false;
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Đã lưu vào thư viện của bạn.'),
+                              ),
+                            );
+                          }
+                        });
+                        if (mounted) setState(() => busy = false);
+                      },
               ),
-          ],
-        );
-      },
+              if (snapshot.data != null)
+                TextButton.icon(
+                  icon: const Icon(Icons.bookmark_remove_outlined),
+                  label: const Text('Bỏ lưu bài viết'),
+                  onPressed: busy
+                      ? null
+                      : () async {
+                          final confirmed = await campusConfirm(
+                            context,
+                            title: 'Bỏ lưu bài viết?',
+                            message:
+                                'Bài viết và ghi chú riêng sẽ được bỏ khỏi thư viện. Bạn vẫn có thể tìm và lưu lại bài gốc.',
+                            confirm: 'Bỏ lưu',
+                            destructive: true,
+                          );
+                          if (!confirmed || !context.mounted || busy) return;
+                          setState(() => busy = true);
+                          await runAction(context, () async {
+                            await ref
+                                .read(articleLibraryProvider)
+                                .remove(article);
+                            if (context.mounted) Navigator.pop(context);
+                          });
+                          if (mounted) setState(() => busy = false);
+                        },
+                ),
+            ],
+          );
+        },
+      ),
     ),
   );
 }
@@ -228,6 +250,13 @@ class SavedArticlesPanel extends ConsumerStatefulWidget {
 
 class _SavedArticlesPanelState extends ConsumerState<SavedArticlesPanel> {
   String query = '';
+  final search = TextEditingController();
+  @override
+  void dispose() {
+    search.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final articles = ref.watch(savedArticlesProvider);
@@ -235,12 +264,10 @@ class _SavedArticlesPanelState extends ConsumerState<SavedArticlesPanel> {
       children: [
         Padding(
           padding: const EdgeInsets.all(16),
-          child: TextField(
+          child: CampusSearchField(
+            controller: search,
+            hint: 'Tìm trong bài báo đã lưu',
             onChanged: (v) => setState(() => query = v.toLowerCase().trim()),
-            decoration: const InputDecoration(
-              labelText: 'Tìm trong bài báo đã lưu',
-              prefixIcon: Icon(Icons.search),
-            ),
           ),
         ),
         Expanded(
@@ -258,8 +285,15 @@ class _SavedArticlesPanelState extends ConsumerState<SavedArticlesPanel> {
                   )
                   .toList();
               if (filtered.isEmpty) {
-                return const EmptyState(
-                  'Chưa có bài báo phù hợp. Lưu bài từ Tin tức hoặc Nghiên cứu.',
+                return EmptyState(
+                  rows.isEmpty
+                      ? 'Thư viện chưa có bài viết. Lưu bài từ Tin tức hoặc Nghiên cứu.'
+                      : 'Không có bài viết khớp từ khóa.',
+                  actionLabel: query.isEmpty ? null : 'Xóa tìm kiếm',
+                  onAction: () => setState(() {
+                    query = '';
+                    search.clear();
+                  }),
                 );
               }
               return ListView.builder(

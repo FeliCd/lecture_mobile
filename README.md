@@ -5,6 +5,7 @@ Flutter Android/iOS, entry `lib/main.dart` → `lib/lab2/app.dart`. Bản shared
 ## Chức năng
 
 - **Hôm nay:** lịch thật theo học kỳ, tạo hoặc tiếp tục phiên từ buổi học.
+- **Trợ lý giảng dạy:** việc cá nhân, nhắc Android theo ngày, sổ tay buổi dạy tự lưu trên máy và tổng kết tuần xuất Excel. Mở từ Hôm nay hoặc thẻ buổi học; chưa đồng bộ dữ liệu cá nhân. [Phạm vi và kiểm thử](docs/LECTURER_MVP1_IMPLEMENTATION.md).
 - **Lịch dạy:** xem ngày/tuần, môn, lịch định kỳ và ngoại lệ theo ngày.
 - **Lớp học:** roster, QR/secret, live polling, chốt phiên, điều chỉnh có lý do/audit, thống kê và CSV. Giữ OCR/Excel/CSV; sửa tên/email có kiểm soát; hủy/dời/bù/đổi phòng.
 - **Cập nhật:** NEWS từ RSS chính thức, RESEARCH Crossref/OpenAlex theo môn được phân công; lọc nguồn/ngày/từ khóa, provenance, lưu/ghi chú/bỏ lưu.

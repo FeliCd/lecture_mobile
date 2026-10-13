@@ -26,13 +26,16 @@ class ClassToolsPage extends ConsumerWidget {
               children: [
                 for (final s in rows.where((s) => s['classId'] == cls['id']))
                   ListTile(
-                    title: Text('Thứ ${s['dayOfWeek']} • Slot ${s['slot']}'),
+                    title: Text(
+                      '${s['dayOfWeek'] == 7 ? 'Chủ nhật' : 'Thứ ${(s['dayOfWeek'] as num) + 1}'} • Slot ${s['slot']}',
+                    ),
                     subtitle: Text(
                       '${s['startTime']} – ${s['endTime']} • ${s['room']}',
                     ),
                     trailing: const Icon(Icons.edit_calendar),
                     onTap: () => showDialog(
                       context: context,
+                      barrierDismissible: false,
                       builder: (_) => ClassToolDialog(cls: cls, schedule: s),
                     ),
                   ),
@@ -65,6 +68,7 @@ class ClassToolsPage extends ConsumerWidget {
                     trailing: const Icon(Icons.edit_outlined),
                     onTap: () => showDialog(
                       context: context,
+                      barrierDismissible: false,
                       builder: (_) =>
                           ClassToolDialog(cls: cls, student: student),
                     ),
@@ -96,6 +100,14 @@ class _ClassToolDialogState extends ConsumerState<ClassToolDialog> {
   late final Map<String, TextEditingController> fields;
   String kind = 'CANCELLED';
   bool busy = false;
+  bool dirty = false;
+  static const kinds = {
+    'CANCELLED': 'Hủy buổi',
+    'RESCHEDULED': 'Dời buổi',
+    'MAKEUP': 'Buổi bù',
+    'ROOM_CHANGED': 'Đổi phòng',
+    'RESTORED': 'Khôi phục lịch gốc',
+  };
   Object? error;
   @override
   void initState() {
@@ -135,7 +147,7 @@ class _ClassToolDialogState extends ConsumerState<ClassToolDialog> {
     if (!form.currentState!.validate()) return;
     final description = widget.student != null
         ? 'Họ tên: ${widget.student!['displayName'] ?? widget.student!['fullName'] ?? ''} → ${fields['fullName']!.text.trim()}\nEmail: ${widget.student!['schoolEmail'] ?? ''} → ${fields['schoolEmail']!.text.trim()}'
-        : 'Lớp ${widget.cls['classCode'] ?? widget.cls['id']} • $kind • ngày ${fields['date']!.text.trim()}';
+        : 'Lớp ${widget.cls['classCode'] ?? widget.cls['id']} • ${kinds[kind]} • ngày ${fields['date']!.text.trim()}';
     if (!await campusConfirm(
           context,
           title: 'Xác nhận thay đổi?',
@@ -179,85 +191,100 @@ class _ClassToolDialogState extends ConsumerState<ClassToolDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text(
-      widget.schedule != null
-          ? 'Ngoại lệ lịch theo ngày'
-          : 'Sửa thông tin sinh viên',
-    ),
-    content: SizedBox(
-      width: 420,
-      child: SingleChildScrollView(
-        child: Form(
-          key: form,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (widget.schedule != null)
-                DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  initialValue: kind,
-                  items:
-                      const {
-                            'CANCELLED': 'Hủy buổi',
-                            'RESCHEDULED': 'Dời buổi',
-                            'MAKEUP': 'Thêm buổi bù',
-                            'ROOM_CHANGED': 'Đổi phòng',
-                            'RESTORED': 'Khôi phục lịch gốc',
-                          }.entries
-                          .map(
-                            (e) => DropdownMenuItem(
-                              value: e.key,
-                              child: Text(e.value),
-                            ),
-                          )
-                          .toList(),
-                  onChanged: busy ? null : (v) => setState(() => kind = v!),
-                ),
-              for (final e in fields.entries)
-                if (e.key != 'targetDate' ||
-                    ['RESCHEDULED', 'MAKEUP'].contains(kind))
-                  TextFormField(
-                    controller: e.value,
-                    enabled: !busy,
-                    decoration: InputDecoration(
-                      labelText: const {
-                        'date': 'Ngày gốc (YYYY-MM-DD)',
-                        'targetDate': 'Ngày mới (YYYY-MM-DD)',
-                        'slot': 'Slot',
-                        'startTime': 'Bắt đầu (HH:mm)',
-                        'endTime': 'Kết thúc (HH:mm)',
-                        'room': 'Phòng',
-                        'fullName': 'Họ tên',
-                        'schoolEmail': 'Email trường',
-                        'reason': 'Lý do bắt buộc',
-                      }[e.key],
+  Widget build(BuildContext context) => CampusDraftGuard(
+    dirty: dirty,
+    busy: busy,
+    child: AlertDialog(
+      title: Text(
+        widget.schedule != null
+            ? 'Ngoại lệ lịch theo ngày'
+            : 'Sửa thông tin sinh viên',
+      ),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Form(
+            key: form,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.schedule != null)
+                  DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    initialValue: kind,
+                    decoration: const InputDecoration(
+                      labelText: 'Thao tác với buổi học',
                     ),
-                    validator: (v) =>
-                        !['room', 'schoolEmail'].contains(e.key) &&
-                            (v ?? '').trim().isEmpty
-                        ? 'Vui lòng nhập thông tin'
-                        : null,
+                    items:
+                        const {
+                              'CANCELLED': 'Hủy buổi',
+                              'RESCHEDULED': 'Dời buổi',
+                              'MAKEUP': 'Thêm buổi bù',
+                              'ROOM_CHANGED': 'Đổi phòng',
+                              'RESTORED': 'Khôi phục lịch gốc',
+                            }.entries
+                            .map(
+                              (e) => DropdownMenuItem(
+                                value: e.key,
+                                child: Text(e.value),
+                              ),
+                            )
+                            .toList(),
+                    onChanged: busy
+                        ? null
+                        : (v) => setState(() {
+                            kind = v!;
+                            dirty = true;
+                          }),
                   ),
-              if (error != null)
-                Text(
-                  errorMessage(error!),
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-            ],
+                for (final e in fields.entries)
+                  if (e.key != 'targetDate' ||
+                      ['RESCHEDULED', 'MAKEUP'].contains(kind))
+                    TextFormField(
+                      controller: e.value,
+                      enabled: !busy,
+                      onChanged: (_) => setState(() => dirty = true),
+                      decoration: InputDecoration(
+                        labelText: const {
+                          'date': 'Ngày gốc (YYYY-MM-DD)',
+                          'targetDate': 'Ngày mới (YYYY-MM-DD)',
+                          'slot': 'Slot',
+                          'startTime': 'Bắt đầu (HH:mm)',
+                          'endTime': 'Kết thúc (HH:mm)',
+                          'room': 'Phòng',
+                          'fullName': 'Họ tên',
+                          'schoolEmail': 'Email trường',
+                          'reason': 'Lý do bắt buộc',
+                        }[e.key],
+                      ),
+                      validator: (v) =>
+                          !['room', 'schoolEmail'].contains(e.key) &&
+                              (v ?? '').trim().isEmpty
+                          ? 'Vui lòng nhập thông tin'
+                          : null,
+                    ),
+                if (error != null)
+                  Text(
+                    mutationErrorMessage(error!),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
+      actions: [
+        TextButton(
+          onPressed: busy ? null : () => Navigator.maybePop(context),
+          child: const Text('Hủy'),
+        ),
+        FilledButton(
+          onPressed: busy ? null : save,
+          child: Text(busy ? 'Đang lưu…' : 'Xác nhận lưu'),
+        ),
+      ],
     ),
-    actions: [
-      TextButton(
-        onPressed: busy ? null : () => Navigator.pop(context),
-        child: const Text('Hủy'),
-      ),
-      FilledButton(
-        onPressed: busy ? null : save,
-        child: Text(busy ? 'Đang lưu…' : 'Xác nhận lưu'),
-      ),
-    ],
   );
 }

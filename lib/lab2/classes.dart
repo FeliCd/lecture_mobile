@@ -58,6 +58,13 @@ class ClassList extends ConsumerStatefulWidget {
 
 class _ClassListState extends ConsumerState<ClassList> {
   String query = '', term = '';
+  final searchController = TextEditingController();
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => CampusRefreshList(
     padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -66,11 +73,9 @@ class _ClassListState extends ConsumerState<ClassList> {
         title: 'Không gian lớp học',
         subtitle: 'Danh sách lớp, sinh viên và tình hình điểm danh',
       ),
-      TextField(
-        decoration: const InputDecoration(
-          labelText: 'Tìm lớp hoặc môn',
-          prefixIcon: Icon(Icons.search),
-        ),
+      CampusSearchField(
+        controller: searchController,
+        hint: 'Tìm lớp hoặc môn',
         onChanged: (v) => setState(() => query = v.toLowerCase()),
       ),
       const SizedBox(height: 16),
@@ -118,7 +123,16 @@ class _ClassListState extends ConsumerState<ClassList> {
                   ),
                 ),
               ),
-              if (filtered.isEmpty) const EmptyState('Không có lớp phù hợp.'),
+              if (filtered.isEmpty)
+                EmptyState(
+                  'Không có lớp phù hợp.',
+                  actionLabel: 'Xóa bộ lọc',
+                  onAction: () => setState(() {
+                    query = '';
+                    term = '';
+                    searchController.clear();
+                  }),
+                ),
               ...filtered.map((c) => ClassTile(data: c)),
             ],
           );
@@ -154,9 +168,17 @@ class ClassPage extends ConsumerWidget {
         body: StreamBuilder<Data?>(
           stream: repo.document('classes/$classId'),
           builder: (context, s) {
-            if (s.hasError) return ErrorState(s.error!, () => context.go('/'));
+            if (s.hasError) {
+              return ErrorState(
+                s.error!,
+                () => context.go('/'),
+                actionLabel: 'Về Hôm nay',
+              );
+            }
             if (!s.hasData) {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(
+                child: CampusLoadingState(message: 'Đang tải lớp học…'),
+              );
             }
             final cls = s.data!;
             return TabBarView(

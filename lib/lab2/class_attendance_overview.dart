@@ -44,6 +44,13 @@ class ClassAttendanceOverview extends ConsumerStatefulWidget {
 class _ClassAttendanceOverviewState
     extends ConsumerState<ClassAttendanceOverview> {
   String search = '', filter = 'all';
+  final searchController = TextEditingController();
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final id = widget.cls['id'] as String;
@@ -264,7 +271,7 @@ class _ClassAttendanceOverviewState
                   ),
                   children: const [
                     Text(
-                      'Tỷ lệ vắng tính trên các buổi đã chốt. Cảnh báo từ 15% đến 20%; vượt ngưỡng khi trên 20%.',
+                      'Tỷ lệ vắng tính trên các buổi đã chốt. Cảnh báo từ 15% đến 20%; vượt ngưỡng khi trên 20%. Đi muộn và vắng có phép được giữ riêng; khi thiếu quy định tính các trạng thái này, tỷ lệ sẽ hiển thị chưa đủ cấu hình.',
                       style: TextStyle(fontSize: 12, height: 1.6),
                     ),
                   ],
@@ -281,11 +288,9 @@ class _ClassAttendanceOverviewState
                 ? 'Đồng bộ từ Sheet • Tự cập nhật mỗi 30 giây'
                 : 'Theo dõi chuyên cần và lịch sử từng sinh viên',
           ),
-          TextField(
-            decoration: const InputDecoration(
-              labelText: 'Tìm tên hoặc MSSV',
-              prefixIcon: Icon(Icons.search),
-            ),
+          CampusSearchField(
+            controller: searchController,
+            hint: 'Tìm tên hoặc MSSV',
             onChanged: (value) =>
                 setState(() => search = value.toLowerCase().trim()),
           ),
@@ -306,7 +311,18 @@ class _ClassAttendanceOverviewState
                 ),
             ],
           ),
-          if (students.isEmpty) const EmptyState('Không có sinh viên phù hợp.'),
+          if (students.isEmpty)
+            EmptyState(
+              'Không có sinh viên phù hợp.',
+              actionLabel: search.isNotEmpty || filter != 'all'
+                  ? 'Xóa bộ lọc'
+                  : null,
+              onAction: () => setState(() {
+                search = '';
+                filter = 'all';
+                searchController.clear();
+              }),
+            ),
           if (students.isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),

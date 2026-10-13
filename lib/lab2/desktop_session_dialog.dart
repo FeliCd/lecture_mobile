@@ -146,10 +146,12 @@ class _DesktopSessionDialogState extends ConsumerState<DesktopSessionDialog>
               ),
               Text(roomLabel(occurrence?['room'] as String? ?? p.room)),
               if (loading)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Center(child: CircularProgressIndicator()),
+                const CampusLoadingState(
+                  message: 'Đang kiểm tra buổi học với máy chủ…',
                 ),
+              const Text(
+                'Giờ học và thời hạn được kiểm tra theo máy chủ (UTC+7). Phiên không kéo dài quá giờ kết thúc buổi học.',
+              ),
               if (state == 'AVAILABLE') ...[
                 DropdownButtonFormField<int>(
                   isExpanded: true,
