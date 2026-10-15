@@ -73,9 +73,16 @@ void main() {
     await tester.pump(const Duration(seconds: 8));
     await tester.pumpAndSettle();
     expect(find.byType(QrImageView), findsNothing);
+    await tester.tap(find.text('Sinh viên'));
+    await tester.pumpAndSettle();
     expect(
       find.textContaining('Số liệu bên dưới có thể đã cũ'),
       findsOneWidget,
+    );
+    await tester.scrollUntilVisible(
+      find.text('Student'),
+      150,
+      scrollable: find.byType(Scrollable).first,
     );
     expect(find.textContaining('Chưa điểm danh'), findsWidgets);
     await tester.pumpWidget(const SizedBox());

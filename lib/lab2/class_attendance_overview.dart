@@ -31,10 +31,12 @@ final classAttendanceRecordsProvider = StreamProvider.autoDispose
 class ClassAttendanceOverview extends ConsumerStatefulWidget {
   final Data cls;
   final bool showStudents;
+  final bool showIdentity;
   const ClassAttendanceOverview({
     super.key,
     required this.cls,
     this.showStudents = false,
+    this.showIdentity = true,
   });
   @override
   ConsumerState<ClassAttendanceOverview> createState() =>
@@ -127,39 +129,41 @@ class _ClassAttendanceOverviewState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${widget.cls['classCode']}',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${widget.cls['subjectId']} • ${widget.cls['term'] ?? 'Học kỳ hiện tại'}',
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
-                            fontSize: 13,
+              if (widget.showIdentity) ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${widget.cls['classCode']}',
+                            style: Theme.of(context).textTheme.titleLarge,
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 4),
+                          Text(
+                            '${widget.cls['subjectId']} • ${widget.cls['term'] ?? 'Học kỳ hiện tại'}',
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  if (!widget.showStudents)
-                    IconButton(
-                      onPressed: () => context.push('/class/$id'),
-                      tooltip: 'Quản lý lớp và điểm danh',
-                      icon: const Icon(Icons.arrow_outward_rounded, size: 20),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
+                    if (!widget.showStudents)
+                      IconButton(
+                        onPressed: () => context.push('/class/$id'),
+                        tooltip: 'Quản lý lớp và điểm danh',
+                        icon: const Icon(Icons.arrow_outward_rounded, size: 20),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
               Wrap(
                 spacing: 8,
                 runSpacing: 8,

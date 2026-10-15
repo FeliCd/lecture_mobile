@@ -148,78 +148,169 @@ class ClassPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(profileProvider).value;
-    if (user == null) return const SizedBox();
+    if (user == null || !user.isLecturer) return const SizedBox();
     final repo = ref.read(repositoryProvider);
     return DefaultTabController(
+      key: ValueKey('${user.uid}:$classId'),
       length: 4,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Chi tiết lớp'),
-          bottom: TabBar(
-            isScrollable: true,
-            tabs: [
-              if (user.isLecturer) const Tab(text: 'Sinh viên'),
-              Tab(text: 'Điểm danh'),
-              Tab(text: 'Buổi học'),
-              Tab(text: 'Thống kê'),
-            ],
-          ),
-        ),
-        body: StreamBuilder<Data?>(
-          stream: repo.document('classes/$classId'),
-          builder: (context, s) {
-            if (s.hasError) {
-              return ErrorState(
+      child: StreamBuilder<Data?>(
+        key: ValueKey('${user.uid}:$classId'),
+        stream: repo.document('classes/$classId'),
+        builder: (context, s) {
+          if (s.hasError) {
+            return Scaffold(
+              appBar: AppBar(title: const Text('Lớp học')),
+              body: ErrorState(
                 s.error!,
                 () => context.go('/'),
                 actionLabel: 'Về Hôm nay',
-              );
-            }
-            if (!s.hasData) {
-              return const Center(
-                child: CampusLoadingState(message: 'Đang tải lớp học…'),
-              );
-            }
-            final cls = s.data!;
-            return TabBarView(
-              children: [
-                if (user.isLecturer)
-                  SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: () => openImport(context, cls: cls),
-                          icon: const Icon(Icons.person_add_alt),
-                          label: const Text('Nhập sinh viên vào lớp'),
-                        ),
-                        if (useSharedDesktop)
-                          OutlinedButton.icon(
-                            onPressed: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ClassToolsPage(cls: cls),
-                              ),
-                            ),
-                            icon: const Icon(Icons.build_outlined),
-                            label: const Text('Ngoại lệ lịch / sửa sinh viên'),
-                          ),
-                        const SizedBox(height: 12),
-                        ClassAttendanceOverview(cls: cls, showStudents: true),
-                      ],
-                    ),
-                  ),
-                SessionsPanel(cls: cls, user: user),
-                ClassTimetable(cls: cls, user: user),
-                AnalyticsPanel(cls: cls, user: user),
-              ],
+              ),
             );
-          },
-        ),
+          }
+          if (!s.hasData) {
+            return Scaffold(
+              appBar: AppBar(title: const Text('Lớp học')),
+              body: s.connectionState == ConnectionState.waiting
+                  ? const Center(
+                      child: CampusLoadingState(message: 'Đang tải lớp học…'),
+                    )
+                  : const EmptyState(
+                      'Không tìm thấy lớp hoặc lớp không còn được phân công.',
+                    ),
+            );
+          }
+          final cls = s.data!;
+          return Scaffold(
+            appBar: AppBar(title: Text('${cls['classCode'] ?? 'Lớp học'}')),
+            body: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ClassContextHeader(cls: cls),
+                const TabBar(
+                  isScrollable: true,
+                  tabs: [
+                    Tab(text: 'Sinh viên'),
+                    Tab(text: 'Điểm danh'),
+                    Tab(text: 'Buổi học'),
+                    Tab(text: 'Thống kê'),
+                  ],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      if (user.isLecturer)
+                        SingleChildScrollView(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              ClassAttendanceOverview(
+                                cls: cls,
+                                showStudents: true,
+                                showIdentity: false,
+                              ),
+                            ],
+                          ),
+                        ),
+                      SessionsPanel(cls: cls, user: user),
+                      ClassTimetable(cls: cls, user: user),
+                      AnalyticsPanel(cls: cls, user: user),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
+}
+
+class ClassContextHeader extends StatelessWidget {
+  final Data cls;
+  const ClassContextHeader({super.key, required this.cls});
+  @override
+  Widget build(BuildContext context) => Container(
+    color: Theme.of(context).colorScheme.surfaceContainerLow,
+    padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Tooltip(
+          message: subjectLabel(cls),
+          child: Text(
+            subjectLabel(cls),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 12,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text('${cls['term'] ?? 'Chưa có học kỳ'}'),
+            Text(
+              cls['studentCount'] == null
+                  ? 'Chưa có sĩ số'
+                  : '${cls['studentCount']} sinh viên',
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Công cụ lớp',
+              onSelected: (value) {
+                if (value == 'import') {
+                  openImport(context, cls: cls);
+                } else {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ClassToolsPage(cls: cls),
+                    ),
+                  );
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'import',
+                  child: Text('Nhập sinh viên vào lớp'),
+                ),
+                if (useSharedDesktop)
+                  const PopupMenuItem(
+                    value: 'tools',
+                    child: Text('Ngoại lệ lịch / sửa sinh viên'),
+                  ),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.build_outlined,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'Công cụ lớp',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                    const Icon(Icons.arrow_drop_down),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
 }
 
 class SessionsPanel extends ConsumerWidget {

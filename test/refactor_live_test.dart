@@ -68,6 +68,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Sinh viên'));
+      await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.textContaining('Student'),
         150,
