@@ -54,8 +54,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Nhập lý do điều chỉnh.'), findsOneWidget);
     expect(result, isNull);
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Có mặt').last);
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField), '  Có giấy phép  ');

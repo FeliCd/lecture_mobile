@@ -11,6 +11,9 @@ Future<void> editAttendance(
   required String studentUid,
   String status = 'present',
   String notes = '',
+  String? studentName,
+  studentCode,
+  contextLabel,
 }) async {
   final input = await showDialog<Data>(
     context: context,
@@ -18,6 +21,9 @@ Future<void> editAttendance(
     builder: (_) => AttendanceEditDialog(
       status: status,
       notes: notes,
+      studentName: studentName,
+      studentCode: studentCode,
+      contextLabel: contextLabel,
       onSave: (input) => ref.read(repositoryProvider).call(
         'updateAttendanceRecord',
         {'attendanceSessionId': sessionId, 'studentUid': studentUid, ...input},
@@ -32,11 +38,15 @@ Future<void> editAttendance(
 
 class AttendanceEditDialog extends StatefulWidget {
   final String status, notes;
+  final String? studentName, studentCode, contextLabel;
   final Future<Data> Function(Data)? onSave;
   const AttendanceEditDialog({
     super.key,
     required this.status,
     this.notes = '',
+    this.studentName,
+    this.studentCode,
+    this.contextLabel,
     this.onSave,
   });
   @override
@@ -94,39 +104,80 @@ class _AttendanceEditDialogState extends State<AttendanceEditDialog> {
     dirty: !saved && dirty,
     busy: busy,
     child: AlertDialog(
-      title: const Text('Cập nhật điểm danh'),
+      title: const Text('Sửa điểm danh'),
       content: Form(
         key: form,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              DropdownButtonFormField<String>(
-                isExpanded: true,
-                initialValue: status,
-                decoration: const InputDecoration(labelText: 'Trạng thái'),
-                items: ['present', 'late', 'absent', 'excused']
-                    .map(
-                      (s) => DropdownMenuItem(
-                        value: s,
-                        child: Text(StatusBadge.label(s)),
+              if (widget.studentName != null || widget.studentCode != null) ...[
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.studentName ?? 'Sinh viên',
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
-                    )
-                    .toList(),
-                onChanged: busy ? null : (v) => setState(() => status = v!),
+                      if (widget.studentCode != null) Text(widget.studentCode!),
+                      if (widget.contextLabel != null)
+                        Text(
+                          widget.contextLabel!,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                    ],
+                  ),
+                ),
+                const Divider(),
+              ],
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Trạng thái',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
               ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final option in [
+                      'present',
+                      'late',
+                      'absent',
+                      'excused',
+                    ])
+                      ChoiceChip(
+                        label: Text(StatusBadge.label(option)),
+                        selected: status == option,
+                        onSelected: busy
+                            ? null
+                            : (_) => setState(() => status = option),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: notes,
                 enabled: !busy,
                 onChanged: (_) => setState(() {}),
                 maxLength: 500,
-                maxLines: 3,
+                minLines: 2,
+                maxLines: 4,
+                textCapitalization: TextCapitalization.sentences,
+                scrollPadding: const EdgeInsets.all(24),
                 decoration: const InputDecoration(labelText: 'Lý do / ghi chú'),
                 validator: (v) => v == null || v.trim().isEmpty
                     ? 'Nhập lý do điều chỉnh.'
                     : null,
               ),
-              const Text('Thay đổi được lưu kèm lý do và người điều chỉnh.'),
+              const Text('Lưu kèm lý do và người sửa.'),
               if (error != null)
                 Semantics(
                   liveRegion: true,

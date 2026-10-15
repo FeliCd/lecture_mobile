@@ -149,6 +149,6 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(repo.calls, isEmpty);
-    expect(find.textContaining('Không có lịch hôm nay'), findsOneWidget);
+    expect(find.textContaining('Hôm nay không có lịch dạy'), findsOneWidget);
   });
 }

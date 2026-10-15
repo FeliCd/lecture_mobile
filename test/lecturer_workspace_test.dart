@@ -32,7 +32,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Thêm việc'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'Chuẩn bị demo');
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(TaskEditor),
+        matching: find.byType(TextField),
+      ),
+      'Chuẩn bị demo',
+    );
     await tester.tap(find.text('Lưu trên máy'));
     await tester.pumpAndSettle();
     expect(find.byType(TaskEditor), findsNothing);

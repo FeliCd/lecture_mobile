@@ -29,6 +29,7 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
   String search = '', filter = 'all';
   bool studentsMode = false;
   bool expandedQr = false;
+  final controlsKey = GlobalKey(debugLabel: 'attendance-controls');
   final qrScroll = ScrollController(), studentsScroll = ScrollController();
   bool get open => live?['status'] == 'OPEN';
   DateTime get serverNow => DateTime.now().add(Duration(milliseconds: offset));
@@ -168,6 +169,87 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                   1000)
               .clamp(0, 86400);
     final scheme = Theme.of(context).colorScheme;
+    final controls = Material(
+      key: controlsKey,
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SegmentedButton<bool>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: false, label: Text('Mã QR')),
+                ButtonSegment(value: true, label: Text('Sinh viên')),
+              ],
+              selected: {studentsMode},
+              onSelectionChanged: (value) {
+                FocusManager.instance.primaryFocus?.unfocus();
+                setState(() => studentsMode = value.single);
+              },
+            ),
+            if (studentsMode) ...[
+              const SizedBox(height: 12),
+              CampusSearchField(
+                controller: searchController,
+                hint: 'Tìm tên hoặc MSSV',
+                onChanged: (v) =>
+                    setState(() => search = v.trim().toLowerCase()),
+              ),
+              const SizedBox(height: 8),
+              if (failure != null)
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    'Dữ liệu cũ',
+                    style: TextStyle(color: scheme.error),
+                  ),
+                ),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final status in [
+                      'all',
+                      'present',
+                      'late',
+                      'absent',
+                      'excused',
+                      'pending',
+                    ])
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                status == 'all'
+                                    ? 'Tất cả'
+                                    : StatusBadge.label(status),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '${status == 'all' ? rows.length : counts[status] ?? '—'}',
+                              ),
+                            ],
+                          ),
+                          selected: filter == status,
+                          onSelected: (_) => setState(() => filter = status),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+    final pinControls =
+        MediaQuery.sizeOf(context).height >= 600 &&
+        MediaQuery.viewInsetsOf(context).bottom == 0;
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -317,17 +399,10 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                 ),
               ),
               if (live != null)
-                SliverPersistentHeader(
-                  pinned: true,
-                  delegate: AttendanceModeHeader(
-                    height: MediaQuery.textScalerOf(context).scale(16) + 40,
-                    students: studentsMode,
-                    onChanged: (value) {
-                      FocusManager.instance.primaryFocus?.unfocus();
-                      setState(() => studentsMode = value);
-                    },
-                  ),
-                ),
+                if (pinControls)
+                  PinnedHeaderSliver(child: controls)
+                else
+                  SliverToBoxAdapter(child: controls),
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                 sliver: SliverList.list(
@@ -417,42 +492,11 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       if (studentsMode) ...[
-                        const CampusSectionHeader(
-                          title: 'Sinh viên trong phiên',
-                        ),
-                        CampusSearchField(
-                          controller: searchController,
-                          hint: 'Tìm tên hoặc MSSV',
-                          onChanged: (v) =>
-                              setState(() => search = v.trim().toLowerCase()),
-                        ),
-                        const SizedBox(height: 8),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              for (final status in [
-                                'all',
-                                'present',
-                                'late',
-                                'absent',
-                                'excused',
-                                'pending',
-                              ])
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 8),
-                                  child: ChoiceChip(
-                                    label: Text(
-                                      status == 'all'
-                                          ? 'Tất cả'
-                                          : StatusBadge.label(status),
-                                    ),
-                                    selected: filter == status,
-                                    onSelected: (_) =>
-                                        setState(() => filter = status),
-                                  ),
-                                ),
-                            ],
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            '${visible.length}/${rows.length} sinh viên',
+                            style: Theme.of(context).textTheme.bodyMedium,
                           ),
                         ),
                         if (visible.isEmpty)
@@ -495,6 +539,12 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                                           ref,
                                           sessionId: widget.sessionId,
                                           studentUid: r['studentUid'],
+                                          studentName:
+                                              r['displayName'] as String?,
+                                          studentCode:
+                                              r['studentCode'] as String?,
+                                          contextLabel:
+                                              '${live!['classCode']} · Slot ${live!['slot']}',
                                           status: r['status'],
                                           notes: r['notes'] ?? '',
                                         );
@@ -514,51 +564,4 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
       ),
     );
   }
-}
-
-class AttendanceModeHeader extends SliverPersistentHeaderDelegate {
-  final double height;
-  final bool students;
-  final ValueChanged<bool> onChanged;
-  AttendanceModeHeader({
-    required this.height,
-    required this.students,
-    required this.onChanged,
-  });
-  @override
-  double get minExtent => height;
-  @override
-  double get maxExtent => height;
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) => Material(
-    color: Theme.of(context).scaffoldBackgroundColor,
-    elevation: overlapsContent ? 1 : 0,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: SizedBox(
-          width: double.infinity,
-          child: SegmentedButton<bool>(
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: false, label: Text('Mã QR')),
-              ButtonSegment(value: true, label: Text('Sinh viên')),
-            ],
-            selected: {students},
-            onSelectionChanged: (value) => onChanged(value.single),
-          ),
-        ),
-      ),
-    ),
-  );
-  @override
-  bool shouldRebuild(covariant AttendanceModeHeader oldDelegate) =>
-      oldDelegate.students != students ||
-      oldDelegate.height != height ||
-      oldDelegate.onChanged != onChanged;
 }

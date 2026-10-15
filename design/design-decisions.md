@@ -23,6 +23,8 @@ Ngày 15/10/2026. Đây là truy vết bổ sung sau triển khai; không khẳn
 | D06 Modify | E05 + A03 → P03 → N04 → F03 → S06/S07 | Nêu lưu trên máy ở nơi lưu/trợ giúp, không hứa cloud | Đã có nhãn lưu; rút chữ ở Home có thể làm người dùng bỏ sót giới hạn | T03, câu hỏi đa thiết bị |
 | D07 Reject trong scope | E01 → P01/P03 → N01/N03 | Không thêm livestream/bảng viết/chat từ ví dụ Teacher Station | Chưa có nhu cầu được ghi nhận trong dự án | Review scope sau nghiên cứu, không thêm chỉ để giống ví dụ |
 | D08 Accept để thử | E02/E06 + A05 → P01/P02 → N01/N02 → S01–S07 | Chữ lớn, icon kèm chữ trạng thái, giảm chuyển động theo hệ thống | Có xử lý trong source; TalkBack/thiết bị thật cần nghiệm thu | T01–T03 và checklist screen-spec; Q07 |
+| D09 Accept để thử | E05 + A03 → P03 → N03 → F03 → S07/S06 | Tìm sổ tay theo lớp/môn/ngày, ưu tiên cập nhật gần nhất; header ghi chú gọn và trợ giúp lưu local | Đã triển khai sau hồ sơ; chưa đo thời gian tìm lại với giảng viên | T03; Q08 |
+| D10 Accept để thử | E03/E04 + A01/A02 → P01/P02 → N01/N02 → F02 → S03/S03E | Giữ thanh tìm/lọc khi đủ chiều cao; thêm số đếm, tên/MSSV và bối cảnh trong form; trạng thái chọn trực tiếp | Đã triển khai; bàn phím/màn thấp dùng controls cuộn, giữ focus; payload nghiệp vụ giữ nguyên | T02; Q08 và Q01–Q03 |
 
 Các nhu cầu do A hỗ trợ vẫn là giả thuyết. E03/E04 có thể buộc giữ cơ chế an toàn dù nhu cầu phân khúc chưa được xác thực.
 
@@ -39,10 +41,12 @@ Chỉ đọc source test để lập mapping, không chạy lại trong đợt h
 | Q05 | [assistant_ui_test.dart](../test/assistant_ui_test.dart): `carry forward appends once, preserves target and enforces same class/term` | Ràng buộc tiếp nối nội dung |
 | Q06 | [lecturer_workspace_test.dart](../test/lecturer_workspace_test.dart): `notebook autosaves edits and restores on reopen` | Lưu/đọc local trong test |
 | Q07 | [motion_test.dart](../test/motion_test.dart): reduced motion, giữ input/scroll, bỏ nội dung thay thế ngay; [assistant](../test/assistant_ui_test.dart): layout sáng/tối/chữ lớn | Các bất biến UI kỹ thuật, không thay TalkBack/performance thật |
+| Q08 | [persona_ui_test.dart](../test/persona_ui_test.dart): danh sách 60 sinh viên, định danh trong form, payload, chữ lớn/bàn phím, tìm và mở lại sổ tay | Fixture kỹ thuật; không thay T01–T03 với người tham gia |
 
 ## Revision log
 
 | Phiên bản | Cơ sở thay đổi | Việc còn mở |
 |---|---|---|
 | v0.1, 15/10/2026 | Rà source, phản hồi chủ dự án và tài liệu môn | Thực hiện T01–T03, thêm E thực tế, sửa persona/D khi bị phản bác |
+| v0.2, 15/10/2026 | Áp dụng D09/D10 vào source; xem báo cáo triển khai | Các phép thử người dùng vẫn chưa thực hiện |
 

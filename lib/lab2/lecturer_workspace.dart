@@ -57,6 +57,14 @@ class LecturerWorkspacePage extends ConsumerStatefulWidget {
 
 class _WorkspacePageState extends ConsumerState<LecturerWorkspacePage> {
   bool showDone = false;
+  String notebookQuery = '';
+  final notebookSearch = TextEditingController();
+  @override
+  void dispose() {
+    notebookSearch.dispose();
+    super.dispose();
+  }
+
   String? reminderStatus;
   Future<void> sync() async {
     try {
@@ -117,6 +125,26 @@ class _WorkspacePageState extends ConsumerState<LecturerWorkspacePage> {
                 ..sort(
                   (a, b) => '${a['due'] ?? '9999'}'.compareTo(
                     '${b['due'] ?? '9999'}',
+                  ),
+                );
+          final notes =
+              data.notes.entries
+                  .where(
+                    (entry) => [
+                      entry.value['label'],
+                      entry.value['classId'],
+                      entry.value['subjectId'],
+                      entry.value['date'],
+                      entry.value['term'],
+                      if (DateTime.tryParse('${entry.value['date']}')
+                          case final date?)
+                        timetableDate(date),
+                    ].join(' ').toLowerCase().contains(notebookQuery),
+                  )
+                  .toList()
+                ..sort(
+                  (a, b) => '${b.value['updatedAt'] ?? ''}'.compareTo(
+                    '${a.value['updatedAt'] ?? ''}',
                   ),
                 );
           return ListView(
@@ -291,7 +319,26 @@ class _WorkspacePageState extends ConsumerState<LecturerWorkspacePage> {
               const Text(
                 'Mở sổ tay ngay trên thẻ buổi học trong Hôm nay hoặc Lịch dạy.',
               ),
-              for (final e in data.notes.entries)
+              const SizedBox(height: 12),
+              CampusSearchField(
+                key: const ValueKey('notebook-search'),
+                controller: notebookSearch,
+                hint: 'Tìm lớp, môn, ngày',
+                onChanged: (value) =>
+                    setState(() => notebookQuery = value.trim().toLowerCase()),
+              ),
+              if (notes.isEmpty)
+                EmptyState(
+                  data.notes.isEmpty
+                      ? 'Chưa có sổ tay'
+                      : 'Không tìm thấy sổ tay',
+                  actionLabel: notebookQuery.isEmpty ? null : 'Xóa tìm kiếm',
+                  onAction: () => setState(() {
+                    notebookQuery = '';
+                    notebookSearch.clear();
+                  }),
+                ),
+              for (final e in notes)
                 ListTile(
                   leading: const Icon(Icons.menu_book_outlined),
                   title: Text('${e.value['label'] ?? 'Buổi dạy'}'),
@@ -565,6 +612,8 @@ class _NotebookState extends ConsumerState<LessonNotebookPage> {
     padding: const EdgeInsets.only(top: 16),
     child: TextField(
       controller: fields[key],
+      scrollPadding: const EdgeInsets.all(24),
+      textCapitalization: TextCapitalization.sentences,
       minLines: 2,
       maxLines: 8,
       maxLength: 10000,
@@ -726,38 +775,54 @@ class _NotebookState extends ConsumerState<LessonNotebookPage> {
     dirty: failed,
     busy: pending > 0,
     child: Scaffold(
-      appBar: AppBar(title: const Text('Sổ tay buổi dạy')),
+      appBar: AppBar(
+        title: const Text('Sổ tay'),
+        actions: const [
+          CampusHelpButton(
+            title: 'Lưu trên máy',
+            message:
+                'Sổ tay và việc cá nhân chỉ lưu cho tài khoản này trên thiết bị hiện tại. Chưa đồng bộ sang máy khác; gỡ ứng dụng có thể mất dữ liệu. Chỉ rời màn sau khi lưu thành công.',
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.menu_book_outlined),
-                const SizedBox(height: 12),
-                Text(
-                  '${widget.metadata['label'] ?? ''}',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                Semantics(
-                  liveRegion: true,
-                  child: CampusEntrance(
-                    trigger: status,
-                    child: Text(
-                      status,
-                      key: const ValueKey('notebook-save-status'),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${widget.metadata['label'] ?? ''}',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Semantics(
+                liveRegion: true,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      failed
+                          ? Icons.error_outline
+                          : pending > 0
+                          ? Icons.sync
+                          : Icons.save_outlined,
+                      size: 18,
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: CampusEntrance(
+                        trigger: status,
+                        child: Text(
+                          status,
+                          key: const ValueKey('notebook-save-status'),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
           if (failed)
             TextButton(onPressed: save, child: const Text('Thử lưu lại')),

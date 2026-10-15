@@ -294,6 +294,15 @@ class _AttendanceHostState extends ConsumerState<AttendanceHost>
                                       ref,
                                       sessionId: widget.sessionId,
                                       studentUid: uid,
+                                      studentName:
+                                          members[uid]?['displayName']
+                                              as String?,
+                                      studentCode:
+                                          members[uid]?['studentCode']
+                                              as String?,
+                                      contextLabel: attendanceSessionLabel(
+                                        data,
+                                      ),
                                       status: r?['status'] ?? 'present',
                                       notes: r?['notes'] ?? '',
                                     ),

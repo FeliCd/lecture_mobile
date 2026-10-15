@@ -51,8 +51,13 @@ Future<void> openEditor(
           body: TextButton(
             onPressed: () => showDialog<Data>(
               context: context,
-              builder: (_) =>
-                  AttendanceEditDialog(status: 'present', onSave: save),
+              builder: (_) => AttendanceEditDialog(
+                status: 'present',
+                studentName: 'Nguyễn Minh Anh',
+                studentCode: 'SE1001',
+                contextLabel: 'SE1928 · Slot 1',
+                onSave: save,
+              ),
             ),
             child: const Text('Sửa'),
           ),

@@ -498,6 +498,9 @@ class AttendancePanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final repo = ref.read(repositoryProvider);
+    final members = user.isLecturer
+        ? ref.watch(memberNamesProvider(cls['id'] as String)).value
+        : null;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: LiveList(
@@ -540,6 +543,13 @@ class AttendancePanel extends ConsumerWidget {
                             ref,
                             sessionId: r['attendanceSessionId'],
                             studentUid: r['studentUid'],
+                            studentName:
+                                members?[r['studentUid']]?['displayName']
+                                    as String?,
+                            studentCode:
+                                members?[r['studentUid']]?['studentCode']
+                                    as String?,
+                            contextLabel: attendanceSessionLabel(r, cls),
                             status: r['status'],
                             notes: r['notes'] ?? '',
                           ),
