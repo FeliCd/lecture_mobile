@@ -101,6 +101,8 @@ class _ClassAttendanceOverviewState
     final currentSummaries = members.value!.keys.map(
       (uid) => studentSummaries[uid]!,
     );
+    final limit = summary.policy.limitPercent.toStringAsFixed(0);
+    final warning = summary.policy.warningPercent.toStringAsFixed(0);
     final near = currentSummaries.where((s) => s.nearAbsenceLimit).length;
     final exceeded = currentSummaries
         .where((s) => s.exceedsAbsenceLimit)
@@ -183,7 +185,7 @@ class _ClassAttendanceOverviewState
                 'TỶ LỆ CHUYÊN CẦN',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontSize: 10,
+                  fontSize: 13,
                   letterSpacing: 1.2,
                   fontWeight: FontWeight.w700,
                 ),
@@ -229,7 +231,7 @@ class _ClassAttendanceOverviewState
                           child: Text(
                             item.value,
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: 14,
                               color: Theme.of(
                                 context,
                               ).colorScheme.onSurfaceVariant,
@@ -246,7 +248,7 @@ class _ClassAttendanceOverviewState
                 runSpacing: 8,
                 children: [
                   SoftLabel(
-                    'Sắp vượt 20%: $near',
+                    'Sắp vượt $limit%: $near',
                     icon: Icons.warning_amber_rounded,
                     color: CampusColors.status(
                       'late',
@@ -254,7 +256,7 @@ class _ClassAttendanceOverviewState
                     ),
                   ),
                   SoftLabel(
-                    'Vượt 20%: $exceeded',
+                    'Vượt $limit%: $exceeded',
                     icon: Icons.error_outline,
                     color: Theme.of(context).colorScheme.error,
                   ),
@@ -269,14 +271,14 @@ class _ClassAttendanceOverviewState
                   title: Text(
                     'Cách tính & ngưỡng cảnh báo',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 14,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  children: const [
+                  children: [
                     Text(
-                      'Tỷ lệ vắng tính trên các buổi đã chốt. Cảnh báo từ 15% đến 20%; vượt ngưỡng khi trên 20%. Đi muộn và vắng có phép được giữ riêng; khi thiếu quy định tính các trạng thái này, tỷ lệ sẽ hiển thị chưa đủ cấu hình.',
-                      style: TextStyle(fontSize: 12, height: 1.6),
+                      'Tỷ lệ vắng tính trên các buổi đã chốt. Cảnh báo từ $warning% đến $limit%; vượt ngưỡng khi trên $limit%. Đi muộn và vắng có phép được giữ riêng; khi thiếu quy định tính các trạng thái này, tỷ lệ sẽ hiển thị chưa đủ cấu hình.',
+                      style: TextStyle(fontSize: 14, height: 1.6),
                     ),
                   ],
                 ),
@@ -305,8 +307,8 @@ class _ClassAttendanceOverviewState
             children: [
               for (final option in {
                 'all': 'Tất cả',
-                'near': 'Sắp vượt 20%',
-                'exceeded': 'Vượt 20%',
+                'near': 'Sắp vượt $limit%',
+                'exceeded': 'Vượt $limit%',
               }.entries)
                 ChoiceChip(
                   label: Text(option.value),
@@ -333,97 +335,174 @@ class _ClassAttendanceOverviewState
               child: Text(
                 '${students.length} sinh viên • Ưu tiên tỷ lệ vắng cao',
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 14,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
             ),
           ...students.map((entry) {
             final s = studentSummaries[entry.key]!;
-            return CampusCard(
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  '${entry.value['displayName']} • ${entry.value['studentCode']}',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 8),
-                    Text(
-                      'Có mặt ${s.present} • Đi trễ ${s.late} • Vắng ${s.absent} • Có phép ${s.excused}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        height: 1.6,
-                      ),
+            return StudentAttendanceRow(
+              key: ValueKey(entry.key),
+              name: '${entry.value['displayName'] ?? 'Chưa có tên'}',
+              code: '${entry.value['studentCode'] ?? 'Chưa có MSSV'}',
+              summary: s,
+              onTap: () => showDialog<void>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: Text('${entry.value['displayName']}'),
+                  content: SizedBox(
+                    width: double.maxFinite,
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: [
+                        Text('${entry.value['studentCode'] ?? 'Chưa có MSSV'}'),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Có mặt ${s.present} • Đi trễ ${s.late} • Vắng ${s.absent} • Có phép ${s.excused}',
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Tỷ lệ vắng: ${s.absenceRate == null ? 'Chưa đủ dữ liệu' : '${s.absenceRate!.toStringAsFixed(1)}%'}',
+                        ),
+                        const SizedBox(height: 8),
+                        Text(attendanceWarningLabel(s)),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Tính từ các bản ghi điểm danh đã chốt. Đi trễ và vắng có phép phụ thuộc quy định đã cấu hình.',
+                        ),
+                        const Divider(),
+                        if (groups[entry.key]!.isEmpty)
+                          const Text('Chưa có bản ghi điểm danh đã chốt.'),
+                        ...groups[entry.key]!.map(
+                          (r) => ListTile(
+                            title: Text(attendanceSessionLabel(r, widget.cls)),
+                            subtitle: StatusBadge(r['status'] as String),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Tỷ lệ vắng: ${s.absenceRate == null ? 'Chưa đủ dữ liệu' : '${s.absenceRate!.toStringAsFixed(1)}%'}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    SoftLabel(
-                      s.absenceWarning,
-                      icon: s.exceedsAbsenceLimit
-                          ? Icons.error_outline
-                          : s.nearAbsenceLimit
-                          ? Icons.warning_amber_rounded
-                          : s.eligible == 0
-                          ? Icons.hourglass_empty_rounded
-                          : Icons.check_circle_outline,
-                      color: s.exceedsAbsenceLimit
-                          ? Theme.of(context).colorScheme.error
-                          : s.eligible == 0
-                          ? Theme.of(context).colorScheme.onSurfaceVariant
-                          : CampusColors.status(
-                              s.nearAbsenceLimit ? 'late' : 'present',
-                              Theme.of(context).brightness == Brightness.dark,
-                            ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Đóng'),
                     ),
                   ],
-                ),
-                onTap: () => showDialog<void>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: Text('${entry.value['displayName']}'),
-                    content: SizedBox(
-                      width: double.maxFinite,
-                      child: ListView(
-                        shrinkWrap: true,
-                        children: [
-                          if (groups[entry.key]!.isEmpty)
-                            const Text('Chưa có bản ghi điểm danh đã chốt.'),
-                          ...groups[entry.key]!.map(
-                            (r) => ListTile(
-                              title: Text(
-                                attendanceSessionLabel(r, widget.cls),
-                              ),
-                              subtitle: StatusBadge(r['status'] as String),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Đóng'),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             );
           }),
         ],
       ],
+    );
+  }
+}
+
+String attendanceWarningLabel(AttendanceSummary summary) {
+  final limit = summary.policy.limitPercent.toStringAsFixed(0);
+  if (summary.needsPolicy) return 'Chờ cấu hình quy định đi trễ / vắng có phép';
+  if (summary.exceedsAbsenceLimit) return 'Vượt ngưỡng vắng $limit%';
+  if (summary.nearAbsenceLimit) return 'Sắp vượt ngưỡng vắng $limit%';
+  if (summary.eligible == 0) return 'Chưa đủ dữ liệu';
+  return 'Trong ngưỡng cho phép';
+}
+
+/// Compact summary; the existing history action exposes counts and records.
+class StudentAttendanceRow extends StatelessWidget {
+  final String name, code;
+  final AttendanceSummary summary;
+  final VoidCallback onTap;
+  const StudentAttendanceRow({
+    super.key,
+    required this.name,
+    required this.code,
+    required this.summary,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final unknown = summary.needsPolicy || summary.eligible == 0;
+    final color = unknown
+        ? scheme.onSurfaceVariant
+        : summary.exceedsAbsenceLimit
+        ? scheme.error
+        : CampusColors.status(
+            summary.nearAbsenceLimit ? 'late' : 'present',
+            theme.brightness == Brightness.dark,
+          );
+    return Material(
+      color: scheme.surface,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: theme.textTheme.titleMedium),
+                    const SizedBox(height: 4),
+                    Text(
+                      code,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      summary.absenceRate == null
+                          ? 'Tỷ lệ vắng: Chưa đủ dữ liệu'
+                          : 'Tỷ lệ vắng: ${summary.absenceRate!.toStringAsFixed(1)}%',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Icon(
+                            unknown
+                                ? Icons.info_outline
+                                : summary.exceedsAbsenceLimit
+                                ? Icons.error_outline
+                                : summary.nearAbsenceLimit
+                                ? Icons.warning_amber_rounded
+                                : Icons.check_circle_outline,
+                            size: 18,
+                            color: color,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            attendanceWarningLabel(summary),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: color,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right, size: 20),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

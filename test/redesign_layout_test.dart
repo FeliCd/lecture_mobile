@@ -238,9 +238,7 @@ void main() {
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
           if (screen == 'students') {
-            await tester.ensureVisible(
-              find.text('Nguyễn Thị Minh Châu • SE192803'),
-            );
+            await tester.ensureVisible(find.text('SE192803'));
             await tester.pumpAndSettle();
             expect(tester.takeException(), isNull);
           }

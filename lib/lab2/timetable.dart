@@ -168,81 +168,10 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
     return CampusRefreshList(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
-        OutlinedButton.icon(
-          onPressed: () => openImport(context),
-          icon: const Icon(Icons.add),
-          label: const Text('Nhập thời khóa biểu'),
-        ),
-        const SizedBox(height: 12),
         const DashboardHeading(
           title: 'Lịch của bạn',
-          subtitle: 'Chạm vào buổi học để xem chi tiết lớp',
+          subtitle: 'Chọn ngày hoặc xem toàn bộ tuần dạy',
         ),
-        Row(
-          children: [
-            Expanded(
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  SoftLabel(term ?? 'Chọn học kỳ', icon: Icons.school_outlined),
-                  if (effectiveSubject.isNotEmpty) SoftLabel(effectiveSubject),
-                ],
-              ),
-            ),
-            IconButton(
-              tooltip: 'Lọc lịch dạy',
-              onPressed: () => setState(() => filtersOpen = !filtersOpen),
-              icon: Icon(
-                filtersOpen
-                    ? Icons.filter_list_off_rounded
-                    : Icons.tune_rounded,
-              ),
-            ),
-          ],
-        ),
-        if (filtersOpen || term == null)
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              SizedBox(
-                width: filterWidth,
-                child: DropdownButtonFormField<String>(
-                  key: ValueKey('term-$term-${terms.join()}'),
-                  initialValue: term,
-                  decoration: const InputDecoration(labelText: 'Học kỳ'),
-                  isExpanded: true,
-                  items: terms
-                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                      .toList(),
-                  onChanged: (value) => setState(() {
-                    selectedTerm = value;
-                    subject = '';
-                  }),
-                ),
-              ),
-              SizedBox(
-                width: filterWidth,
-                child: DropdownButtonFormField<String>(
-                  key: ValueKey('subject-$term-$effectiveSubject'),
-                  initialValue: effectiveSubject,
-                  decoration: const InputDecoration(labelText: 'Môn phụ trách'),
-                  isExpanded: true,
-                  items: [
-                    const DropdownMenuItem(
-                      value: '',
-                      child: Text('Tất cả môn'),
-                    ),
-                    ...subjects.map(
-                      (s) => DropdownMenuItem(value: s, child: Text(s)),
-                    ),
-                  ],
-                  onChanged: (value) => setState(() => subject = value ?? ''),
-                ),
-              ),
-            ],
-          ),
         const SizedBox(height: 12),
         CampusCard(
           child: Column(
@@ -288,6 +217,10 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
                         padding: const EdgeInsets.only(right: 8),
                         child: Semantics(
                           selected: day == selectedDay,
+                          button: true,
+                          label:
+                              '${teachingDayName(day.weekday)}, ${timetableDate(day)}, ${byDay[day]!.length} buổi học${day == today ? ', hôm nay' : ''}',
+                          excludeSemantics: true,
                           child: InkWell(
                             borderRadius: BorderRadius.circular(12),
                             onTap: () => setState(() => selectedDay = day),
@@ -317,7 +250,7 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
                                         ? 'CN'
                                         : 'T${day.weekday + 1}',
                                     style: TextStyle(
-                                      fontSize: 11,
+                                      fontSize: 13,
                                       color: day == selectedDay
                                           ? Theme.of(
                                               context,
@@ -393,6 +326,88 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
                 ],
               ),
             ],
+          ),
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  SoftLabel(term ?? 'Chọn học kỳ', icon: Icons.school_outlined),
+                  if (effectiveSubject.isNotEmpty) SoftLabel(effectiveSubject),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Lọc lịch dạy',
+              onPressed: () => setState(() => filtersOpen = !filtersOpen),
+              icon: Icon(
+                filtersOpen
+                    ? Icons.filter_list_off_rounded
+                    : Icons.tune_rounded,
+              ),
+            ),
+          ],
+        ),
+        if (filtersOpen || term == null)
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              SizedBox(
+                width: filterWidth,
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('term-$term-${terms.join()}'),
+                  initialValue: term,
+                  decoration: const InputDecoration(labelText: 'Học kỳ'),
+                  isExpanded: true,
+                  items: terms
+                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                      .toList(),
+                  onChanged: (value) => setState(() {
+                    selectedTerm = value;
+                    subject = '';
+                  }),
+                ),
+              ),
+              SizedBox(
+                width: filterWidth,
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('subject-$term-$effectiveSubject'),
+                  initialValue: effectiveSubject,
+                  decoration: const InputDecoration(labelText: 'Môn phụ trách'),
+                  isExpanded: true,
+                  items: [
+                    const DropdownMenuItem(
+                      value: '',
+                      child: Text('Tất cả môn'),
+                    ),
+                    ...subjects.map(
+                      (s) => DropdownMenuItem(value: s, child: Text(s)),
+                    ),
+                  ],
+                  onChanged: (value) => setState(() => subject = value ?? ''),
+                ),
+              ),
+            ],
+          ),
+        if (effectiveSubject.isNotEmpty)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => setState(() => subject = ''),
+              icon: const Icon(Icons.filter_alt_off_outlined, size: 18),
+              label: const Text('Xóa lọc môn'),
+            ),
+          ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => openImport(context),
+            icon: const Icon(Icons.file_upload_outlined, size: 18),
+            label: const Text('Nhập thời khóa biểu'),
           ),
         ),
         if (term == null)

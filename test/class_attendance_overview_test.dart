@@ -91,13 +91,19 @@ void main() {
       expect(find.text('Vắng: 8'), findsOneWidget);
       expect(find.text('Sắp vượt 20%: 1'), findsOneWidget);
       expect(find.text('Vượt 20%: 1'), findsOneWidget);
-      expect(find.text('Chi • SE003'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(StudentAttendanceRow),
+          matching: find.text('SE003'),
+        ),
+        findsOneWidget,
+      );
       expect(find.textContaining('Tỷ lệ vắng: 15.0%'), findsOneWidget);
       await tester.ensureVisible(find.text('Sắp vượt 20%'));
       await tester.tap(find.text('Sắp vượt 20%'));
       await tester.pumpAndSettle();
-      expect(find.text('An • SE001'), findsOneWidget);
-      expect(find.text('Bình • SE002'), findsNothing);
+      expect(find.text('SE001'), findsOneWidget);
+      expect(find.text('SE002'), findsNothing);
       await tester.tap(find.text('Tất cả'));
       roster.add({
         ...members,
@@ -105,11 +111,17 @@ void main() {
       });
       await tester.pumpAndSettle();
       expect(find.text('4 sinh viên'), findsOneWidget);
-      expect(find.text('Dung • SE004'), findsOneWidget);
+      expect(find.text('SE004'), findsOneWidget);
       await tester.enterText(find.byType(TextField), 'SE003');
       await tester.pumpAndSettle();
-      expect(find.text('Chi • SE003'), findsOneWidget);
-      expect(find.text('An • SE001'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(StudentAttendanceRow),
+          matching: find.text('SE003'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('SE001'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
@@ -149,7 +161,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('An • SE001'), findsOneWidget);
+    expect(find.text('SE001'), findsOneWidget);
     expect(find.text('Buổi đã chốt: 0'), findsOneWidget);
     expect(find.text('Vượt 20%: 0'), findsOneWidget);
     expect(tester.takeException(), isNull);
