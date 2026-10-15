@@ -136,6 +136,46 @@ class WorkspaceStore {
   Future<void> setQuiet(bool quiet) => update(
     (d) => WorkspaceData(tasks: d.tasks, notes: d.notes, quiet: quiet),
   );
+  Future<void> carryForward(
+    String sourceId,
+    String targetId,
+    String text,
+  ) => update((d) {
+    final source = d.notes[sourceId], target = d.notes[targetId];
+    if (source == null ||
+        target == null ||
+        text.trim().isEmpty ||
+        source['classId'] == null ||
+        source['classId'] != target['classId'] ||
+        source['term'] != target['term'] ||
+        source['subjectId'] != target['subjectId'] ||
+        '${target['date'] ?? ''}'.compareTo('${source['date'] ?? '9999'}') <=
+            0) {
+      throw StateError('Chọn sổ tay buổi sau cùng lớp, môn và học kỳ.');
+    }
+    final signature = sha256
+        .convert(utf8.encode('$sourceId/${text.trim()}'))
+        .toString();
+    final carried = List<String>.from(target['carriedFrom'] as List? ?? []);
+    if (carried.contains(signature)) return d;
+    return WorkspaceData(
+      tasks: d.tasks,
+      quiet: d.quiet,
+      notes: {
+        ...d.notes,
+        targetId: {
+          ...target,
+          'goals': [
+            if ('${target['goals'] ?? ''}'.trim().isNotEmpty) target['goals'],
+            'Tiếp nối ${source['date']}:\n${text.trim()}',
+          ].join('\n\n'),
+          'carriedFrom': [...carried, signature],
+          'revision': (target['revision'] as int? ?? 0) + 1,
+          'updatedAt': DateTime.now().toUtc().toIso8601String(),
+        },
+      },
+    );
+  });
   void dispose() {
     _events.close();
   }

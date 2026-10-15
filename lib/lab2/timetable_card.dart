@@ -22,13 +22,14 @@ String periodAction(TeachingPeriod p) {
 
 class TeachingPeriodCard extends StatelessWidget {
   final TeachingPeriod period;
-  final bool conflict, compact, showAction;
+  final bool conflict, compact, showAction, featured;
   const TeachingPeriodCard({
     super.key,
     required this.period,
     this.conflict = false,
     this.compact = false,
     this.showAction = false,
+    this.featured = false,
   });
   void openClass(BuildContext context) {
     if (period.classId != null && !period.cancelled) {
@@ -74,10 +75,12 @@ class TeachingPeriodCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
-        color: scheme.surface,
+        color: featured ? scheme.primaryContainer : scheme.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(CampusRadius.card),
-          side: BorderSide(color: scheme.outlineVariant),
+          side: BorderSide(
+            color: featured ? scheme.primary : scheme.outlineVariant,
+          ),
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
