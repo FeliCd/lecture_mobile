@@ -40,6 +40,7 @@ Functions/emulator giữ source nghiệp vụ cũ để regression, không phả
 
 ## Tài liệu và giới hạn
 
+- [Hồ sơ persona và nghiên cứu UX](ux/README.md): ba proto-persona, evidence/coverage matrix, stakeholder/affinity, ba user flow và kế hoạch usability. Chưa có nghiên cứu giảng viên thực tế; các giả định được gắn nhãn riêng.
 - [Kiến trúc và luồng backend](docs/ARCHITECTURE.md), [blueprint](docs/REFACTOR_BLUEPRINT.md), [báo cáo từng phase](docs/IMPLEMENTATION_REPORT.md).
 - Live polling8s foreground, backoff khi lỗi; full snapshot30s. Class cap400; không có Firestore mirror attendance.
 - Desktop calendar cũ chưa render exceptions nhưng backend chặn mở occurrence đã hủy/dời. FAP bridge Desktop chưa ánh xạ EXCUSED; cần chốt quy định, không tự đổi thành ABSENT.
