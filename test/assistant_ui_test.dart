@@ -229,7 +229,7 @@ void main() {
             body: TodayPanel(user: user, onTimetable: () {}),
           ),
         );
-        expect(find.text('Đang diễn ra'), findsOneWidget);
+        expect(find.text('Đang dạy'), findsOneWidget);
         expect(find.text('Phòng A201'), findsOneWidget);
         await capture('today');
         await tester.scrollUntilVisible(

@@ -56,7 +56,6 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
       return ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          WorkspaceShortcut(user: widget.user),
           TodayTaskPreview(user: widget.user),
           ErrorState(
             exceptions.error!,
@@ -69,7 +68,6 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
       return ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          WorkspaceShortcut(user: widget.user),
           TodayTaskPreview(user: widget.user),
           const Center(child: CircularProgressIndicator()),
         ],
@@ -78,19 +76,11 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
     return CampusRefreshList(
       padding: const EdgeInsets.all(20),
       children: [
-        Text(
-          'Chào ${widget.user.name}',
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
+        Text(widget.user.name, style: Theme.of(context).textTheme.titleLarge),
         Text(
           '${teachingDayName(day.weekday)}, ${timetableDate(day)} · ${day.year}',
         ),
         const SizedBox(height: 12),
-        OutlinedButton.icon(
-          icon: const Icon(Icons.calendar_month_outlined),
-          onPressed: widget.onTimetable,
-          label: const Text('Xem thời khóa biểu'),
-        ),
         LiveList(
           source: () => repo.classes(widget.user),
           empty: 'Chưa có lớp được phân công.',
@@ -105,17 +95,30 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  initialValue: selected,
-                  decoration: const InputDecoration(labelText: 'Học kỳ'),
-                  items: terms
-                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                      .toList(),
-                  onChanged: (v) => setState(() => term = v),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        initialValue: selected,
+                        decoration: const InputDecoration(labelText: 'Học kỳ'),
+                        items: terms
+                            .map(
+                              (t) => DropdownMenuItem(value: t, child: Text(t)),
+                            )
+                            .toList(),
+                        onChanged: (v) => setState(() => term = v),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    IconButton.outlined(
+                      tooltip: 'Lịch dạy',
+                      onPressed: widget.onTimetable,
+                      icon: const Icon(Icons.calendar_month_outlined),
+                    ),
+                  ],
                 ),
-                if (selected == null)
-                  const EmptyState('Chọn học kỳ để xem các buổi hôm nay.'),
+                if (selected == null) const EmptyState('Chọn học kỳ'),
                 if (selected != null)
                   LiveList(
                     source: () => repo.watch('schedules'),
@@ -156,9 +159,7 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                         ];
 
                         if (periods.isEmpty) {
-                          return const EmptyState(
-                            'Không có lịch hôm nay. Kiểm tra Lịch dạy hoặc thêm buổi bù trong công cụ quản lý lịch.',
-                          );
+                          return const EmptyState('Hôm nay không có lịch dạy');
                         }
                         final completed = periods
                             .where((p) => p.completed)
@@ -175,7 +176,7 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                                 runSpacing: 8,
                                 children: [
                                   CampusStatusChip(
-                                    '${periods.where((p) => !p.cancelled).length} buổi học',
+                                    '${periods.where((p) => !p.cancelled).length} buổi',
                                     icon: Icons.school_outlined,
                                   ),
                                   CampusStatusChip(
@@ -193,10 +194,8 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                             if (focus != null) ...[
                               CampusSectionHeader(
                                 title: focus.scheduledStartAt.isAfter(now)
-                                    ? 'Buổi tiếp theo'
-                                    : 'Đang diễn ra',
-                                description:
-                                    'Kiểm tra phòng, chuẩn bị bài và mở điểm danh',
+                                    ? 'Sắp dạy'
+                                    : 'Đang dạy',
                               ),
                               TeachingPeriodCard(
                                 period: focus,
@@ -206,9 +205,7 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                             ] else
                               const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 16),
-                                child: Text(
-                                  'Không còn buổi sắp tới hôm nay. Bạn vẫn có thể xem lại các buổi và ghi sổ tay.',
-                                ),
+                                child: Text('Hết lịch hôm nay'),
                               ),
                             if (periods.any((p) => !identical(p, focus)))
                               ExpansionTile(
@@ -223,13 +220,10 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                                       : const Duration(milliseconds: 220),
                                 ),
                                 title: Text(
-                                  'Các buổi khác hôm nay (${periods.where((p) => !identical(p, focus)).length})',
+                                  '${focus == null ? 'Buổi học' : 'Buổi khác'} (${periods.where((p) => !identical(p, focus)).length})',
                                   style: Theme.of(
                                     context,
                                   ).textTheme.titleMedium,
-                                ),
-                                subtitle: const Text(
-                                  'Mở để xem lịch và ghi chú từng buổi',
                                 ),
                                 children: [
                                   for (final p in periods.where(
@@ -252,7 +246,6 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
         ),
         const SizedBox(height: 20),
         TodayTaskPreview(user: widget.user),
-        WorkspaceShortcut(user: widget.user),
       ],
     );
   }
@@ -272,12 +265,26 @@ class TodayTaskPreview extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const CampusSectionHeader(
-          title: 'Việc đến hạn',
-          description: 'Việc cá nhân lưu trên máy · Giờ Việt Nam',
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Đến hạn',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            Tooltip(
+              message: 'Việc cá nhân, sổ tay và báo cáo tuần · Lưu trên máy',
+              child: TextButton.icon(
+                onPressed: () => open(),
+                icon: const Icon(Icons.checklist, size: 18),
+                label: const Text('Trợ lý'),
+              ),
+            ),
+          ],
         ),
         value.when(
-          loading: () => const Text('Đang đọc việc trên máy…'),
+          loading: () => const Text('Đang tải…'),
           error: (e, _) =>
               ErrorState(e, () => ref.invalidate(workspaceProvider(user.uid))),
           data: (data) {
@@ -302,9 +309,7 @@ class TodayTaskPreview extends ConsumerWidget {
                 if (tasks.isEmpty)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Text(
-                      'Không có việc đến hạn hôm nay. Thêm việc để chuẩn bị cho buổi dạy tiếp theo.',
-                    ),
+                    child: Text('Không có việc đến hạn'),
                   ),
                 for (final t in tasks.take(3))
                   CampusEntrance(
@@ -326,15 +331,14 @@ class TodayTaskPreview extends ConsumerWidget {
                       ),
                     ),
                   ),
-                TextButton.icon(
-                  onPressed: () => open(),
-                  icon: const Icon(Icons.add_task),
-                  label: Text(
-                    tasks.length > 3
-                        ? 'Xem tất cả ${tasks.length} việc đến hạn'
-                        : 'Quản lý và thêm việc',
+                if (tasks.length > 3)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: () => open(),
+                      child: Text('Xem tất cả (${tasks.length})'),
+                    ),
                   ),
-                ),
               ],
             );
           },

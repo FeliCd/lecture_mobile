@@ -503,7 +503,7 @@ class LessonNotebookButton extends ConsumerWidget {
     }
     return TextButton.icon(
       icon: const Icon(Icons.edit_note),
-      label: const Text('Sổ tay buổi dạy'),
+      label: const Text('Sổ tay'),
       onPressed: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => LessonNotebookPage(

@@ -47,7 +47,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final section = find.text('Các buổi khác hôm nay (1)');
+      final section = find.text('Buổi khác (1)');
       await tester.scrollUntilVisible(
         section,
         200,
@@ -58,7 +58,12 @@ void main() {
       await tester.tap(section);
       await tester.pumpAndSettle();
       expect(find.byType(TeachingPeriodCard), findsNWidgets(2));
-      expect(find.text('Việc đến hạn'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('Đến hạn'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Đến hạn'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     },
   );
