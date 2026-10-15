@@ -1,3 +1,4 @@
+import 'motion.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -318,18 +319,21 @@ class _CampusShellState extends ConsumerState<CampusShell> {
         body: SafeArea(
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1100),
-              child: IndexedStack(
-                index: tab,
-                children: [
-                  TodayPanel(
-                    user: user,
-                    onTimetable: () => setState(() => tab = 1),
-                  ),
-                  LecturerTimetable(user: user),
-                  ClassList(user: user),
-                  SubjectUpdatesPage(user: user),
-                ],
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: CampusEntrance(
+                trigger: tab,
+                child: IndexedStack(
+                  index: tab,
+                  children: [
+                    TodayPanel(
+                      user: user,
+                      onTimetable: () => setState(() => tab = 1),
+                    ),
+                    LecturerTimetable(user: user),
+                    ClassList(user: user),
+                    SubjectUpdatesPage(user: user),
+                  ],
+                ),
               ),
             ),
           ),

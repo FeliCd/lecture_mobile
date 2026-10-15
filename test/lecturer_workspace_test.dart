@@ -46,6 +46,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Chuẩn bị demo'), findsNothing);
     expect((await WorkspaceStore('u').read()).tasks.single['done'], true);
+    expect(find.text('Đã hoàn thành việc'), findsOneWidget);
+    await tester.tap(find.text('Hoàn tác'));
+    await tester.pumpAndSettle();
+    expect((await WorkspaceStore('u').read()).tasks.single['done'], false);
+    expect(find.text('Chuẩn bị demo'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
   testWidgets(

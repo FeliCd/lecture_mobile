@@ -1,3 +1,4 @@
+import 'motion.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -223,279 +224,292 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
           : null,
       body: RefreshIndicator(
         onRefresh: refresh,
-        child: CustomScrollView(
-          key: ValueKey(studentsMode),
-          controller: studentsMode ? studentsScroll : qrScroll,
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              sliver: SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (loading) const LinearProgressIndicator(),
-                    if (live == null && failure == null)
-                      const CampusLoadingState(
-                        message: 'Đang tải phiên điểm danh…',
-                      ),
-                    if (failure != null)
-                      CampusCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+        child: CampusEntrance(
+          trigger: studentsMode,
+          child: CustomScrollView(
+            key: ValueKey(studentsMode),
+            controller: studentsMode ? studentsScroll : qrScroll,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                sliver: SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (loading) const LinearProgressIndicator(),
+                      if (live == null && failure == null)
+                        const CampusLoadingState(
+                          message: 'Đang tải phiên điểm danh…',
+                        ),
+                      if (failure != null)
+                        CampusCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Chưa đồng bộ được. Số liệu bên dưới có thể đã cũ. QR tạm ẩn để tránh dùng thông tin cũ.',
+                              ),
+                              Text(errorMessage(failure!)),
+                              TextButton(
+                                onPressed: loading ? null : refresh,
+                                child: const Text('Thử lại'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (live != null) ...[
+                        Text(
+                          '${live!['subjectName']} • ${live!['classCode']} • Slot ${live!['slot']}',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        Text(roomLabel(live!['room'] as String?)),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 8,
+                          alignment: WrapAlignment.spaceBetween,
                           children: [
-                            const Text(
-                              'Chưa đồng bộ được. Số liệu bên dưới có thể đã cũ. QR tạm ẩn để tránh dùng thông tin cũ.',
+                            CampusStatusChip(
+                              failure != null
+                                  ? 'Chưa đồng bộ'
+                                  : canCheckIn
+                                  ? 'Đang mở'
+                                  : open
+                                  ? 'Đã hết hạn • Đang chốt'
+                                  : 'Đã kết thúc',
+                              icon: open ? Icons.schedule : Icons.task_alt,
+                              color: canCheckIn
+                                  ? CampusColors.status(
+                                      'present',
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark,
+                                    )
+                                  : null,
                             ),
-                            Text(errorMessage(failure!)),
-                            TextButton(
-                              onPressed: loading ? null : refresh,
-                              child: const Text('Thử lại'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (live != null) ...[
-                      Text(
-                        '${live!['subjectName']} • ${live!['classCode']} • Slot ${live!['slot']}',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      Text(roomLabel(live!['room'] as String?)),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 8,
-                        alignment: WrapAlignment.spaceBetween,
-                        children: [
-                          CampusStatusChip(
-                            failure != null
-                                ? 'Chưa đồng bộ'
-                                : canCheckIn
-                                ? 'Đang mở'
-                                : open
-                                ? 'Đã hết hạn • Đang chốt'
-                                : 'Đã kết thúc',
-                            icon: open ? Icons.schedule : Icons.task_alt,
-                            color: canCheckIn
-                                ? CampusColors.status(
-                                    'present',
-                                    Theme.of(context).brightness ==
-                                        Brightness.dark,
-                                  )
-                                : null,
-                          ),
-                          if (canCheckIn)
-                            Text(
-                              'Còn ${remaining ~/ 60}:${(remaining % 60).toString().padLeft(2, '0')}',
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '${checkedIn ?? '—'}/${counts['eligible'] ?? '—'} đã điểm danh',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 16,
-                        runSpacing: 4,
-                        children: [
-                          Text('Có mặt ${counts['present'] ?? 0}'),
-                          Text('Đi trễ ${counts['late'] ?? 0}'),
-                          Text('Còn chờ ${counts['pending'] ?? 0}'),
-                          Text('Vắng ${counts['absent'] ?? 0}'),
-                          Text('Vắng có phép ${counts['excused'] ?? 0}'),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            if (live != null)
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: AttendanceModeHeader(
-                  height: MediaQuery.textScalerOf(context).scale(16) + 40,
-                  students: studentsMode,
-                  onChanged: (value) {
-                    FocusManager.instance.primaryFocus?.unfocus();
-                    setState(() => studentsMode = value);
-                  },
-                ),
-              ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-              sliver: SliverList.list(
-                children: [
-                  if (live != null) ...[
-                    if (!studentsMode && canCheckIn && qrCurrent) ...[
-                      const SizedBox(height: 16),
-                      Center(
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxWidth: expandedQr ? 480 : 260,
-                          ),
-                          child: LayoutBuilder(
-                            builder: (_, constraints) => QrImageView(
-                              data: qr!['token'],
-                              size: constraints.maxWidth,
-                              padding: const EdgeInsets.all(16),
-                              backgroundColor: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                      TextButton.icon(
-                        onPressed: () =>
-                            setState(() => expandedQr = !expandedQr),
-                        icon: Icon(expandedQr ? Icons.zoom_out : Icons.zoom_in),
-                        label: Text(expandedQr ? 'Thu gọn QR' : 'Phóng to QR'),
-                      ),
-                      if (qr!['secretEnabled'] == true)
-                        Center(
-                          child: SelectableText(
-                            '${qr!['secretCode']}',
-                            style: Theme.of(context).textTheme.headlineMedium,
-                          ),
-                        ),
-                      ExpansionTile(
-                        tilePadding: EdgeInsets.zero,
-                        title: const Text('Tùy chọn QR'),
-                        children: [
-                          SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Yêu cầu mã xác nhận'),
-                            subtitle: const Text(
-                              'Sinh viên nhập thêm mã bạn cung cấp.',
-                            ),
-                            value: qr!['secretEnabled'] == true,
-                            onChanged: writing || loading
-                                ? null
-                                : (v) => mutate('rotateAttendanceQr', {
-                                    'secretEnabled': v,
-                                  }),
-                          ),
-                          OutlinedButton(
-                            onPressed: writing || loading
-                                ? null
-                                : () => mutate('rotateAttendanceQr'),
-                            child: const Text('Đổi mã QR'),
-                          ),
-                        ],
-                      ),
-                    ],
-                    if (!studentsMode && canCheckIn && !qrCurrent)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        child: Text(
-                          'Đang chờ mã QR mới. Mã hết hạn được ẩn; bạn có thể bấm Cập nhật phiên.',
-                        ),
-                      ),
-                    if (!studentsMode && !canCheckIn && failure == null)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        child: Text(
-                          'Phiên đã kết thúc hoặc hết hạn nhận điểm danh. Chọn Sinh viên để xem và điều chỉnh kết quả.',
-                        ),
-                      ),
-                    Text(
-                      'Lần đọc từ máy chủ: ${localDate(DateTime.parse(live!['serverTime']))}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    if (live!['effectiveDurationMinutes'] is num)
-                      Text(
-                        'Thời lượng hiệu lực: ${(live!['effectiveDurationMinutes'] as num).toStringAsFixed(1)} phút.',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    if (studentsMode) ...[
-                      const CampusSectionHeader(title: 'Sinh viên trong phiên'),
-                      CampusSearchField(
-                        controller: searchController,
-                        hint: 'Tìm tên hoặc MSSV',
-                        onChanged: (v) =>
-                            setState(() => search = v.trim().toLowerCase()),
-                      ),
-                      const SizedBox(height: 8),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            for (final status in [
-                              'all',
-                              'present',
-                              'late',
-                              'absent',
-                              'excused',
-                              'pending',
-                            ])
-                              Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: ChoiceChip(
-                                  label: Text(
-                                    status == 'all'
-                                        ? 'Tất cả'
-                                        : StatusBadge.label(status),
-                                  ),
-                                  selected: filter == status,
-                                  onSelected: (_) =>
-                                      setState(() => filter = status),
-                                ),
+                            if (canCheckIn)
+                              Text(
+                                'Còn ${remaining ~/ 60}:${(remaining % 60).toString().padLeft(2, '0')}',
+                                style: Theme.of(context).textTheme.titleLarge,
                               ),
                           ],
                         ),
-                      ),
-                      if (visible.isEmpty)
-                        EmptyState(
-                          rows.isEmpty
-                              ? 'Chưa có sinh viên trong phiên.'
-                              : 'Không có sinh viên phù hợp với tìm kiếm hoặc trạng thái đã chọn.',
-                          actionLabel: search.isNotEmpty || filter != 'all'
-                              ? 'Xóa bộ lọc'
-                              : null,
-                          onAction: () => setState(() {
-                            searchController.clear();
-                            search = '';
-                            filter = 'all';
-                          }),
+                        const SizedBox(height: 12),
+                        Text(
+                          '${checkedIn ?? '—'}/${counts['eligible'] ?? '—'} đã điểm danh',
+                          style: Theme.of(context).textTheme.titleLarge,
                         ),
-                      for (final r in visible)
-                        CampusStudentRow(
-                          name: '${r['displayName']}',
-                          code: '${r['studentCode']}',
-                          detail: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 16,
+                          runSpacing: 4,
+                          children: [
+                            Text('Có mặt ${counts['present'] ?? 0}'),
+                            Text('Đi trễ ${counts['late'] ?? 0}'),
+                            Text('Còn chờ ${counts['pending'] ?? 0}'),
+                            Text('Vắng ${counts['absent'] ?? 0}'),
+                            Text('Vắng có phép ${counts['excused'] ?? 0}'),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              if (live != null)
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: AttendanceModeHeader(
+                    height: MediaQuery.textScalerOf(context).scale(16) + 40,
+                    students: studentsMode,
+                    onChanged: (value) {
+                      FocusManager.instance.primaryFocus?.unfocus();
+                      setState(() => studentsMode = value);
+                    },
+                  ),
+                ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                sliver: SliverList.list(
+                  children: [
+                    if (live != null) ...[
+                      if (!studentsMode && canCheckIn && qrCurrent) ...[
+                        const SizedBox(height: 16),
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: expandedQr ? 480 : 260,
+                            ),
+                            child: LayoutBuilder(
+                              builder: (_, constraints) => QrImageView(
+                                data: qr!['token'],
+                                size: constraints.maxWidth,
+                                padding: const EdgeInsets.all(16),
+                                backgroundColor: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () =>
+                              setState(() => expandedQr = !expandedQr),
+                          icon: Icon(
+                            expandedQr ? Icons.zoom_out : Icons.zoom_in,
+                          ),
+                          label: Text(
+                            expandedQr ? 'Thu gọn QR' : 'Phóng to QR',
+                          ),
+                        ),
+                        if (qr!['secretEnabled'] == true)
+                          Center(
+                            child: SelectableText(
+                              '${qr!['secretCode']}',
+                              style: Theme.of(context).textTheme.headlineMedium,
+                            ),
+                          ),
+                        ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          title: const Text('Tùy chọn QR'),
+                          children: [
+                            SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Yêu cầu mã xác nhận'),
+                              subtitle: const Text(
+                                'Sinh viên nhập thêm mã bạn cung cấp.',
+                              ),
+                              value: qr!['secretEnabled'] == true,
+                              onChanged: writing || loading
+                                  ? null
+                                  : (v) => mutate('rotateAttendanceQr', {
+                                      'secretEnabled': v,
+                                    }),
+                            ),
+                            OutlinedButton(
+                              onPressed: writing || loading
+                                  ? null
+                                  : () => mutate('rotateAttendanceQr'),
+                              child: const Text('Đổi mã QR'),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (!studentsMode && canCheckIn && !qrCurrent)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: Text(
+                            'Đang chờ mã QR mới. Mã hết hạn được ẩn; bạn có thể bấm Cập nhật phiên.',
+                          ),
+                        ),
+                      if (!studentsMode && !canCheckIn && failure == null)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: Text(
+                            'Phiên đã kết thúc hoặc hết hạn nhận điểm danh. Chọn Sinh viên để xem và điều chỉnh kết quả.',
+                          ),
+                        ),
+                      Text(
+                        'Lần đọc từ máy chủ: ${localDate(DateTime.parse(live!['serverTime']))}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      if (live!['effectiveDurationMinutes'] is num)
+                        Text(
+                          'Thời lượng hiệu lực: ${(live!['effectiveDurationMinutes'] as num).toStringAsFixed(1)} phút.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      if (studentsMode) ...[
+                        const CampusSectionHeader(
+                          title: 'Sinh viên trong phiên',
+                        ),
+                        CampusSearchField(
+                          controller: searchController,
+                          hint: 'Tìm tên hoặc MSSV',
+                          onChanged: (v) =>
+                              setState(() => search = v.trim().toLowerCase()),
+                        ),
+                        const SizedBox(height: 8),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
                             children: [
-                              StatusBadge(r['status']),
-                              if ('${r['notes'] ?? ''}'.isNotEmpty)
-                                Text('${r['notes']}'),
+                              for (final status in [
+                                'all',
+                                'present',
+                                'late',
+                                'absent',
+                                'excused',
+                                'pending',
+                              ])
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: ChoiceChip(
+                                    label: Text(
+                                      status == 'all'
+                                          ? 'Tất cả'
+                                          : StatusBadge.label(status),
+                                    ),
+                                    selected: filter == status,
+                                    onSelected: (_) =>
+                                        setState(() => filter = status),
+                                  ),
+                                ),
                             ],
                           ),
-                          action: IconButton(
-                            icon: const Icon(Icons.edit_outlined),
-                            tooltip: 'Sửa điểm danh',
-                            onPressed: writing || loading || failure != null
-                                ? null
-                                : () async {
-                                    await editAttendance(
-                                      context,
-                                      ref,
-                                      sessionId: widget.sessionId,
-                                      studentUid: r['studentUid'],
-                                      status: r['status'],
-                                      notes: r['notes'] ?? '',
-                                    );
-                                    await refresh();
-                                  },
-                          ),
                         ),
+                        if (visible.isEmpty)
+                          EmptyState(
+                            rows.isEmpty
+                                ? 'Chưa có sinh viên trong phiên.'
+                                : 'Không có sinh viên phù hợp với tìm kiếm hoặc trạng thái đã chọn.',
+                            actionLabel: search.isNotEmpty || filter != 'all'
+                                ? 'Xóa bộ lọc'
+                                : null,
+                            onAction: () => setState(() {
+                              searchController.clear();
+                              search = '';
+                              filter = 'all';
+                            }),
+                          ),
+                        for (final r in visible)
+                          CampusChangeHighlight(
+                            key: ValueKey(r['studentUid']),
+                            value: '${r['status']}:${r['notes'] ?? ''}',
+                            child: CampusStudentRow(
+                              name: '${r['displayName']}',
+                              code: '${r['studentCode']}',
+                              detail: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  StatusBadge(r['status']),
+                                  if ('${r['notes'] ?? ''}'.isNotEmpty)
+                                    Text('${r['notes']}'),
+                                ],
+                              ),
+                              action: IconButton(
+                                icon: const Icon(Icons.edit_outlined),
+                                tooltip: 'Sửa điểm danh',
+                                onPressed: writing || loading || failure != null
+                                    ? null
+                                    : () async {
+                                        await editAttendance(
+                                          context,
+                                          ref,
+                                          sessionId: widget.sessionId,
+                                          studentUid: r['studentUid'],
+                                          status: r['status'],
+                                          notes: r['notes'] ?? '',
+                                        );
+                                        await refresh();
+                                      },
+                              ),
+                            ),
+                          ),
+                      ],
                     ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

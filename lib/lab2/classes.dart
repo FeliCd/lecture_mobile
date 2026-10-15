@@ -1,3 +1,4 @@
+import 'motion.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,34 +20,74 @@ class ClassTile extends StatelessWidget {
   final Data data;
   const ClassTile({super.key, required this.data});
   @override
-  Widget build(BuildContext context) => CampusCard(
-    child: InkWell(
-      onTap: () => context.push('/class/${data['id']}'),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: theme.colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: theme.colorScheme.outlineVariant),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => context.push('/class/${data['id']}'),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '${data['classCode']}',
-                  style: Theme.of(context).textTheme.titleMedium,
+                Container(
+                  width: 3,
+                  height: 44,
+                  color: theme.colorScheme.primary,
                 ),
-                const SizedBox(height: 4),
-                Text(subjectLabel(data)),
-                const SizedBox(height: 8),
-                Text(
-                  '${data['term']} · ${data['studentCount'] ?? '—'} sinh viên',
-                  style: Theme.of(context).textTheme.bodySmall,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${data['classCode']}',
+                        style: theme.textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subjectLabel(data),
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 4,
+                        children: [
+                          Text(
+                            '${data['term'] ?? 'Chưa có học kỳ'}',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          Text(
+                            '${data['studentCount'] ?? '—'} sinh viên',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 8),
+                const Icon(Icons.chevron_right, size: 20),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right, size: 20),
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class ClassList extends ConsumerStatefulWidget {
@@ -133,7 +174,15 @@ class _ClassListState extends ConsumerState<ClassList> {
                     searchController.clear();
                   }),
                 ),
-              ...filtered.map((c) => ClassTile(data: c)),
+              CampusEntrance(
+                trigger: '$query:$term',
+                child: Column(
+                  children: [
+                    for (final c in filtered)
+                      ClassTile(key: ValueKey(c['id']), data: c),
+                  ],
+                ),
+              ),
             ],
           );
         },

@@ -1,3 +1,4 @@
+import 'motion.dart';
 import 'package:flutter/material.dart';
 
 abstract final class CampusSpace {
@@ -51,6 +52,14 @@ ThemeData campusTheme(Brightness brightness) {
   final base = ThemeData(useMaterial3: true, colorScheme: s);
   return base.copyWith(
     visualDensity: VisualDensity.standard,
+    pageTransitionsTheme: PageTransitionsTheme(
+      builders: {
+        ...base.pageTransitionsTheme.builders,
+        TargetPlatform.android: const CampusPageTransitions(),
+        TargetPlatform.windows: const CampusPageTransitions(),
+        TargetPlatform.linux: const CampusPageTransitions(),
+      },
+    ),
     dialogTheme: DialogThemeData(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(CampusRadius.sheet),

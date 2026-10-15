@@ -273,7 +273,7 @@ void main() {
       } else if (entry == 'Timetable') {
         await tester.tap(find.byType(TeachingPeriodCard));
       } else {
-        await tester.tap(find.text('Slot 1 • 00:00 – 23:59').first);
+        await tester.tap(find.text('00:00 – 23:59 · Slot 1').first);
       }
       await tester.pumpAndSettle();
       expect(repo.calls.single['name'], 'getTeachingOccurrence');

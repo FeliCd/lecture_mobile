@@ -1,3 +1,4 @@
+import 'motion.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -210,15 +211,36 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                                 ),
                               ),
                             if (periods.any((p) => !identical(p, focus)))
-                              const CampusSectionHeader(
-                                title: 'Các buổi khác hôm nay',
-                                description:
-                                    'Xem trạng thái và ghi chú từng buổi',
+                              ExpansionTile(
+                                key: PageStorageKey(
+                                  'other-lessons:${widget.user.uid}:$day',
+                                ),
+                                tilePadding: EdgeInsets.zero,
+                                childrenPadding: const EdgeInsets.only(top: 8),
+                                expansionAnimationStyle: AnimationStyle(
+                                  duration: campusReduceMotion(context)
+                                      ? Duration.zero
+                                      : const Duration(milliseconds: 220),
+                                ),
+                                title: Text(
+                                  'Các buổi khác hôm nay (${periods.where((p) => !identical(p, focus)).length})',
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
+                                ),
+                                subtitle: const Text(
+                                  'Mở để xem lịch và ghi chú từng buổi',
+                                ),
+                                children: [
+                                  for (final p in periods.where(
+                                    (p) => !identical(p, focus),
+                                  ))
+                                    TeachingPeriodCard(
+                                      period: p,
+                                      compact: true,
+                                    ),
+                                ],
                               ),
-                            for (final p in periods.where(
-                              (p) => !identical(p, focus),
-                            ))
-                              TeachingPeriodCard(period: p, showAction: true),
                           ],
                         );
                       },
@@ -285,20 +307,23 @@ class TodayTaskPreview extends ConsumerWidget {
                     ),
                   ),
                 for (final t in tasks.take(3))
-                  Card(
-                    child: ListTile(
-                      leading: Icon(
-                        DateTime.parse('${t['due']}').isBefore(now)
-                            ? Icons.pending_actions
-                            : Icons.checklist,
-                        color: Theme.of(context).colorScheme.primary,
+                  CampusEntrance(
+                    key: ValueKey(t['id']),
+                    child: Card(
+                      child: ListTile(
+                        leading: Icon(
+                          DateTime.parse('${t['due']}').isBefore(now)
+                              ? Icons.pending_actions
+                              : Icons.checklist,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        title: Text('${t['title']}'),
+                        subtitle: Text(
+                          '${DateTime.parse('${t['due']}').isBefore(now) ? 'Quá hạn · ' : 'Hôm nay · '}${workspaceDate('${t['due']}')}',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => open('${t['id']}'),
                       ),
-                      title: Text('${t['title']}'),
-                      subtitle: Text(
-                        '${DateTime.parse('${t['due']}').isBefore(now) ? 'Quá hạn · ' : 'Hôm nay · '}${workspaceDate('${t['due']}')}',
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => open('${t['id']}'),
                     ),
                   ),
                 TextButton.icon(

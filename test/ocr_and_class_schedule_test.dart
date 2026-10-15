@@ -109,7 +109,7 @@ void main() {
     await tester.tap(find.byTooltip('Tuần sau'));
     await tester.pumpAndSettle();
     expect(find.text('1 buổi học'), findsOneWidget);
-    expect(find.text('Slot 1 • 07:30 – 09:50'), findsOneWidget);
+    expect(find.text('07:30 – 09:50 · Slot 1'), findsOneWidget);
     expect(find.textContaining('Slot 3'), findsNothing);
     expect(tester.takeException(), isNull);
   });

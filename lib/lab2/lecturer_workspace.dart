@@ -1,3 +1,4 @@
+import 'motion.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'domain.dart';
@@ -188,9 +189,51 @@ class _WorkspacePageState extends ConsumerState<LecturerWorkspacePage> {
                       onChanged: (v) => runAction(context, () async {
                         await store.saveTask({...t, 'done': v});
                         await sync();
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              v == true
+                                  ? 'Đã hoàn thành việc'
+                                  : 'Đã đưa việc về cần làm',
+                            ),
+                            action: SnackBarAction(
+                              label: 'Hoàn tác',
+                              onPressed: () => runAction(context, () async {
+                                final current = ref
+                                    .read(workspaceProvider(widget.user.uid))
+                                    .value
+                                    ?.tasks
+                                    .where((item) => item['id'] == t['id'])
+                                    .firstOrNull;
+                                if (current == null || current['done'] != v) {
+                                  return;
+                                }
+                                await store.saveTask({
+                                  ...current,
+                                  'done': t['done'] == true,
+                                });
+                                await sync();
+                              }),
+                            ),
+                          ),
+                        );
                       }),
                     ),
-                    title: Text('${t['title']}'),
+                    title: AnimatedDefaultTextStyle(
+                      duration: campusReduceMotion(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 180),
+                      style: Theme.of(context).textTheme.bodyLarge!.copyWith(
+                        decoration: t['done'] == true
+                            ? TextDecoration.lineThrough
+                            : TextDecoration.none,
+                        color: t['done'] == true
+                            ? Theme.of(context).colorScheme.onSurfaceVariant
+                            : Theme.of(context).colorScheme.onSurface,
+                      ),
+                      child: Text('${t['title']}'),
+                    ),
                     subtitle: Text(
                       '${workspaceDate(t['due'] as String?)}${t['label'] == null ? '' : '\n${t['label']}'}${t['remind'] == true ? '\nNhắc trước ${t['lead'] ?? 0} phút' : ''}',
                     ),
@@ -309,6 +352,9 @@ class _TaskEditorState extends State<TaskEditor> {
           children: [
             TextField(
               controller: title,
+              textCapitalization: TextCapitalization.sentences,
+              textInputAction: TextInputAction.done,
+              scrollPadding: const EdgeInsets.all(24),
               onChanged: (_) => setState(() => changed = true),
               autofocus: true,
               maxLength: 200,
@@ -363,20 +409,29 @@ class _TaskEditorState extends State<TaskEditor> {
                 remind = v;
               }),
             ),
-            if (remind)
-              DropdownButtonFormField<int>(
-                isExpanded: true,
-                initialValue: lead,
-                items: [0, 10, 15, 30]
-                    .map(
-                      (v) => DropdownMenuItem(value: v, child: Text('$v phút')),
+            CampusSize(
+              child: remind
+                  ? DropdownButtonFormField<int>(
+                      decoration: const InputDecoration(
+                        labelText: 'Thời gian nhắc trước hạn',
+                      ),
+                      isExpanded: true,
+                      initialValue: lead,
+                      items: [0, 10, 15, 30]
+                          .map(
+                            (v) => DropdownMenuItem(
+                              value: v,
+                              child: Text('$v phút'),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(() {
+                        changed = true;
+                        lead = v!;
+                      }),
                     )
-                    .toList(),
-                onChanged: (v) => setState(() {
-                  changed = true;
-                  lead = v!;
-                }),
-              ),
+                  : const SizedBox.shrink(),
+            ),
           ],
         ),
       ),
@@ -693,9 +748,12 @@ class _NotebookState extends ConsumerState<LessonNotebookPage> {
                 const SizedBox(height: 8),
                 Semantics(
                   liveRegion: true,
-                  child: Text(
-                    status,
-                    key: const ValueKey('notebook-save-status'),
+                  child: CampusEntrance(
+                    trigger: status,
+                    child: Text(
+                      status,
+                      key: const ValueKey('notebook-save-status'),
+                    ),
                   ),
                 ),
               ],
@@ -737,11 +795,14 @@ class _NotebookState extends ConsumerState<LessonNotebookPage> {
                 onSelectionChanged: (v) => setState(() => phase = v.single),
               ),
             const SizedBox(height: 16),
-            Text(
-              phase == 0
-                  ? 'Sẵn sàng cho buổi dạy'
-                  : 'Ghi lại để buổi sau tiếp nối',
-              style: Theme.of(context).textTheme.titleLarge,
+            CampusEntrance(
+              trigger: phase,
+              child: Text(
+                phase == 0
+                    ? 'Sẵn sàng cho buổi dạy'
+                    : 'Ghi lại để buổi sau tiếp nối',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
             ),
             Text(
               phase == 0

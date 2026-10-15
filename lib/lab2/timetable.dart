@@ -1,3 +1,4 @@
+import 'motion.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'domain.dart';
@@ -173,159 +174,162 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
           subtitle: 'Chọn ngày hoặc xem toàn bộ tuần dạy',
         ),
         const SizedBox(height: 12),
-        CampusCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  IconButton(
-                    tooltip: 'Tuần trước',
-                    onPressed: () => setState(
-                      () => selectedDay = selectedDay.subtract(
-                        const Duration(days: 7),
-                      ),
-                    ),
-                    icon: const Icon(Icons.chevron_left),
-                  ),
-                  Expanded(
-                    child: Text(
-                      '${timetableDate(monday)} – ${timetableDate(days.last)} • ${monday.year}',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Tuần sau',
-                    onPressed: () => setState(
-                      () => selectedDay = selectedDay.add(
-                        const Duration(days: 7),
-                      ),
-                    ),
-                    icon: const Icon(Icons.chevron_right),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                controller: dayScroll,
-                child: Row(
+        CampusEntrance(
+          trigger: selectedDay,
+          child: CampusCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
                   children: [
-                    for (final day in days)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: Semantics(
-                          selected: day == selectedDay,
-                          button: true,
-                          label:
-                              '${teachingDayName(day.weekday)}, ${timetableDate(day)}, ${byDay[day]!.length} buổi học${day == today ? ', hôm nay' : ''}',
-                          excludeSemantics: true,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap: () => setState(() => selectedDay = day),
-                            child: Container(
-                              width: 62,
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 12,
-                                horizontal: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: day == selectedDay
-                                    ? Theme.of(context).colorScheme.primary
-                                    : Theme.of(context).colorScheme.surface,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: day == today
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Theme.of(
-                                          context,
-                                        ).colorScheme.outlineVariant,
+                    IconButton(
+                      tooltip: 'Tuần trước',
+                      onPressed: () => setState(
+                        () => selectedDay = selectedDay.subtract(
+                          const Duration(days: 7),
+                        ),
+                      ),
+                      icon: const Icon(Icons.chevron_left),
+                    ),
+                    Expanded(
+                      child: Text(
+                        '${timetableDate(monday)} – ${timetableDate(days.last)} • ${monday.year}',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Tuần sau',
+                      onPressed: () => setState(
+                        () => selectedDay = selectedDay.add(
+                          const Duration(days: 7),
+                        ),
+                      ),
+                      icon: const Icon(Icons.chevron_right),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  controller: dayScroll,
+                  child: Row(
+                    children: [
+                      for (final day in days)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Semantics(
+                            selected: day == selectedDay,
+                            button: true,
+                            label:
+                                '${teachingDayName(day.weekday)}, ${timetableDate(day)}, ${byDay[day]!.length} buổi học${day == today ? ', hôm nay' : ''}',
+                            excludeSemantics: true,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () => setState(() => selectedDay = day),
+                              child: Container(
+                                width: 62,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                  horizontal: 6,
                                 ),
-                              ),
-                              child: Column(
-                                children: [
-                                  Text(
-                                    day.weekday == 7
-                                        ? 'CN'
-                                        : 'T${day.weekday + 1}',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: day == selectedDay
-                                          ? Theme.of(
-                                              context,
-                                            ).colorScheme.onPrimary
-                                          : Theme.of(
-                                              context,
-                                            ).colorScheme.onSurfaceVariant,
-                                    ),
+                                decoration: BoxDecoration(
+                                  color: day == selectedDay
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(context).colorScheme.surface,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: day == today
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Theme.of(
+                                            context,
+                                          ).colorScheme.outlineVariant,
                                   ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    '${day.day}',
-                                    style: TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w700,
-                                      color: day == selectedDay
-                                          ? Theme.of(
-                                              context,
-                                            ).colorScheme.onPrimary
-                                          : Theme.of(
-                                              context,
-                                            ).colorScheme.onSurface,
+                                ),
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      day.weekday == 7
+                                          ? 'CN'
+                                          : 'T${day.weekday + 1}',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: day == selectedDay
+                                            ? Theme.of(
+                                                context,
+                                              ).colorScheme.onPrimary
+                                            : Theme.of(
+                                                context,
+                                              ).colorScheme.onSurfaceVariant,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 7),
-                                  Container(
-                                    width: 4,
-                                    height: 4,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: byDay[day]!.isEmpty
-                                          ? Colors.transparent
-                                          : day == selectedDay
-                                          ? Theme.of(
-                                              context,
-                                            ).colorScheme.onPrimary
-                                          : Theme.of(
-                                              context,
-                                            ).colorScheme.primary,
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      '${day.day}',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w700,
+                                        color: day == selectedDay
+                                            ? Theme.of(
+                                                context,
+                                              ).colorScheme.onPrimary
+                                            : Theme.of(
+                                                context,
+                                              ).colorScheme.onSurface,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(height: 7),
+                                    Container(
+                                      width: 4,
+                                      height: 4,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: byDay[day]!.isEmpty
+                                            ? Colors.transparent
+                                            : day == selectedDay
+                                            ? Theme.of(
+                                                context,
+                                              ).colorScheme.onPrimary
+                                            : Theme.of(
+                                                context,
+                                              ).colorScheme.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () => selectDay(today),
+                      icon: const Icon(Icons.today_outlined, size: 16),
+                      label: const Text('Hôm nay'),
+                    ),
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(value: false, label: Text('Ngày')),
+                        ButtonSegment(value: true, label: Text('Tuần')),
+                      ],
+                      selected: {weekly},
+                      showSelectedIcon: false,
+                      onSelectionChanged: (value) =>
+                          setState(() => weekly = value.single),
+                    ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  TextButton.icon(
-                    onPressed: () => selectDay(today),
-                    icon: const Icon(Icons.today_outlined, size: 16),
-                    label: const Text('Hôm nay'),
-                  ),
-                  SegmentedButton<bool>(
-                    segments: const [
-                      ButtonSegment(value: false, label: Text('Ngày')),
-                      ButtonSegment(value: true, label: Text('Tuần')),
-                    ],
-                    selected: {weekly},
-                    showSelectedIcon: false,
-                    onSelectionChanged: (value) =>
-                        setState(() => weekly = value.single),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         Row(
@@ -426,13 +430,17 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
                 : '${byDay[selectedDay]!.length} buổi dạy • Xếp theo giờ bắt đầu',
           ),
           if (weekly)
-            _WeekTimetable(days: days, byDay: byDay)
+            CampusEntrance(
+              trigger: selectedDay,
+              child: _WeekTimetable(days: days, byDay: byDay),
+            )
           else if (byDay[selectedDay]!.isEmpty)
             const EmptyState('Không có lịch dạy trong ngày này.')
           else
             ...byDay[selectedDay]!.map(
               (p) => TeachingPeriodCard(
                 period: p,
+                compact: true,
                 conflict: byDay[selectedDay]!.any(
                   (other) => !identical(p, other) && p.overlaps(other),
                 ),
@@ -473,6 +481,7 @@ class _WeekTimetable extends StatelessWidget {
           for (final p in byDay[day]!)
             TeachingPeriodCard(
               period: p,
+              compact: true,
               conflict: byDay[day]!.any(
                 (o) => !identical(p, o) && p.overlaps(o),
               ),
