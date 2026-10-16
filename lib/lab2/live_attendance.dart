@@ -416,11 +416,33 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                               maxWidth: expandedQr ? 480 : 260,
                             ),
                             child: LayoutBuilder(
-                              builder: (_, constraints) => QrImageView(
-                                data: qr!['token'],
-                                size: constraints.maxWidth,
-                                padding: const EdgeInsets.all(16),
-                                backgroundColor: Colors.white,
+                              builder: (_, constraints) => Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: scheme.primary.withValues(
+                                      alpha: .25,
+                                    ),
+                                    width: 2,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: scheme.primary.withValues(
+                                        alpha: .06,
+                                      ),
+                                      blurRadius: 24,
+                                      offset: const Offset(0, 8),
+                                    ),
+                                  ],
+                                ),
+                                child: QrImageView(
+                                  data: qr!['token'],
+                                  size: constraints.maxWidth - 24,
+                                  padding: const EdgeInsets.all(12),
+                                  backgroundColor: Colors.white,
+                                ),
                               ),
                             ),
                           ),

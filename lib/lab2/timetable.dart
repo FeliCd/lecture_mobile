@@ -169,9 +169,10 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
     return CampusRefreshList(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
-        const DashboardHeading(
-          title: 'Lịch của bạn',
-          subtitle: 'Chọn ngày hoặc xem toàn bộ tuần dạy',
+        CampusInfoBanner(
+          icon: Icons.calendar_month_outlined,
+          title: 'Lịch giảng dạy · ${term ?? 'Chọn học kỳ'}',
+          subtitle: '$total buổi trong tuần · ${classes.length} lớp phụ trách',
         ),
         const SizedBox(height: 12),
         CampusEntrance(

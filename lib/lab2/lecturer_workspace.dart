@@ -791,9 +791,10 @@ class _NotebookState extends ConsumerState<LessonNotebookPage> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '${widget.metadata['label'] ?? ''}',
-                style: Theme.of(context).textTheme.titleMedium,
+              CampusInfoBanner(
+                icon: Icons.menu_book_outlined,
+                title: '${widget.metadata['label'] ?? ''}',
+                subtitle: 'Sổ tay buổi dạy · Lưu trên thiết bị',
               ),
               const SizedBox(height: 8),
               Semantics(

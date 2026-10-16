@@ -5,12 +5,14 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:lecturer_companion/lab2/app.dart';
 import 'package:lecturer_companion/lab2/classes.dart';
 import 'package:lecturer_companion/lab2/class_attendance_overview.dart';
 import 'package:lecturer_companion/lab2/domain.dart';
 import 'package:lecturer_companion/lab2/repository.dart';
 import 'package:lecturer_companion/lab2/theme.dart';
+import 'package:lecturer_companion/lab2/widgets.dart';
 import 'package:lecturer_companion/lab2/timetable.dart';
 import 'package:lecturer_companion/lab2/today.dart';
 import 'package:lecturer_companion/lab2/live_attendance.dart';
@@ -25,6 +27,7 @@ class RoomPreviewFixture extends SlotFixture {
 }
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   setUpAll(() async {
     if (const bool.fromEnvironment('CAPTURE_UI')) {
       final fontRoot = Platform.environment['FLUTTER_PREVIEW_FONTS'];
@@ -45,6 +48,15 @@ void main() {
         );
         await loader.load();
       }
+      final vietnam = FontLoader('Be Vietnam Pro');
+      for (final weight in ['Regular', 'Medium', 'SemiBold', 'Bold']) {
+        vietnam.addFont(
+          File(
+            'assets/fonts/BeVietnamPro-$weight.ttf',
+          ).readAsBytes().then((bytes) => ByteData.sublistView(bytes)),
+        );
+      }
+      await vietnam.load();
     }
   });
   const profile = UserProfile('lecturer', 'Nguyễn Minh Anh', 'lecturer', [
@@ -155,8 +167,8 @@ void main() {
                           )
                         : Scaffold(
                             appBar: AppBar(
-                              title: Text(
-                                screen == 'home'
+                              title: CampusBrandTitle(
+                                section: screen == 'home'
                                     ? 'Hôm nay'
                                     : screen == 'classes'
                                     ? 'Lớp học'
@@ -243,6 +255,15 @@ void main() {
             expect(tester.takeException(), isNull);
           }
           if (const bool.fromEnvironment('CAPTURE_UI') && scale == 1) {
+            if (screen == 'login') {
+              await tester.runAsync(
+                () => precacheImage(
+                  const AssetImage('assets/stitch-campus.jpg'),
+                  boundaryKey.currentContext!,
+                ),
+              );
+              await tester.pumpAndSettle();
+            }
             final boundary =
                 boundaryKey.currentContext!.findRenderObject()
                     as RenderRepaintBoundary;

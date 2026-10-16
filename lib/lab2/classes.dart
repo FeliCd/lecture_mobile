@@ -1,4 +1,5 @@
 import 'motion.dart';
+import 'theme.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,68 +22,138 @@ class ClassTile extends StatelessWidget {
   const ClassTile({super.key, required this.data});
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        color: theme.colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: theme.colorScheme.outlineVariant),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => context.push('/class/${data['id']}'),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 3,
-                  height: 44,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${data['classCode']}',
-                        style: theme.textTheme.titleLarge,
+    final theme = Theme.of(context), scheme = Theme.of(context).colorScheme;
+    final code = '${data['subjectId'] ?? ''}';
+    final accent = code.startsWith('SW') ? CampusColors.blue : scheme.primary;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => context.push('/class/${data['id']}'),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: .12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      code.length > 3 ? code.substring(0, 3) : code,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: accent,
+                        fontWeight: FontWeight.w700,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        subjectLabel(data),
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 4,
-                        children: [
-                          Text(
-                            '${data['term'] ?? 'Chưa có học kỳ'}',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          Text(
-                            '${data['studentCount'] ?? '—'} sinh viên',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                    ),
                   ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '$code · Lớp ${data['classCode']}',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: accent,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          subjectLabel(data),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.chevron_right,
+                    size: 20,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(width: 8),
-                const Icon(Icons.chevron_right, size: 20),
-              ],
-            ),
+                child: Wrap(
+                  spacing: 16,
+                  runSpacing: 8,
+                  children: [
+                    CampusStatusChip(
+                      '${data['studentCount'] ?? '—'} sinh viên',
+                      icon: Icons.groups_outlined,
+                      color: scheme.secondary,
+                    ),
+                    CampusStatusChip(
+                      '${data['term'] ?? 'Chưa có học kỳ'}',
+                      icon: Icons.calendar_today_outlined,
+                      color: scheme.primary,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final actions = [
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        textStyle: theme.textTheme.labelMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      onPressed: () =>
+                          context.push('/class/${data['id']}?tab=2'),
+                      icon: const Icon(Icons.how_to_reg_outlined, size: 18),
+                      label: const Text('Điểm danh'),
+                    ),
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        textStyle: theme.textTheme.labelMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      onPressed: () => context.push('/class/${data['id']}'),
+                      icon: const Icon(Icons.arrow_forward, size: 16),
+                      label: const Text('Chi tiết lớp'),
+                    ),
+                  ];
+                  return constraints.maxWidth < 270 ||
+                          MediaQuery.textScalerOf(context).scale(1) > 1.3
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            actions[0],
+                            const SizedBox(height: 8),
+                            actions[1],
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            Expanded(child: actions[0]),
+                            const SizedBox(width: 10),
+                            Expanded(child: actions[1]),
+                          ],
+                        );
+                },
+              ),
+            ],
           ),
         ),
       ),
@@ -111,7 +182,7 @@ class _ClassListState extends ConsumerState<ClassList> {
     padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
     children: [
       const DashboardHeading(
-        title: 'Không gian lớp học',
+        title: 'Lớp học của bạn',
         subtitle: 'Danh sách lớp, sinh viên và tình hình điểm danh',
       ),
       CampusSearchField(
@@ -193,7 +264,8 @@ class _ClassListState extends ConsumerState<ClassList> {
 
 class ClassPage extends ConsumerWidget {
   final String classId;
-  const ClassPage({super.key, required this.classId});
+  final int initialTab;
+  const ClassPage({super.key, required this.classId, this.initialTab = 0});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(profileProvider).value;
@@ -202,6 +274,7 @@ class ClassPage extends ConsumerWidget {
     return DefaultTabController(
       key: ValueKey('${user.uid}:$classId'),
       length: 4,
+      initialIndex: initialTab.clamp(0, 3),
       child: StreamBuilder<Data?>(
         key: ValueKey('${user.uid}:$classId'),
         stream: repo.document('classes/$classId'),
@@ -234,14 +307,33 @@ class ClassPage extends ConsumerWidget {
             body: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                ClassContextHeader(cls: cls),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(context).height * .3,
+                  ),
+                  child: SingleChildScrollView(
+                    child: ClassContextHeader(cls: cls),
+                  ),
+                ),
                 const TabBar(
                   isScrollable: true,
                   tabs: [
-                    Tab(text: 'Sinh viên'),
-                    Tab(text: 'Điểm danh'),
-                    Tab(text: 'Buổi học'),
-                    Tab(text: 'Thống kê'),
+                    Tab(
+                      icon: Icon(Icons.groups_outlined, size: 18),
+                      text: 'Sinh viên',
+                    ),
+                    Tab(
+                      icon: Icon(Icons.how_to_reg_outlined, size: 18),
+                      text: 'Điểm danh',
+                    ),
+                    Tab(
+                      icon: Icon(Icons.event_note_outlined, size: 18),
+                      text: 'Buổi học',
+                    ),
+                    Tab(
+                      icon: Icon(Icons.query_stats, size: 18),
+                      text: 'Thống kê',
+                    ),
                   ],
                 ),
                 Expanded(
@@ -281,8 +373,13 @@ class ClassContextHeader extends StatelessWidget {
   const ClassContextHeader({super.key, required this.cls});
   @override
   Widget build(BuildContext context) => Container(
-    color: Theme.of(context).colorScheme.surfaceContainerLow,
-    padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+    margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surface,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+    ),
+    padding: const EdgeInsets.all(16),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

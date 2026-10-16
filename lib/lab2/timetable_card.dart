@@ -73,115 +73,188 @@ class TeachingPeriodCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final action = periodAction(period);
+    final active =
+        !period.cancelled &&
+        !period.completed &&
+        !DateTime.now().toUtc().isBefore(period.scheduledStartAt) &&
+        DateTime.now().toUtc().isBefore(period.scheduledEndAt);
     return CampusEntrance(
       trigger:
           '${period.sessionDate}:${period.slot}:${period.classCode}:${period.sessionId}:$action',
       child: Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: Material(
-          color: featured ? scheme.primaryContainer : scheme.surface,
+          color: scheme.surface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(CampusRadius.card),
             side: BorderSide(
-              color: featured ? scheme.primary : scheme.outlineVariant,
+              color: featured || active
+                  ? scheme.primary.withValues(alpha: .35)
+                  : scheme.outlineVariant,
             ),
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: () => openClass(context),
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                compact ? 12 : 16,
-                compact ? 12 : 16,
-                16,
-                compact ? 12 : 16,
-              ),
-              child: Container(
-                padding: EdgeInsets.only(left: compact ? 12 : 0),
-                decoration: compact
-                    ? BoxDecoration(
-                        border: Border(
-                          left: BorderSide(
-                            width: 3,
-                            color: period.cancelled
-                                ? scheme.outline
-                                : scheme.primary,
-                          ),
-                        ),
-                      )
-                    : null,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 4,
-                      alignment: WrapAlignment.spaceBetween,
-                      children: [
+            child: Container(
+              decoration: featured || active
+                  ? BoxDecoration(
+                      border: Border(
+                        left: BorderSide(color: scheme.primary, width: 4),
+                      ),
+                    )
+                  : null,
+              padding: EdgeInsets.all(compact ? 14 : 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      if (featured)
+                        CampusStatusChip(
+                          active ? 'ĐANG DIỄN RA' : 'CA DẠY TIẾP THEO',
+                          icon: active
+                              ? Icons.radio_button_checked
+                              : Icons.schedule,
+                          color: scheme.primary,
+                        )
+                      else
                         Text(
                           '${period.timeRange} · Slot ${period.slot ?? '—'}',
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(color: scheme.primary),
+                          style: Theme.of(context).textTheme.titleSmall,
                         ),
-                        if (conflict)
-                          CampusStatusChip(
-                            'Trùng giờ',
-                            icon: Icons.warning_amber,
-                            color: scheme.error,
-                          ),
+                      if (conflict)
+                        CampusStatusChip(
+                          'Trùng giờ',
+                          icon: Icons.warning_amber,
+                          color: scheme.error,
+                        )
+                      else if (featured && active)
+                        CampusStatusChip(
+                          'Còn ${period.scheduledEndAt.difference(DateTime.now().toUtc()).inMinutes} phút',
+                          icon: Icons.schedule,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  DefaultTextStyle(
+                    style:
+                        (featured
+                                ? Theme.of(context).textTheme.titleLarge!
+                                : Theme.of(context).textTheme.titleMedium!)
+                            .copyWith(
+                              color: featured
+                                  ? scheme.onSurface
+                                  : scheme.primary,
+                            ),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        Text(period.subjectId),
+                        Text('· Lớp ${period.classCode}'),
                       ],
                     ),
-                    SizedBox(height: compact ? 8 : 12),
+                  ),
+                  if (period.subjectName.isNotEmpty) ...[
+                    const SizedBox(height: 4),
                     Text(
-                      period.subjectName.isEmpty
-                          ? period.subjectId
-                          : period.subjectName,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    Text(
-                      '${period.subjectId} · Lớp ${period.classCode}',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      roomLabel(period.room),
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
+                      period.subjectName,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    if (showAction)
-                      FilledButton(
-                        onPressed: () => openClass(context),
-                        child: Text(action),
-                      )
-                    else
-                      Row(
-                        children: [
-                          Expanded(
-                            child: CampusStatusChip(
-                              action,
-                              icon: period.completed
-                                  ? Icons.task_alt
-                                  : period.sessionId != null
-                                  ? Icons.play_circle_outline
-                                  : Icons.schedule,
-                              color:
-                                  period.sessionId != null && !period.completed
-                                  ? CampusColors.status(
-                                      'present',
-                                      Theme.of(context).brightness ==
-                                          Brightness.dark,
-                                    )
-                                  : null,
-                            ),
-                          ),
-                          const Icon(Icons.chevron_right, size: 20),
-                        ],
-                      ),
-                    LessonNotebookButton(period: period),
                   ],
-                ),
+                  const SizedBox(height: 12),
+                  if (featured)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final details = [
+                            _PeriodDetail(
+                              icon: Icons.meeting_room_outlined,
+                              label: 'Phòng học',
+                              value: roomLabel(period.room),
+                            ),
+                            _PeriodDetail(
+                              icon: Icons.access_time,
+                              label: 'Ca học',
+                              value:
+                                  'Slot ${period.slot ?? '—'} · ${period.timeRange}',
+                            ),
+                          ];
+                          return constraints.maxWidth < 240 ||
+                                  MediaQuery.textScalerOf(context).scale(1) >
+                                      1.3
+                              ? Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    details[0],
+                                    const SizedBox(height: 12),
+                                    details[1],
+                                  ],
+                                )
+                              : Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(child: details[0]),
+                                    const SizedBox(width: 12),
+                                    Expanded(child: details[1]),
+                                  ],
+                                );
+                        },
+                      ),
+                    )
+                  else
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.meeting_room_outlined,
+                          size: 16,
+                          color: scheme.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            roomLabel(period.room),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  const SizedBox(height: 12),
+                  if (showAction)
+                    FilledButton.icon(
+                      onPressed: () => openClass(context),
+                      icon: const Icon(Icons.qr_code_scanner, size: 18),
+                      label: Text(action),
+                    )
+                  else
+                    Row(
+                      children: [
+                        Expanded(
+                          child: CampusStatusChip(
+                            action,
+                            icon: period.completed
+                                ? Icons.task_alt
+                                : Icons.schedule,
+                            color: active ? scheme.primary : scheme.secondary,
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right, size: 20),
+                      ],
+                    ),
+                  LessonNotebookButton(period: period),
+                ],
               ),
             ),
           ),
@@ -189,4 +262,42 @@ class TeachingPeriodCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _PeriodDetail extends StatelessWidget {
+  final IconData icon;
+  final String label, value;
+  const _PeriodDetail({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              value,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
 }

@@ -54,6 +54,9 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pumpAndSettle();
+      expect(find.byType(TeachingPeriodCard), findsNWidgets(2));
+      await tester.tap(section);
+      await tester.pumpAndSettle();
       expect(find.byType(TeachingPeriodCard), findsOneWidget);
       await tester.tap(section);
       await tester.pumpAndSettle();

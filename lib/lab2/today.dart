@@ -76,9 +76,18 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
     return CampusRefreshList(
       padding: const EdgeInsets.all(20),
       children: [
-        Text(widget.user.name, style: Theme.of(context).textTheme.titleLarge),
+        Text(
+          'Chào ${widget.user.name} 👋',
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            fontSize: 22,
+          ),
+        ),
         Text(
           '${teachingDayName(day.weekday)}, ${timetableDate(day)} · ${day.year}',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 12),
         LiveList(
@@ -213,6 +222,7 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                                   'other-lessons:${widget.user.uid}:$day',
                                 ),
                                 tilePadding: EdgeInsets.zero,
+                                initiallyExpanded: true,
                                 childrenPadding: const EdgeInsets.only(top: 8),
                                 expansionAnimationStyle: AnimationStyle(
                                   duration: campusReduceMotion(context)
@@ -315,6 +325,7 @@ class TodayTaskPreview extends ConsumerWidget {
                   CampusEntrance(
                     key: ValueKey(t['id']),
                     child: Card(
+                      color: Theme.of(context).colorScheme.surfaceContainerLow,
                       child: ListTile(
                         leading: Icon(
                           DateTime.parse('${t['due']}').isBefore(now)

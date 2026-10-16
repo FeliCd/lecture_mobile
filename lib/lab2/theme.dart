@@ -14,7 +14,10 @@ abstract final class CampusColors {
       action = Color(0xFFB54708),
       white = Colors.white,
       ink = Color(0xFF172033),
-      border = Color(0xFFE7EAF0);
+      border = Color(0xFFE6E9F4),
+      canvas = Color(0xFFF9F9FF),
+      soft = Color(0xFFF1F3FF),
+      blue = Color(0xFF0F6B93);
   static Color status(String s, bool dark) => switch (s) {
     'present' => dark ? const Color(0xFF74D89A) : const Color(0xFF15803D),
     'late' => dark ? const Color(0xFFFFD27A) : const Color(0xFF98600B),
@@ -42,6 +45,16 @@ ThemeData campusTheme(Brightness brightness) {
         secondary: dark ? const Color(0xFFAFC6ED) : const Color(0xFF334E76),
         tertiary: dark ? const Color(0xFF8ED8C2) : const Color(0xFF167D64),
         surface: dark ? const Color(0xFF1B2535) : CampusColors.white,
+        surfaceContainerLow: dark ? const Color(0xFF202D42) : CampusColors.soft,
+        surfaceContainer: dark
+            ? const Color(0xFF26344B)
+            : const Color(0xFFE9EDFF),
+        surfaceContainerHigh: dark
+            ? const Color(0xFF2D3A50)
+            : const Color(0xFFE1E8FF),
+        surfaceContainerHighest: dark
+            ? const Color(0xFF34425A)
+            : const Color(0xFFD9E2FC),
         onSurface: dark ? const Color(0xFFEDF2FA) : CampusColors.ink,
         onSurfaceVariant: dark
             ? const Color(0xFFAEBBD0)
@@ -49,7 +62,11 @@ ThemeData campusTheme(Brightness brightness) {
         outline: dark ? const Color(0xFF43526B) : const Color(0xFFCBD4E1),
         outlineVariant: dark ? const Color(0xFF2D3A50) : CampusColors.border,
       );
-  final base = ThemeData(useMaterial3: true, colorScheme: s);
+  final base = ThemeData(
+    useMaterial3: true,
+    colorScheme: s,
+    fontFamily: 'Be Vietnam Pro',
+  );
   return base.copyWith(
     visualDensity: VisualDensity.standard,
     pageTransitionsTheme: PageTransitionsTheme(
@@ -76,7 +93,7 @@ ThemeData campusTheme(Brightness brightness) {
     ),
     scaffoldBackgroundColor: dark
         ? const Color(0xFF111A29)
-        : const Color(0xFFF7F8FA),
+        : CampusColors.canvas,
     textTheme: base.textTheme.copyWith(
       headlineMedium: base.textTheme.headlineMedium?.copyWith(
         fontSize: 24,
@@ -97,12 +114,13 @@ ThemeData campusTheme(Brightness brightness) {
       ),
     ),
     appBarTheme: AppBarTheme(
-      backgroundColor: dark ? const Color(0xFF111A29) : const Color(0xFFF5F7FB),
+      backgroundColor: dark ? const Color(0xFF111A29) : CampusColors.canvas,
       foregroundColor: s.onSurface,
       centerTitle: false,
       elevation: 0,
       scrolledUnderElevation: 0,
       titleSpacing: 20,
+      toolbarHeight: 68,
       titleTextStyle: base.textTheme.titleLarge?.copyWith(
         color: s.onSurface,
         fontSize: 20,
@@ -112,6 +130,7 @@ ThemeData campusTheme(Brightness brightness) {
     cardTheme: CardThemeData(
       elevation: 0,
       color: s.surface,
+      surfaceTintColor: Colors.transparent,
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(CampusRadius.card),
@@ -161,10 +180,13 @@ ThemeData campusTheme(Brightness brightness) {
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: s.surface,
+      backgroundColor: dark ? const Color(0xFF111A29) : CampusColors.canvas,
       indicatorColor: s.primaryContainer,
       elevation: 0,
       height: 72,
+      indicatorShape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
       labelTextStyle: WidgetStateProperty.resolveWith(
         (states) => TextStyle(
           fontSize: 12,
@@ -179,12 +201,28 @@ ThemeData campusTheme(Brightness brightness) {
     ),
     chipTheme: base.chipTheme.copyWith(
       side: BorderSide(color: s.outlineVariant),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(CampusRadius.control),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       selectedColor: s.primaryContainer,
       showCheckmark: false,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+    ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(
+        side: WidgetStatePropertyAll(BorderSide(color: s.outlineVariant)),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? s.primaryContainer
+              : s.surface,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? s.primary
+              : s.onSurfaceVariant,
+        ),
+      ),
     ),
     dividerTheme: DividerThemeData(
       color: s.outlineVariant,

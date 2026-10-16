@@ -96,7 +96,10 @@ class _CampusAppState extends ConsumerState<CampusApp> {
         ),
         GoRoute(
           path: '/class/:id',
-          builder: (_, s) => ClassPage(classId: s.pathParameters['id']!),
+          builder: (_, s) => ClassPage(
+            classId: s.pathParameters['id']!,
+            initialTab: int.tryParse(s.uri.queryParameters['tab'] ?? '') ?? 0,
+          ),
         ),
         GoRoute(
           path: '/host/:id',
@@ -187,30 +190,113 @@ class _CampusLoginState extends ConsumerState<CampusLogin> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Icon(
-                      Icons.school_outlined,
-                      size: 40,
-                      color: CampusColors.brand,
+                  Center(
+                    child: Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Center(
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primary,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'F.',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 30,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    'FAP Attendance',
+                    'FAP Smart Lecturer',
+                    textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Lecturer Companion',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Lịch dạy và điểm danh, ngay trong tầm tay.',
-                    style: Theme.of(context).textTheme.bodyLarge,
+                    'Cổng thông tin & Điểm danh giảng viên FPT Education',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 32),
+                  CampusCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Xác thực quyền giảng viên',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Truy cập lịch giảng, quản lý lớp & điểm danh học kỳ hiện hành',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 20),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Stack(
+                            children: [
+                              Image.asset(
+                                'assets/stitch-campus.jpg',
+                                height: 140,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                              ),
+                              Positioned(
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  color: const Color(0xBB172033),
+                                  child: const Row(
+                                    children: [
+                                      Icon(
+                                        Icons.school_outlined,
+                                        size: 16,
+                                        color: Colors.white,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'FPT University · Giảng dạy & kết nối',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   if (failure != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 16),
@@ -242,9 +328,11 @@ class _CampusLoginState extends ConsumerState<CampusLogin> {
                       child: const Text('Dùng tài khoản Google khác'),
                     ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Chỉ tài khoản Google đã được cấp quyền giảng viên mới có thể truy cập.',
-                    textAlign: TextAlign.center,
+                  const CampusInfoBanner(
+                    icon: Icons.verified_user_outlined,
+                    title: 'Đăng nhập an toàn với Google',
+                    subtitle:
+                        'Chỉ tài khoản Google đã được cấp quyền giảng viên mới có thể truy cập.',
                   ),
                   const SizedBox(height: 32),
                   Text(
@@ -288,7 +376,7 @@ class _CampusShellState extends ConsumerState<CampusShell> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(labels[tab]),
+          title: CampusBrandTitle(section: labels[tab]),
           actions: [
             if (useSharedDesktop)
               IconButton(
@@ -301,7 +389,7 @@ class _CampusShellState extends ConsumerState<CampusShell> {
               onPressed: () => context.push('/settings'),
               icon: CircleAvatar(
                 radius: 17,
-                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                backgroundColor: Theme.of(context).colorScheme.primary,
                 child: Text(
                   user.name.trim().isEmpty
                       ? 'U'
@@ -309,7 +397,7 @@ class _CampusShellState extends ConsumerState<CampusShell> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: Theme.of(context).colorScheme.primary,
+                    color: Theme.of(context).colorScheme.onPrimary,
                   ),
                 ),
               ),
