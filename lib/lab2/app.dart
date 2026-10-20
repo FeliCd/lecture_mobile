@@ -21,6 +21,7 @@ import 'import_page.dart';
 import 'roster_assignment.dart';
 import 'lecturer_workspace.dart';
 import 'lecturer_reminders.dart';
+import 'quick_attendance.dart';
 
 final themeProvider = NotifierProvider<ThemeSettings, ThemeMode>(
   ThemeSettings.new,
@@ -107,6 +108,13 @@ class _CampusAppState extends ConsumerState<CampusApp> {
               ? LiveAttendancePage(sessionId: s.pathParameters['id']!)
               : AttendanceHost(sessionId: s.pathParameters['id']!),
         ),
+        GoRoute(
+          path: '/quick',
+          builder: (_, s) => QuickAttendancePage(
+            selector: quickSelectorFromQuery(s.uri.queryParameters),
+            uid: ref.read(profileProvider).value!.uid,
+          ),
+        ),
         GoRoute(path: '/settings', builder: (_, _) => const SettingsPage()),
         GoRoute(
           path: '/workspace',
@@ -135,6 +143,10 @@ class _CampusAppState extends ConsumerState<CampusApp> {
       if (uid != previous?.value?.uid) {
         LecturerReminders.instance.onOpen = (id) =>
             router.go('/workspace?task=${Uri.encodeQueryComponent(id)}');
+        // F02: a reminder opens exactly its class/date/slot; a lesson that was
+        // completed meanwhile shows the official result instead of a draft.
+        LecturerReminders.instance.onOpenAttendance = (selector) =>
+            router.push(quickAttendanceLocation(selector));
         LecturerReminders.instance
             .activate(next.value?.isLecturer == true ? uid : null)
             .catchError((Object _) {});

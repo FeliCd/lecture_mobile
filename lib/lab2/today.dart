@@ -10,6 +10,10 @@ import 'widgets.dart';
 import 'timetable.dart';
 import 'lecturer_workspace.dart';
 import 'lecturer_workspace_store.dart';
+import 'attendance_reminders.dart';
+import 'lecturer_reminders.dart';
+import 'quick_attendance.dart';
+import 'package:go_router/go_router.dart';
 
 TeachingPeriod? todayFocus(List<TeachingPeriod> periods, DateTime now) {
   final candidates =
@@ -175,6 +179,25 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                             .length;
                         final now = DateTime.now().toUtc();
                         final focus = todayFocus(periods, now);
+                        final pending = pendingAttendancePeriods(periods, now);
+                        final tomorrow = teachingPeriods(
+                          user: widget.user,
+                          day: day.add(const Duration(days: 1)),
+                          term: selected,
+                          schedules: schedules,
+                          classes: classes,
+                          sessions: sessions,
+                          exceptions: exceptions.value ?? [],
+                        );
+                        final plan = planAttendanceReminders([
+                          ...periods,
+                          ...tomorrow,
+                        ], now);
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          LecturerReminders.instance
+                              .syncAttendance(widget.user.uid, plan)
+                              .catchError((Object _) {});
+                        });
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -200,6 +223,8 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                                 ],
                               ),
                             ),
+                            if (pending.isNotEmpty)
+                              PendingAttendanceSection(periods: pending),
                             if (focus != null) ...[
                               CampusSectionHeader(
                                 title: focus.scheduledStartAt.isAfter(now)
@@ -357,4 +382,96 @@ class TodayTaskPreview extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// F02 in-app fallback: lessons that started but are not finished stay
+/// visible here even when notifications are off.
+class PendingAttendanceSection extends StatelessWidget {
+  final List<TeachingPeriod> periods;
+  const PendingAttendanceSection({super.key, required this.periods});
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        CampusSectionHeader(
+          title: 'Buổi chưa hoàn tất điểm danh (${periods.length})',
+          description:
+              'Buổi đã hết giờ nhưng chưa có kết quả. Bản nháp chưa lưu không được tính.',
+        ),
+        for (final p in periods)
+          Card(
+            color: scheme.errorContainer.withValues(alpha: .35),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    '${p.subjectName.isEmpty ? p.subjectId : p.subjectName} · Lớp ${p.classCode}',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  Text(
+                    '${p.slot == null ? '' : 'Slot ${p.slot} · '}${p.timeRange} · ${roomLabel(p.room)}',
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: FilledButton.tonalIcon(
+                      onPressed: () =>
+                          context.push(quickAttendanceLocation(p.selector)),
+                      icon: const Icon(Icons.checklist_rtl),
+                      label: const Text('Điểm danh nhanh'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        const AttendanceNotificationHint(),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+}
+
+class AttendanceNotificationHint extends StatefulWidget {
+  const AttendanceNotificationHint({super.key});
+  @override
+  State<AttendanceNotificationHint> createState() =>
+      _AttendanceNotificationHintState();
+}
+
+class _AttendanceNotificationHintState
+    extends State<AttendanceNotificationHint> {
+  late Future<bool> allowed = _check();
+  Future<bool> _check() async {
+    final r = LecturerReminders.instance;
+    if (!r.supported) return true;
+    return r.enabled();
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<bool>(
+    future: allowed,
+    builder: (context, snap) {
+      if (snap.data != false) return const SizedBox.shrink();
+      return ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(Icons.notifications_off_outlined),
+        title: const Text('Thông báo đang tắt'),
+        subtitle: const Text(
+          'Ứng dụng vẫn hiện danh sách này. Bật thông báo để được nhắc trước giờ kết thúc buổi.',
+        ),
+        trailing: TextButton(
+          onPressed: () async {
+            await LecturerReminders.instance.enable();
+            if (mounted) setState(() => allowed = _check());
+          },
+          child: const Text('Bật'),
+        ),
+      );
+    },
+  );
 }
