@@ -222,7 +222,9 @@ class _AttendanceReminderToggleState extends State<AttendanceReminderToggle> {
       final p = await SharedPreferences.getInstance();
       final key = LecturerReminders.lessonPreference(widget.uid);
       final value =
-          p.getBool(key) == true && p.getString('$key-term') == widget.term;
+          p.getBool(key) != false &&
+          (p.getString('$key-term') == null ||
+              p.getString('$key-term') == widget.term);
       if (mounted) setState(() => enabled = value);
     } catch (_) {
       /* Defaults off when local preferences cannot be read. */
@@ -272,10 +274,46 @@ class _AttendanceReminderToggleState extends State<AttendanceReminderToggle> {
         context: context,
         builder: (c) => AlertDialog(
           title: const Text('Nhắc điểm danh'),
-          content: const Text(
-            'Nhắc trước giờ 10 phút và trước khi hết buổi/phiên 2 phút, theo lịch đã tải hôm nay và ngày mai của học kỳ được chọn. Khi mở phiên, nhắc được cập nhật theo hạn của phiên. Buổi đã chốt hoặc hủy sẽ được gỡ nhắc khi app kết nối. Android có thể nhắc trễ. Chưa đồng bộ nhắc giữa các thiết bị; cần mở app để cập nhật lịch mới.',
+          content: const SingleChildScrollView(
+            child: Text(
+              'Nhắc giữa buổi, trước khi kết thúc 5 phút, sau khi kết thúc 10 phút và lúc 21:00 nếu chưa hoàn tất điểm danh (tối đa 4 lần/buổi, trước 00:00 giờ Việt Nam). Có âm thanh và rung theo cài đặt thông báo Android; chế độ im lặng hoặc Không làm phiền có thể tắt tiếng/rung. Chạm thông báo để mở đúng buổi điểm danh nhanh. Dùng lịch đã tải hôm nay và ngày mai. Buổi đã chốt hoặc hủy sẽ được gỡ nhắc khi app kết nối. Android có thể nhắc trễ. Cần mở app để cập nhật lịch và trạng thái từ thiết bị khác.',
+            ),
           ),
           actions: [
+            TextButton(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      Navigator.pop(c);
+                      setState(() => busy = true);
+                      try {
+                        final shown = await LecturerReminders.instance
+                            .testAttendanceAlert(widget.uid);
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(this.context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              shown
+                                  ? 'Đã gửi thông báo thử. Nếu không có tiếng/rung, kiểm tra cài đặt thông báo Android.'
+                                  : 'Chưa gửi được. Cần cấp quyền thông báo trên Android.',
+                            ),
+                          ),
+                        );
+                      } catch (_) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(this.context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Chưa gửi được thông báo thử. Thử lại.',
+                            ),
+                          ),
+                        );
+                      } finally {
+                        if (mounted) setState(() => busy = false);
+                      }
+                    },
+              child: const Text('Thử âm thanh và rung'),
+            ),
             TextButton(
               onPressed: () => Navigator.pop(c),
               child: const Text('Đóng'),

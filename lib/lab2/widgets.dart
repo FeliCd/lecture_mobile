@@ -197,13 +197,17 @@ class CampusOutlineAction extends StatelessWidget {
   );
 }
 
-AttendanceSummary attendanceSummary(WidgetRef ref, Iterable<String> values) =>
-    AttendanceSummary(
-      values,
-      policy:
-          ref.read(profileProvider).value?.attendancePolicy ??
-          const AttendancePolicy(),
-    );
+AttendanceSummary attendanceSummary(
+  WidgetRef ref,
+  Iterable<String> values, {
+  int? totalSlots,
+}) => AttendanceSummary(
+  values,
+  totalSlots: totalSlots,
+  policy:
+      ref.read(profileProvider).value?.attendancePolicy ??
+      const AttendancePolicy(),
+);
 
 class MemberLabel extends ConsumerWidget {
   final String classId, uid;

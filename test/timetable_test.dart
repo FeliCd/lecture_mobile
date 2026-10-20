@@ -286,45 +286,65 @@ void main() {
               w.scrollDirection == Axis.horizontal,
         )
         .last;
-    await tester.drag(horizontal, const Offset(-750, 0));
+    await tester.ensureVisible(horizontal);
+    await tester.dragFrom(
+      tester.getTopLeft(horizontal) + const Offset(120, 35),
+      const Offset(-750, 0),
+    );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await tester.ensureVisible(find.byTooltip('Tuần sau'));
+    tester
+        .state<ScrollableState>(
+          find
+              .byWidgetPredicate(
+                (w) => w is Scrollable && w.axisDirection == AxisDirection.down,
+              )
+              .first,
+        )
+        .position
+        .jumpTo(0);
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Tuần sau'));
     await tester.pumpAndSettle();
     expect(find.text('12/10 – 18/10 • 2026'), findsOneWidget);
     expect(find.text('Lịch tuần • 1 buổi'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
-  testWidgets('multiple semesters require explicit selection', (tester) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          teachingClassesProvider(
-            'teacher',
-          ).overrideWith((ref) => Stream.value(teachingClasses)),
-          teachingSchedulesProvider('teacher').overrideWith(
-            (ref) => Stream.value([
-              ...teachingSchedules,
-              {...teachingSchedules.first, 'term': 'Spring 2027'},
-            ]),
-          ),
-          for (final cls in teachingClasses)
-            teachingSessionsProvider(
-              cls['id'] as String,
-            ).overrideWith((ref) => Stream.value([])),
-        ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: LecturerTimetable(user: teacher, initialDay: friday),
+  testWidgets(
+    'multiple semesters default to newest without a semester picker on timetable',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            teachingClassesProvider(
+              'teacher',
+            ).overrideWith((ref) => Stream.value(teachingClasses)),
+            teachingSchedulesProvider('teacher').overrideWith(
+              (ref) => Stream.value([
+                ...teachingSchedules,
+                {...teachingSchedules.first, 'term': 'Spring 2027'},
+              ]),
+            ),
+            for (final cls in teachingClasses)
+              teachingSessionsProvider(
+                cls['id'] as String,
+              ).overrideWith((ref) => Stream.value([])),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: LecturerTimetable(user: teacher, initialDay: friday),
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Chọn học kỳ để xem lịch dạy.'), findsOneWidget);
-    expect(find.text('Slot 1'), findsNothing);
-  });
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Spring 2027'), findsOneWidget);
+      expect(
+        find.widgetWithText(DropdownButtonFormField<String>, 'Học kỳ'),
+        findsNothing,
+      );
+    },
+  );
   testWidgets('tapping a teaching period opens readonly occurrence details', (
     tester,
   ) async {

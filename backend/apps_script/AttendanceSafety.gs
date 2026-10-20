@@ -1,4 +1,31 @@
 /* Additive attendance migration. Public Sessions/Attendance schemas stay unchanged. */
+// Optional on old deployments: reads never create or modify a sheet.
+function lab2ClassAttendanceConfigs_(book) {
+  return book.getSheetByName('Lab2ClassAttendanceConfig')
+    ? lab2Read_(book,'Lab2ClassAttendanceConfig') : [];
+}
+// Caller holds the script lock; only an assigned lecturer can change the total.
+function lab2SetClassAttendanceConfig_(book,actor,d) {
+  if(actor.role!=='lecturer') throw Error('PERMISSION_DENIED');
+  const cls=lab2Class_(book,actor,d.classId,true);
+  if(Object.keys(d).some(k=>!['classId','totalSlots'].includes(k))||
+      !Number.isInteger(d.totalSlots)||d.totalSlots<1||d.totalSlots>1000) throw Error('INVALID_INPUT');
+  const completion=lab2Read_(book,'Lab2AttendanceCompletion');
+  const confirmed=lab2Read_(book,'Sessions').filter(s=>s.classId===cls.classId&&s.status==='CLOSED'&&
+    !completion.some(c=>c.sessionId===s.sessionId&&c.status==='PENDING'));
+  if(new Set(confirmed.map(s=>s.date+'|'+s.slot)).size>d.totalSlots) throw Error('TOTAL_SLOTS_BELOW_COMPLETED');
+  let sheet=book.getSheetByName('Lab2ClassAttendanceConfig');
+  if(!sheet) {
+    sheet=book.insertSheet('Lab2ClassAttendanceConfig');
+    sheet.getRange(1,1,1,LAB2_TABLES.Lab2ClassAttendanceConfig.length)
+      .setValues([LAB2_TABLES.Lab2ClassAttendanceConfig]);
+    sheet.setFrozenRows(1);
+  }
+  lab2Write_(book,[{table:'Lab2ClassAttendanceConfig',row:{classId:cls.classId,totalSlots:d.totalSlots,
+    updatedBy:actor.firebaseUid||actor.uid,updatedAt:new Date().toISOString()}}]);
+  return {saved:true,totalSlots:d.totalSlots};
+}
+
 function lab2Policy_() {
   const p=PropertiesService.getScriptProperties();
   const tri=k=>p.getProperty(k)==='true'?true:p.getProperty(k)==='false'?false:null;
@@ -29,7 +56,7 @@ function lab2BulkPending_(book,actor,session,d) {
   const seen=new Set(), changes=entries.map(e=>{
     if(!e||typeof e!=='object'||Array.isArray(e)) throw Error('INVALID_INPUT');
     const id=String(e.studentUid||'').replace(/^student-/,''), status=String(e.status||'').toUpperCase();
-    if(!id||seen.has(id)||!['PRESENT','LATE','ABSENT','EXCUSED'].includes(status)) throw Error('INVALID_INPUT');
+    if(!id||seen.has(id)||!['PRESENT','ABSENT'].includes(status)) throw Error('INVALID_INPUT');
     seen.add(id); return {id,status};
   });
   const actorUid=actor.firebaseUid||actor.uid;
@@ -67,7 +94,7 @@ function reconcileExpiredSessions() {
   try {
     const meta=lab2Read_(book,'Lab2SessionMeta'), now=Date.now();
     const sessions=lab2Read_(book,'Sessions').filter(s=>s.status==='OPEN'&&meta.some(m=>m.sessionId===s.sessionId&&Number(m.closesAt)<=now));
-    for(const s of sessions.slice(0,25)) lab2Finalize_(book,s);
+    for(const s of sessions.slice(0,25)) lab2Finalize_(book,s,true);
     if(SpreadsheetApp.flush) SpreadsheetApp.flush();
     return {closed:Math.min(sessions.length,25),remaining:Math.max(0,sessions.length-25)};
   } finally {lock.releaseLock();}
@@ -89,7 +116,7 @@ function lab2Live_(book,actor,d) {
     if(!session) throw Error('PERMISSION_DENIED');
     const cls=lab2Class_(book,actor,session.classId,true), meta=lab2Meta_(book,session);
     if(session.status==='OPEN'&&meta.eligibleStudentIds&&meta.closesAt<=Date.now()) {
-      lab2Finalize_(book,session);
+      lab2Finalize_(book,session,true);
       session=lab2Read_(book,'Sessions').find(s=>s.sessionId===d.sessionId);
     }
     const records=lab2Read_(book,'Attendance').filter(r=>r.sessionId===session.sessionId);
@@ -127,8 +154,13 @@ function lab2QuickRevision_(session,records) {
 // Caller holds the script lock.
 function lab2QuickState_(book,actor,d) {
   if(actor.role!=='lecturer') throw Error('PERMISSION_DENIED');
+  if(!LAB2_TABLES.Lab2AttendanceCompletion) throw Error('ATTENDANCE_BACKEND_UPDATE_REQUIRED');
   const o=lab2ResolveOccurrence_(book,actor,d), existing=lab2OccurrenceSession_(book,o), now=Date.now();
-  const state=lab2OccurrenceState_(o,existing,now), session=existing.session||null;
+  const session=existing.session||null;
+  const completion=session?lab2Read_(book,'Lab2AttendanceCompletion').find(m=>m.sessionId===session.sessionId):null;
+  const completed=!!session&&session.status==='CLOSED'&&(!completion||completion.status==='CONFIRMED');
+  const today=Utilities.formatDate(new Date(now),'Asia/Ho_Chi_Minh','yyyy-MM-dd');
+  const state=completed?'CLOSED':existing.resetOnly?'RESET':o.sessionDate===today?'AVAILABLE':o.sessionDate>today?'NOT_YET':'DAY_EXPIRED';
   const records=session?lab2Read_(book,'Attendance').filter(r=>r.sessionId===session.sessionId):[];
   if(new Set(records.map(r=>r.studentId)).size!==records.length) throw Error('INVALID_SHEET_IDS');
   let eligible;
@@ -139,7 +171,7 @@ function lab2QuickState_(book,actor,d) {
   } else eligible=lab2Read_(book,'Enrollments').filter(e=>e.classId===o.classId).map(e=>e.studentId);
   eligible=[...new Set([...eligible,...records.map(r=>r.studentId)])];
   if(eligible.length>400) throw Error('CLASS_TOO_LARGE');
-  return {o,session,state,records,eligible,revision:lab2QuickRevision_(session,records),now};
+  return {o,session,state,completed,editable:o.sessionDate===today&&!existing.resetOnly,provisional:completion&&completion.status==='PENDING',records,eligible,revision:lab2QuickRevision_(session,records),now};
 }
 function lab2QuickCounts_(eligible,statusOf) {
   const counts={eligible:eligible.length,present:0,late:0,absent:0,excused:0,pending:0};
@@ -153,63 +185,75 @@ function lab2QuickContext_(book,actor,d) {
     const students=q.eligible.map(id=>{
       const s=roster.find(x=>x.studentId===id)||{}, r=byId.get(id);
       return {studentId:id,studentUid:'student-'+id,studentCode:s.studentCode||'',displayName:s.fullName||'',
-        status:r?r.status.toLowerCase():null,notes:r?r.note:'',updatedAt:r?r.updatedAt:''};
+        status:r&&!(q.provisional&&r.note==='Lab2 finalized')?r.status.toLowerCase():null,notes:r?r.note:'',updatedAt:r?r.updatedAt:''};
     }).sort((a,b)=>String(a.studentCode).localeCompare(String(b.studentCode)));
     const savedAt=q.session&&q.session.status==='CLOSED'?Math.max(0,...q.records.map(r=>Date.parse(r.updatedAt)||0)):null;
-    return {...q.o,state:q.state,editable:q.state==='AVAILABLE'||q.state==='OPEN',serverTime:q.now,revision:q.revision,
-      ...(q.session?lab2SessionReceipt_(book,q.session):{}),savedAt,students,
+    const config=lab2ClassAttendanceConfigs_(book).find(c=>c.classId===q.o.classId);
+    return {...q.o,totalSlots:config?Number(config.totalSlots):null,state:q.state,editable:q.editable,serverTime:q.now,revision:q.revision,
+      ...(q.session?lab2SessionReceipt_(book,q.session):{}),attendanceCompleted:q.completed,savedAt,students,
       counts:lab2QuickCounts_(q.eligible,id=>byId.get(id)&&byId.get(id).status)};
   } finally {lock.releaseLock();}
 }
 // Caller (lab2Mutate_) holds the script lock.
 function lab2QuickSubmit_(book,actor,d) {
   const ids=Array.isArray(d.studentIds)?d.studentIds.map(String):null, list=Array.isArray(d.exceptions)?d.exceptions:null;
-  if(!ids||!list||ids.length>400||list.length>400||typeof d.expectedRevision!=='string'||new Set(ids).size!==ids.length) throw Error('INVALID_INPUT');
+  const requestId=String(d.clientRequestId||'');
+  if(!ids||!ids.length||!list||ids.length>400||list.length>400||typeof d.expectedRevision!=='string'||
+      new Set(ids).size!==ids.length||!/^[a-zA-Z0-9_-]{1,160}$/.test(requestId)) throw Error('INVALID_INPUT');
   const wanted=new Map();
   for(const e of list) {
     const id=String(e&&(e.studentId||e.studentUid)||'').replace(/^student-/,''), status=String(e&&e.status||'').toUpperCase();
-    if(!id||wanted.has(id)||!['PRESENT','LATE','ABSENT','EXCUSED'].includes(status)) throw Error('INVALID_INPUT');
+    if(!id||wanted.has(id)||!['PRESENT','ABSENT'].includes(status)) throw Error('INVALID_INPUT');
     wanted.set(id,status);
   }
-  let q=lab2QuickState_(book,actor,d);
+  const q=lab2QuickState_(book,actor,d), actorUid=actor.firebaseUid||actor.uid;
+  const receiptPrefix='quick-'+lab2Hash_(JSON.stringify([q.o.occurrenceId,actorUid,requestId]))+'-';
+  const fingerprint=lab2Hash_(JSON.stringify([d.expectedRevision,[...ids].sort(),[...wanted].sort((a,b)=>a[0].localeCompare(b[0]))]));
   const sameRoster=eligible=>eligible.length===ids.length&&eligible.every(id=>ids.includes(id))&&[...wanted.keys()].every(id=>eligible.includes(id));
   const result=(q,extra)=>{
     const byId=new Map(q.records.map(r=>[r.studentId,r]));
     return {...lab2SessionReceipt_(book,q.session),occurrenceId:q.o.occurrenceId,counts:lab2QuickCounts_(q.eligible,id=>byId.get(id)&&byId.get(id).status),...extra};
   };
-  if(q.session&&q.session.status==='CLOSED') {
-    // Retry after a lost response: identical outcome is acknowledged, anything else needs per-student adjustment.
+  if(q.completed) {
+    // Matching statuses alone do not prove that this request was committed.
+    const prior=lab2Read_(book,'AttendanceAudit').filter(a=>a.sessionId===q.session.sessionId&&a.id.startsWith(receiptPrefix));
+    const audits=prior.filter(a=>a.id.startsWith(receiptPrefix+fingerprint+'-'));
     const byId=new Map(q.records.map(r=>[r.studentId,r]));
-    if(sameRoster(q.eligible)&&q.eligible.every(id=>byId.get(id)&&byId.get(id).status===(wanted.get(id)||byId.get(id).status))) {
-      return result(q,{alreadySaved:true,savedAt:Math.max(0,...q.records.map(r=>Date.parse(r.updatedAt)||0))});
-    }
-    throw Error('ATTENDANCE_ALREADY_FINALIZED');
+    if(sameRoster(q.eligible)&&audits.length===ids.length&&q.eligible.every(id=>{
+      const a=audits.find(a=>a.studentId===id),r=byId.get(id);
+      return a&&r&&a.newStatus===r.status;
+    })) return result(q,{alreadySaved:true,savedAt:Math.max(0,...audits.map(a=>Date.parse(a.changedAt)||0))});
+    if(prior.length) throw Error('ATTENDANCE_ALREADY_FINALIZED');
   }
-  if(q.session&&q.session.status!=='OPEN') throw Error('SESSION_CLOSED');
-  if(!q.session&&q.state!=='AVAILABLE') throw Error({NOT_YET:'OCCURRENCE_NOT_YET',ENDED:'OCCURRENCE_ENDED',TOO_SHORT:'OCCURRENCE_TOO_SHORT',RESET:'SESSION_RESET_REQUIRES_DESKTOP'}[q.state]||'INVALID_OCCURRENCE');
+  if(q.session&&q.session.status==='RESET') throw Error('SESSION_CLOSED');
+  if(!q.editable) throw Error({CLOSED:'QUICK_ATTENDANCE_DAY_EXPIRED',NOT_YET:'OCCURRENCE_NOT_YET',ENDED:'OCCURRENCE_ENDED',DAY_EXPIRED:'QUICK_ATTENDANCE_DAY_EXPIRED',TOO_SHORT:'OCCURRENCE_TOO_SHORT',RESET:'SESSION_RESET_REQUIRES_DESKTOP'}[q.state]||'INVALID_OCCURRENCE');
   if(d.expectedRevision!==q.revision) throw Error('ATTENDANCE_CONFLICT');
   if(!sameRoster(q.eligible)) throw Error('ROSTER_CHANGED');
-  if(!q.session) {
-    lab2CreateFromOccurrence_(book,actor,{...d,durationMinutes:5});
-    q=lab2QuickState_(book,actor,d);
-    if(!q.session||q.session.status!=='OPEN'||!sameRoster(q.eligible)) throw Error('ROSTER_CHANGED');
-  }
   const now=new Date().toISOString(), byId=new Map(q.records.map(r=>[r.studentId,r])), changes=[];
-  const reason='Điểm danh nhanh';
-  for(const id of q.eligible) {
-    const old=byId.get(id), status=wanted.get(id)||(old?old.status:'PRESENT');
-    if(old&&old.status===status) continue;
-    if(old) {
-      changes.push({table:'Attendance',row:{...old,status,updatedAt:now,note:reason,updatedBy:actor.email}});
-      changes.push({table:'AttendanceAudit',row:{id:Utilities.getUuid(),sessionId:q.session.sessionId,studentId:id,
-        actorUid:actor.firebaseUid||actor.uid,changedAt:now,oldStatus:old.status,newStatus:status,reason}});
-    } else {
-      changes.push({table:'Attendance',row:{attendanceId:Utilities.getUuid(),sessionId:q.session.sessionId,studentId:id,
-        status,checkInTime:'',updatedAt:now,note:reason,updatedBy:actor.email}});
-    }
+  if(!q.session) {
+    // Stage session, captured roster and results in one atomic Sheets batch.
+    const o=q.o,id=Utilities.getUuid(),closes=lab2Millis_(o.sessionDate,'00:00')+86400000;
+    q.session={sessionId:id,classId:o.classId,date:o.sessionDate,slot:String(o.slot),
+      startTime:o.scheduledStartTime,endTime:o.scheduledEndTime,status:'CLOSED',
+      currentToken:'',tokenExpiredAt:'',createdBy:actor.entity.lecturerId};
+    changes.push({table:'Lab2SessionMeta',row:{sessionId:id,title:(o.subjectName||o.subjectId)+' • Slot '+o.slot,
+      opensAt:q.now,closesAt:closes,lateThresholdAt:'',eligibleStudentIds:JSON.stringify(q.eligible)}});
   }
+  const reason=q.completed?'Điều chỉnh điểm danh nhanh':'Điểm danh nhanh';
+  for(const [index,id] of q.eligible.entries()) {
+    const old=byId.get(id), provisional=q.provisional&&old&&old.note==='Lab2 finalized';
+    const status=wanted.get(id)||(old&&!provisional?(old.status==='LATE'?'PRESENT':old.status==='EXCUSED'?'ABSENT':old.status):'PRESENT');
+    // Every confirmed student has a receipt, including unchanged results.
+    changes.push({table:'AttendanceAudit',row:{id:receiptPrefix+fingerprint+'-'+index,
+      sessionId:q.session.sessionId,studentId:id,actorUid,changedAt:now,
+      oldStatus:old?old.status:'PENDING',newStatus:status,reason}});
+    if(old&&old.status===status) continue;
+    changes.push({table:'Attendance',row:{...old,attendanceId:old?old.attendanceId:Utilities.getUuid(),
+      sessionId:q.session.sessionId,studentId:id,status,checkInTime:old?old.checkInTime:'',
+      updatedAt:now,note:reason,updatedBy:actor.email}});
+  }
+  changes.push({table:'Lab2AttendanceCompletion',row:{sessionId:q.session.sessionId,status:'CONFIRMED',confirmedAt:now,confirmedBy:actorUid}});
   changes.push({table:'Sessions',row:{...q.session,status:'CLOSED',currentToken:'',tokenExpiredAt:''}});
   lab2Write_(book,changes);
-  const saved=lab2QuickState_(book,actor,d);
-  return result(saved,{alreadySaved:false,savedAt:Date.parse(now)});
+  return result(lab2QuickState_(book,actor,d),{alreadySaved:false,savedAt:Date.parse(now)});
 }

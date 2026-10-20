@@ -67,7 +67,7 @@ class _BulkAttendanceSheetState extends State<BulkAttendanceSheet> {
   @override
   Widget build(BuildContext context) {
     final counts = {
-      for (final s in ['present', 'late', 'absent', 'excused'])
+      for (final s in ['present', 'absent'])
         s: statuses.values.where((v) => v == s).length,
     };
     if (failed) {
@@ -151,7 +151,7 @@ class _BulkAttendanceSheetState extends State<BulkAttendanceSheet> {
                   '${rows.length} sinh viên còn chờ · Giữ các kết quả đã ghi nhận',
                 ),
                 const Text(
-                  'Áp dụng cho cả nhóm chưa điểm danh. Chọn lại người vắng hoặc đi trễ.',
+                  'Áp dụng cho cả nhóm chưa điểm danh. Tắt switch cho sinh viên Vắng; bật là Có mặt.',
                 ),
                 if (preview)
                   Padding(
@@ -185,20 +185,20 @@ class _BulkAttendanceSheetState extends State<BulkAttendanceSheet> {
                             if (preview)
                               Text(StatusBadge.label(statuses[id]!))
                             else
-                              DropdownButtonFormField<String>(
+                              SwitchListTile(
                                 key: ValueKey(id),
-                                initialValue: statuses[id],
-                                isExpanded: true,
-                                items: [
-                                  for (final s in counts.keys)
-                                    DropdownMenuItem(
-                                      value: s,
-                                      child: Text(StatusBadge.label(s)),
-                                    ),
-                                ],
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(
+                                  statuses[id] == 'present' ? 'Có mặt' : 'Vắng',
+                                ),
+                                value: statuses[id] == 'present',
                                 onChanged: busy
                                     ? null
-                                    : (v) => setState(() => statuses[id] = v!),
+                                    : (v) => setState(
+                                        () => statuses[id] = v
+                                            ? 'present'
+                                            : 'absent',
+                                      ),
                               ),
                           ],
                         ),

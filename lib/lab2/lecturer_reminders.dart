@@ -11,61 +11,76 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class LessonAlarm {
   final DateTime at;
-  final String key, payload;
-  const LessonAlarm(this.at, this.key, this.payload);
+  final String key, payload, title, body;
+  const LessonAlarm(this.at, this.key, this.payload, this.title, this.body);
 }
 
 List<LessonAlarm> lessonAlarms(
   List<TeachingPeriod> periods,
   DateTime now,
   bool quiet,
-) {
-  final result = <LessonAlarm>[];
-  for (final p in periods) {
-    if (p.cancelled ||
-        p.completed ||
-        p.classId == null ||
-        p.slot == null ||
-        !p.scheduledEndAt.isAfter(now)) {
-      continue;
-    }
-    final payload = jsonEncode({
-      ...p.selector,
-      'day': p.sessionDate,
-      'classCode': p.classCode,
-      'subjectId': p.subjectId,
-      'subjectName': p.subjectName,
-      'room': p.room,
-      'term': p.term,
-      'start': p.start,
-      'end': p.end,
-    });
-    for (final entry in [
-      if (p.sessionId == null)
-        ('before', p.scheduledStartAt.subtract(const Duration(minutes: 10))),
-      ('end', p.scheduledEndAt.subtract(const Duration(minutes: 2))),
-    ]) {
-      final local = entry.$2.toUtc().add(const Duration(hours: 7));
-      if (!entry.$2.isAfter(now) ||
-          quiet && (local.hour >= 22 || local.hour < 7)) {
-        continue;
-      }
-      result.add(
-        LessonAlarm(
-          entry.$2,
-          '${workspaceKey(p)}/${entry.$1}',
-          'lesson:$payload',
-        ),
-      );
-    }
-  }
-  return result;
-}
+) => [
+  for (final r in planAttendanceReminders(periods, now))
+    if (!quiet ||
+        (() {
+          final h = r.at.toUtc().add(const Duration(hours: 7)).hour;
+          return h >= 7 && h < 22;
+        })())
+      LessonAlarm(
+        r.at,
+        r.key,
+        'lesson:${jsonEncode(r.selector)}',
+        r.title,
+        r.body,
+      ),
+];
 
 /// Single serialized owner, including logout, so old saves cannot resurrect alarms.
 class LecturerReminders {
   static final instance = LecturerReminders();
   final plugin = FlutterLocalNotificationsPlugin();
+  // Keep the channel ID so existing Android sound/vibration preferences survive.
+  static NotificationDetails attendanceDetails({bool quickAction = false}) =>
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          'lecturer_attendance',
+          'Nhắc điểm danh',
+          channelDescription: 'Nhắc lịch dạy và buổi chưa hoàn tất điểm danh',
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          vibrationPattern: Int64List.fromList([0, 500, 200, 500, 200, 800]),
+          visibility: NotificationVisibility.private,
+          actions: quickAction
+              ? const [
+                  AndroidNotificationAction(
+                    'quick_attendance',
+                    'Điểm danh nhanh',
+                    showsUserInterface: true,
+                  ),
+                ]
+              : null,
+        ),
+      );
+
+  /// Uses the real attendance channel so lecturers can check device settings.
+  Future<bool> testAttendanceAlert(String uid) async {
+    var shown = false;
+    await _queue(() async {
+      if (owner != uid || !await enable() || owner != uid) return;
+      await plugin.show(
+        id: 0x7ffffffe,
+        title: 'Thử nhắc điểm danh',
+        body:
+            'Nếu chưa nghe tiếng hoặc thấy rung, kiểm tra cài đặt thông báo của máy.',
+        notificationDetails: attendanceDetails(),
+      );
+      shown = true;
+    });
+    return shown;
+  }
+
   String? owner;
   bool initialized = false;
   bool launchChecked = false;
@@ -106,7 +121,8 @@ class LecturerReminders {
   static bool _isAttendance(String? payload) {
     try {
       return payload != null &&
-          (jsonDecode(payload) as Map)['type'] == 'attendance';
+          (jsonDecode(payload) as Map)['type'] == 'attendance' &&
+          (jsonDecode(payload) as Map)['kind'] != 'lesson';
     } catch (_) {
       return false;
     }
@@ -151,17 +167,7 @@ class LecturerReminders {
           title: r.title,
           body: r.body,
           scheduledDate: tz.TZDateTime.from(r.at, tz.UTC),
-          notificationDetails: const NotificationDetails(
-            android: AndroidNotificationDetails(
-              'lecturer_attendance',
-              'Nhắc điểm danh',
-              channelDescription:
-                  'Nhắc lịch dạy và buổi chưa hoàn tất điểm danh',
-              importance: Importance.high,
-              priority: Priority.high,
-              visibility: NotificationVisibility.private,
-            ),
-          ),
+          notificationDetails: attendanceDetails(),
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
           payload: jsonEncode({
             'uid': uid,
@@ -229,30 +235,35 @@ class LecturerReminders {
     await sync(uid, await WorkspaceStore(uid).read());
   }
 
-  Future<void> syncLessons(String uid, List<TeachingPeriod> periods) => _queue(
-    () async {
-      if (owner != uid || !supported) return;
-      final data = await WorkspaceStore(uid).read();
-      final preferences = await SharedPreferences.getInstance();
-      final term = preferences.getString('${lessonPreference(uid)}-term');
-      final alarms = lessonAlarms(
-        periods.where((p) => p.term == term).toList(),
-        DateTime.now(),
-        data.quiet,
-      );
-      final enabled = preferences.getBool(lessonPreference(uid)) ?? false;
-      final signature = jsonEncode([
-        enabled,
-        alarms.map((a) => [a.key, a.at.toIso8601String(), a.payload]).toList(),
-      ]);
-      _lessons = periods;
-      if (signature == _lessonSignature) return;
-      await _initialize();
-      await _cancelKind(attendance: false);
-      await _schedule(uid, data);
-      _lessonSignature = owner == uid && await this.enabled() ? signature : '';
-    },
-  );
+  Future<void> syncLessons(
+    String uid,
+    List<TeachingPeriod> periods,
+  ) => _queue(() async {
+    if (owner != uid || !supported) return;
+    final data = await WorkspaceStore(uid).read();
+    final preferences = await SharedPreferences.getInstance();
+    final term = preferences.getString('${lessonPreference(uid)}-term');
+    final alarms = lessonAlarms(
+      periods.where((p) => term == null || p.term == term).toList(),
+      DateTime.now(),
+      data.quiet,
+    );
+    final enabled = preferences.getBool(lessonPreference(uid)) ?? true;
+    final signature = jsonEncode([
+      enabled,
+      alarms
+          .map(
+            (a) => [a.key, a.at.toIso8601String(), a.payload, a.title, a.body],
+          )
+          .toList(),
+    ]);
+    _lessons = periods;
+    if (signature == _lessonSignature) return;
+    await _initialize();
+    await _cancelKind(attendance: false);
+    await _schedule(uid, data);
+    _lessonSignature = owner == uid && await this.enabled() ? signature : '';
+  });
 
   Future<void> sync(String uid, WorkspaceData data) => _queue(() async {
     if (owner != uid || !supported) return;
@@ -296,10 +307,10 @@ class LecturerReminders {
       );
     }
     final preferences = await SharedPreferences.getInstance();
-    if (preferences.getBool(lessonPreference(uid)) != true) return;
+    if (preferences.getBool(lessonPreference(uid)) == false) return;
     final term = preferences.getString('${lessonPreference(uid)}-term');
     for (final alarm in lessonAlarms(
-      _lessons.where((p) => p.term == term).toList(),
+      _lessons.where((p) => term == null || p.term == term).toList(),
       DateTime.now(),
       data.quiet,
     )) {
@@ -314,21 +325,17 @@ class LecturerReminders {
       }
       await plugin.zonedSchedule(
         id: id,
-        title: 'FPT Lecturer • Kiểm tra điểm danh',
-        body:
-            'Đến giờ kiểm tra buổi học theo lịch đã tải. Chạm để cập nhật trạng thái.',
+        title: alarm.title,
+        body: alarm.body,
         scheduledDate: tz.TZDateTime.from(alarm.at, tz.UTC),
-        notificationDetails: const NotificationDetails(
-          android: AndroidNotificationDetails(
-            'lecturer_attendance',
-            'Nhắc điểm danh',
-            importance: Importance.high,
-            priority: Priority.high,
-            visibility: NotificationVisibility.private,
-          ),
-        ),
+        notificationDetails: attendanceDetails(quickAction: true),
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        payload: jsonEncode({'uid': uid, 'id': alarm.payload}),
+        payload: jsonEncode({
+          'uid': uid,
+          'type': 'attendance',
+          'kind': 'lesson',
+          'selector': jsonDecode(alarm.payload.substring(7)),
+        }),
       );
     }
   }

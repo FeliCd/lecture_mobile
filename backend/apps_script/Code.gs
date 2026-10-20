@@ -164,7 +164,7 @@ function handleSession_(book, cfg, lecturer, request) {
       if(successors.length>1) throw Error('INVALID_SHEET_IDS');
       const successor=successors[0];
       if (old.status === 'RESET' && successor) {
-        if(successor.status==='OPEN'&&lab2Meta_(book,successor).closesAt<=Date.now()) lab2Finalize_(book,successor);
+        if(successor.status==='OPEN'&&lab2Meta_(book,successor).closesAt<=Date.now()) lab2Finalize_(book,successor,true);
         const current=lab2Read_(book,'Sessions').find(s=>s.sessionId===successor.sessionId);
         return {...sessionView_(current),...lab2SessionReceipt_(book,current)};
       }
@@ -245,7 +245,7 @@ function handleSession_(book, cfg, lecturer, request) {
       const targetId = String(request.classId || '').trim().toUpperCase();
       if (!targetId) return [];
       for(const s of sessions.rows.filter(r=>String(r.classId).trim().toUpperCase()===targetId&&r.status==='OPEN')) {
-        if(lab2Meta_(book,s).closesAt<=Date.now()) lab2Finalize_(book,s);
+        if(lab2Meta_(book,s).closesAt<=Date.now()) lab2Finalize_(book,s,true);
       }
       return lab2Read_(book,'Sessions').filter(r => {
         const rowClassId = String(r.classId || '').trim().toUpperCase();

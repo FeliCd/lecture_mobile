@@ -8,6 +8,8 @@ import 'desktop_sync.dart';
 import 'dashboard_widgets.dart';
 import 'theme.dart';
 import 'student_support.dart';
+import 'attendance_history.dart';
+import 'class_attendance_config.dart';
 
 final classAttendanceSessionsProvider = StreamProvider.autoDispose
     .family<List<Data>, String>(
@@ -80,27 +82,44 @@ class _ClassAttendanceOverviewState
       );
     }
     final finalized = sessions.value!
-        .where((s) => s['status'] == 'finalized')
+        .where(
+          (s) =>
+              s['status'] == 'finalized' && s['attendanceCompleted'] != false,
+        )
         .map((s) => s['id'])
         .toSet();
     final completedRecords = records.value!
         .where((r) => finalized.contains(r['attendanceSessionId']))
         .toList();
-    final summary = attendanceSummary(
-      ref,
-      completedRecords.map((r) => r['status'] as String),
-    );
+    final finalizedSlotCount = sessions.value!
+        .where((s) => finalized.contains(s['id']))
+        .map(attendanceSlotKey)
+        .toSet()
+        .length;
     final groups = <String, List<Data>>{
       for (final uid in members.value!.keys) uid: [],
     };
     for (final row in completedRecords) {
       groups.putIfAbsent(row['studentUid'] as String, () => []).add(row);
     }
+    for (final uid in groups.keys.toList()) {
+      groups[uid] = studentAttendanceSlots(
+        uid,
+        sessions.value!,
+        records.value!,
+      );
+    }
+    final summary = attendanceSummary(
+      ref,
+      groups.values.expand((rows) => rows).map((r) => '${r['status']}'),
+    );
+    final totalSlots = courseSlotTotal(widget.cls['totalSlots']);
     final studentSummaries = {
       for (final entry in groups.entries)
         entry.key: attendanceSummary(
           ref,
           entry.value.map((r) => r['status'] as String),
+          totalSlots: totalSlots,
         ),
     };
     final currentSummaries = members.value!.keys.map(
@@ -114,12 +133,13 @@ class _ClassAttendanceOverviewState
         .length;
     final runs = {
       for (final uid in members.value!.keys)
-        uid: consecutiveAbsences(uid, sessions.value!, groups[uid] ?? []),
+        uid: consecutiveAbsences(uid, sessions.value!, records.value!),
     };
     Data noteFor(String uid) =>
         support?.value?[studentSupportKey(id, uid)] ?? {};
     bool needsFollowUp(String uid) =>
         runs[uid]!.length >= 2 ||
+        studentSummaries[uid]!.missedSlots >= 3 ||
         studentSummaries[uid]!.nearAbsenceLimit ||
         studentSummaries[uid]!.exceedsAbsenceLimit ||
         noteFor(uid)['followUp'] == true;
@@ -129,6 +149,8 @@ class _ClassAttendanceOverviewState
             '${entry.value['displayName']} ${entry.value['studentCode']}',
           ).contains(search) &&
           (filter == 'all' ||
+              filter == 'frequent' && s.missedSlots >= 3 ||
+              filter == 'consecutive' && runs[entry.key]!.length >= 2 ||
               filter == 'followUp' && needsFollowUp(entry.key) ||
               filter == 'near' && s.nearAbsenceLimit ||
               filter == 'exceeded' && s.exceedsAbsenceLimit);
@@ -145,6 +167,8 @@ class _ClassAttendanceOverviewState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (widget.showStudents && user?.isLecturer == true)
+            ClassAttendanceConfig(cls: widget.cls),
           if (widget.showIdentity) ...[
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -187,7 +211,7 @@ class _ClassAttendanceOverviewState
                 icon: Icons.people_outline,
               ),
               SoftLabel(
-                'Buổi đã chốt: ${finalized.length}',
+                'Buổi đã chốt: $finalizedSlotCount',
                 icon: Icons.event_available_outlined,
               ),
             ],
@@ -287,7 +311,7 @@ class _ClassAttendanceOverviewState
               ),
               children: [
                 Text(
-                  'Tỷ lệ vắng tính trên các buổi đã chốt. Cảnh báo từ $warning% đến $limit%; vượt ngưỡng khi trên $limit%. Đi muộn và vắng có phép được giữ riêng; khi thiếu quy định tính các trạng thái này, tỷ lệ sẽ hiển thị chưa đủ cấu hình.',
+                  'Tỷ lệ nghỉ = số slot vắng (kể cả có phép) / tổng slot cả môn × 100%. Mỗi buổi là 1 slot, không chia theo số phút hay số lần quét QR. Cảnh báo từ $warning%; vượt $limit% mới cấm thi. Ví dụ 20 slot: được nghỉ tối đa 4, nghỉ 5 sẽ bị cấm thi. Chỉ tính kết quả đã chốt; bản nháp và buổi chưa điểm danh không tự tính vắng.',
                   style: TextStyle(fontSize: 14, height: 1.6),
                 ),
               ],
@@ -303,7 +327,11 @@ class _ClassAttendanceOverviewState
           ExpansionTile(
             tilePadding: EdgeInsets.zero,
             title: const Text('Chuyên cần'),
-            subtitle: Text('Sắp vượt: $near · Vượt ngưỡng: $exceeded'),
+            subtitle: Text(
+              totalSlots == null
+                  ? 'Chưa có tổng slot môn học'
+                  : 'Sắp vượt: $near · Vượt ngưỡng: $exceeded',
+            ),
             children: [overview],
           )
         else
@@ -324,6 +352,8 @@ class _ClassAttendanceOverviewState
               for (final option in {
                 'all': 'Tất cả',
                 'followUp': 'Cần theo dõi',
+                'frequent': 'Nghỉ từ 3 slot',
+                'consecutive': 'Nghỉ liên tục',
                 'near': 'Sắp vượt $limit%',
                 'exceeded': 'Vượt $limit%',
               }.entries)
@@ -338,7 +368,7 @@ class _ClassAttendanceOverviewState
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
               child: Text(
-                'Vắng từ 2 buổi liên tiếp đã chốt, chạm ngưỡng cảnh báo hoặc được đánh dấu cần trao đổi.',
+                'Nghỉ từ 3 slot, nghỉ từ 2 slot liên tục, chạm ngưỡng cảnh báo hoặc được đánh dấu cần trao đổi.',
               ),
             ),
           if (support?.hasError == true)
@@ -393,6 +423,7 @@ class _ClassAttendanceOverviewState
               code: '${entry.value['studentCode'] ?? 'Chưa có MSSV'}',
               summary: s,
               attention: [
+                if (s.missedSlots >= 3) 'Đã nghỉ ${s.missedSlots} slot',
                 if (runs[entry.key]!.length >= 2)
                   'Vắng ${runs[entry.key]!.length} buổi liên tiếp',
                 if (noteFor(entry.key)['followUp'] == true)
@@ -430,7 +461,7 @@ class _ClassAttendanceOverviewState
                             (session) => Text(absenceRunDate(session)),
                           ),
                           const Text(
-                            'Chỉ đếm Vắng ở các buổi đã chốt gần nhất; bản ghi thiếu, đi trễ hoặc có phép ngắt chuỗi.',
+                            'Đếm vắng và vắng có phép ở các slot đã chốt gần nhất; có mặt, đi trễ hoặc bản ghi thiếu ngắt chuỗi.',
                           ),
                         ],
                         if (user?.isLecturer == true)
@@ -510,12 +541,7 @@ class _ClassAttendanceOverviewState
 }
 
 String attendanceWarningLabel(AttendanceSummary summary) {
-  final limit = summary.policy.limitPercent.toStringAsFixed(0);
-  if (summary.needsPolicy) return 'Chờ cấu hình quy định đi trễ / vắng có phép';
-  if (summary.exceedsAbsenceLimit) return 'Vượt ngưỡng vắng $limit%';
-  if (summary.nearAbsenceLimit) return 'Sắp vượt ngưỡng vắng $limit%';
-  if (summary.eligible == 0) return 'Chưa đủ dữ liệu';
-  return 'Trong ngưỡng cho phép';
+  return summary.absenceWarning;
 }
 
 /// Compact summary; the existing history action exposes counts and records.
@@ -537,7 +563,7 @@ class StudentAttendanceRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final unknown = summary.needsPolicy || summary.eligible == 0;
+    final unknown = !summary.hasSlotTotal;
     final color = unknown
         ? scheme.onSurfaceVariant
         : summary.exceedsAbsenceLimit
@@ -581,11 +607,22 @@ class StudentAttendanceRow extends StatelessWidget {
                       const SizedBox(height: 4),
                     ],
                     Text(
+                      summary.hasSlotTotal
+                          ? 'Đã nghỉ ${summary.missedSlots}/${summary.totalSlots} slot · Tối đa ${summary.maxAbsences} · Còn ${summary.remainingAbsences}'
+                          : 'Đã nghỉ ${summary.missedSlots} slot · Chưa có tổng slot môn học',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
                       summary.absenceRate == null
                           ? 'Tỷ lệ vắng: Chưa đủ dữ liệu'
                           : 'Tỷ lệ vắng: ${summary.absenceRate!.toStringAsFixed(1)}%',
                       style: theme.textTheme.bodyMedium,
                     ),
+                    if (summary.pending > 0)
+                      Text(
+                        '${summary.pending} slot chưa rõ kết quả · Cần đối chiếu',
+                      ),
                     const SizedBox(height: 4),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,

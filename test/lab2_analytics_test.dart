@@ -42,7 +42,7 @@ class AnalyticsFixture extends FixtureRepository {
         {
           'attendanceSessionId': 'final',
           'classSessionId': 'final',
-          'studentUid': 'student-0',
+          'studentUid': 'student-$s',
           'status': s,
         },
       {
@@ -73,10 +73,11 @@ void main() {
             repositoryProvider.overrideWithValue(AnalyticsFixture()),
             memberNamesProvider('class-0').overrideWith(
               (ref) => Stream.value({
-                'student-0': {
-                  'displayName': 'Nguyễn A',
-                  'studentCode': 'SE000000',
-                },
+                for (final status in ['present', 'late', 'absent', 'excused'])
+                  'student-$status': {
+                    'displayName': 'Nguyễn $status',
+                    'studentCode': 'SE$status',
+                  },
               }),
             ),
           ],

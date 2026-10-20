@@ -108,15 +108,20 @@ class AttendancePolicy {
 }
 
 class AttendanceSummary {
-  final int present, late, absent, excused;
+  final int present, late, absent, excused, pending;
+
+  /// Planned slots for the entire course, never the number already marked.
+  final int? totalSlots;
   final AttendancePolicy policy;
   AttendanceSummary(
     Iterable<String> values, {
     this.policy = const AttendancePolicy(),
+    this.totalSlots,
   }) : present = values.where((v) => attendanceStatus(v) == 'present').length,
        late = values.where((v) => attendanceStatus(v) == 'late').length,
        absent = values.where((v) => attendanceStatus(v) == 'absent').length,
-       excused = values.where((v) => attendanceStatus(v) == 'excused').length;
+       excused = values.where((v) => attendanceStatus(v) == 'excused').length,
+       pending = values.where((v) => attendanceStatus(v) == 'pending').length;
   bool get needsPolicy =>
       (late > 0 && policy.lateCountsAsPresent == null) ||
       (excused > 0 && policy.excusedInDenominator == null);
@@ -130,24 +135,44 @@ class AttendanceSummary {
       : (present + (policy.lateCountsAsPresent == true ? late : 0)) /
             eligible *
             100;
-  bool get atRisk => eligible >= 3 && exceedsAbsenceLimit;
+  bool get atRisk => exceedsAbsenceLimit;
+  int get missedSlots => absent + excused;
+  bool get invalidSlotTotal =>
+      totalSlots != null &&
+      totalSlots! < present + late + absent + excused + pending;
+  bool get hasSlotTotal =>
+      totalSlots != null && totalSlots! > 0 && !invalidSlotTotal;
+  int? get maxAbsences =>
+      hasSlotTotal ? (totalSlots! * policy.limitPercent / 100).floor() : null;
+  int? get remainingAbsences => maxAbsences == null
+      ? null
+      : (maxAbsences! - missedSlots).clamp(0, maxAbsences!);
   double? get absenceRate =>
-      needsPolicy || eligible == 0 ? null : absent / eligible * 100;
+      hasSlotTotal ? missedSlots / totalSlots! * 100 : null;
   bool get exceedsAbsenceLimit =>
-      absenceRate != null && absenceRate! > policy.limitPercent;
+      hasSlotTotal && missedSlots * 100 > totalSlots! * policy.limitPercent;
   bool get nearAbsenceLimit =>
       absenceRate != null &&
       absenceRate! >= policy.warningPercent &&
       !exceedsAbsenceLimit;
-  String get absenceWarning => needsPolicy
-      ? 'Chờ cấu hình quy định đi trễ / vắng có phép'
+  String get absenceWarning => invalidSlotTotal
+      ? 'Tổng slot nhỏ hơn số slot đã chốt · Cần kiểm tra kế hoạch môn học'
+      : !hasSlotTotal
+      ? 'Chưa cấu hình tổng slot môn học'
       : exceedsAbsenceLimit
-      ? 'Vượt ngưỡng vắng 20%'
+      ? 'Cấm thi · Nghỉ vượt ${policy.limitPercent.toStringAsFixed(0)}%'
+      : maxAbsences == missedSlots && missedSlots > 0
+      ? 'Đã chạm giới hạn nghỉ · Nghỉ thêm 1 slot sẽ bị cấm thi'
       : nearAbsenceLimit
-      ? 'Sắp vượt ngưỡng vắng 20%'
-      : eligible == 0
-      ? 'Chưa đủ dữ liệu'
+      ? 'Sắp vượt ngưỡng nghỉ ${policy.limitPercent.toStringAsFixed(0)}%'
+      : pending > 0
+      ? 'Còn $pending slot chưa rõ kết quả'
       : 'Trong ngưỡng cho phép';
+}
+
+int? courseSlotTotal(Object? value) {
+  final total = int.tryParse('$value');
+  return total != null && total > 0 && total <= 1000 ? total : null;
 }
 
 String csvCell(Object? value) {
@@ -195,6 +220,10 @@ String errorMessage(Object error) {
     };
   }
   const messages = {
+    'TOTAL_SLOTS_BELOW_COMPLETED':
+        'Tổng slot không thể nhỏ hơn số slot đã hoàn tất điểm danh.',
+    'QUICK_ATTENDANCE_DAY_EXPIRED':
+        'Đã qua 00:00. Chỉ được điểm danh nhanh cho buổi học trong ngày hiện tại.',
     'BULK_ROSTER_REQUIRED':
         'Phiên cũ chưa có danh sách lớp cố định. Hãy sửa từng sinh viên.',
     'GOOGLE_ONLY':

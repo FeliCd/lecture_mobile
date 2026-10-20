@@ -102,6 +102,22 @@ async function limit(uid: string, action: string) {
 }
 const ts = (n: number) => Timestamp.fromMillis(n);
 const stableId = (value: string) => createHash("sha256").update(value).digest("hex");
+export const setClassAttendanceConfig = endpoint(
+  z.object({classId:id,totalSlots:z.number().int().min(1).max(1000)}).strict(),
+  async(r,d)=>{
+    await classAccess(r,d.classId,"lecturer");
+    await db.runTransaction(async t=>{
+      const cls=await t.get(db.doc(`classes/${d.classId}`));
+      if(!cls.data()?.lecturerUids?.includes(r.auth!.uid)) fail("PERMISSION_DENIED");
+      const sessions=await t.get(db.collection("attendanceSessions").where("classId","==",d.classId));
+      const slots=new Set(sessions.docs.filter(s=>s.data().status==="finalized"&&s.data().attendanceCompleted!==false)
+        .map(s=>s.data().classSessionId||s.id));
+      if(slots.size>d.totalSlots) fail("TOTAL_SLOTS_BELOW_COMPLETED");
+      t.update(cls.ref,{totalSlots:d.totalSlots,attendanceConfigUpdatedBy:r.auth!.uid,attendanceConfigUpdatedAt:ts(serverNow())});
+    });
+    return {saved:true,totalSlots:d.totalSlots};
+  },
+);
 export const createAttendanceSession = endpoint(
   z.object({classId:id,title:z.string().trim().min(1).max(300),slot:z.number().int().min(1).max(12),
     durationMinutes:z.number().int().min(1).max(240),

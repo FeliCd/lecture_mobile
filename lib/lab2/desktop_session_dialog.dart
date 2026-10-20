@@ -217,7 +217,8 @@ class _DesktopSessionDialogState extends ConsumerState<DesktopSessionDialog>
               onPressed: loading || submitting ? null : load,
               child: const Text('Kiểm tra lại'),
             ),
-          if (state == 'AVAILABLE' || state == 'OPEN')
+          if (occurrence?['quickAttendanceAvailable'] == true ||
+              (state != null && state != 'CLOSED' && state != 'RESET'))
             OutlinedButton.icon(
               onPressed: loading || submitting
                   ? null

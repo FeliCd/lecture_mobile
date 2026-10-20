@@ -1,11 +1,26 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'attendance_actions.dart';
 import 'domain.dart';
 import 'quick_attendance_draft.dart';
 import 'repository.dart';
 import 'widgets.dart';
+import 'attendance_history.dart';
+import 'student_support.dart' show consecutiveAbsences;
+
+final quickHistorySessionsProvider = StreamProvider.autoDispose
+    .family<List<Data>, String>(
+      (ref, id) => ref
+          .watch(repositoryProvider)
+          .watch('attendanceSessions', field: 'classId', equals: id),
+    );
+final quickHistoryRecordsProvider = StreamProvider.autoDispose
+    .family<List<Data>, String>(
+      (ref, id) => ref
+          .watch(repositoryProvider)
+          .watch('attendanceRecords', field: 'classId', equals: id),
+    );
 
 /// Route for one lesson, identified by class + date + slot (+ schedule ids).
 String quickAttendanceLocation(Data selector) => Uri(
@@ -55,7 +70,10 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
 
   String get draftKey => quickDraftKey(widget.uid, widget.selector);
   bool get editable => context_?['editable'] == true;
-  bool get completed => context_?['status'] == 'CLOSED';
+  bool get completed =>
+      context_?['attendanceCompleted'] == true ||
+      (context_?['attendanceCompleted'] == null &&
+          context_?['status'] == 'CLOSED');
 
   @override
   void initState() {
@@ -70,6 +88,12 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
   }
 
   Future<void> load({Map<String, String> reapply = const {}}) async {
+    ref.invalidate(
+      quickHistorySessionsProvider('${widget.selector['classId']}'),
+    );
+    ref.invalidate(
+      quickHistoryRecordsProvider('${widget.selector['classId']}'),
+    );
     setState(() {
       phase = _Phase.loading;
       loadError = null;
@@ -135,7 +159,12 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
 
   void change(QuickStudent s, String status) {
     final d = draft;
-    if (d == null || phase == _Phase.sending || !d.set(s.id, status)) return;
+    if (d == null ||
+        phase != _Phase.ready ||
+        uncertain ||
+        !d.set(s.id, status)) {
+      return;
+    }
     setState(() {
       saveError = null;
       conflict = false;
@@ -151,7 +180,12 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
         action: SnackBarAction(
           label: 'Hoàn tác',
           onPressed: () {
-            if (!mounted || draft?.undo() == null) return;
+            if (!mounted ||
+                phase != _Phase.ready ||
+                uncertain ||
+                draft?.undo() == null) {
+              return;
+            }
             setState(() {});
             persist();
           },
@@ -162,7 +196,9 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
 
   Future<void> review() async {
     final d = draft;
-    if (d == null || phase == _Phase.sending) return;
+    if (d == null || phase != _Phase.ready || !editable || d.students.isEmpty) {
+      return;
+    }
     final ok = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -179,7 +215,9 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
 
   Future<void> submit() async {
     final d = draft;
-    if (d == null || phase == _Phase.sending) return;
+    if (d == null || phase != _Phase.ready || !editable || d.students.isEmpty) {
+      return;
+    }
     setState(() {
       phase = _Phase.sending;
       saveError = null;
@@ -190,8 +228,14 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
       // compares it with what is stored and answers alreadySaved, or refuses
       // with ATTENDANCE_ALREADY_FINALIZED (the draft is then kept). A lesson
       // closed by someone else is never mistaken for this lecturer's save.
-      requestId ??=
-          '${widget.uid}-${DateTime.now().microsecondsSinceEpoch}-${d.hashCode}';
+      // The request key must not contain an account ID: imported lecturer IDs
+      // may contain email punctuation, spaces or Vietnamese characters.
+      if (requestId == null ||
+          !RegExp(r'^[a-zA-Z0-9_-]{1,160}$').hasMatch(requestId!)) {
+        final random = Random.secure();
+        requestId =
+            'quick-${List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join()}';
+      }
       final result = await ref
           .read(repositoryProvider)
           .call(
@@ -240,6 +284,8 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
         content: Text(
           alreadySaved
               ? 'Kết quả đã được lưu trước đó. Đang hiển thị kết quả chính thức.'
+              : completed
+              ? 'Đã lưu điều chỉnh điểm danh.'
               : 'Đã hoàn tất điểm danh.',
         ),
       ),
@@ -256,8 +302,9 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
         for (final s in d.students)
           if (d.statusOf(s.id) != s.baseline) s.id: d.statusOf(s.id),
     };
-    await discardDraft();
     await load(reapply: mine);
+    if (phase != _Phase.ready) return;
+    requestId = null;
     await persist();
     if (mounted && mine.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -320,7 +367,11 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
           actions: [
             IconButton(
               tooltip: 'Tải lại',
-              onPressed: phase == _Phase.sending ? null : () => load(),
+              onPressed: phase == _Phase.sending || phase == _Phase.loading
+                  ? null
+                  : draft?.dirty == true
+                  ? reloadAfterConflict
+                  : () => load(),
               icon: const Icon(Icons.refresh),
             ),
           ],
@@ -354,7 +405,9 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
                           minimumSize: const Size.fromHeight(52),
                         ),
                         onPressed:
-                            phase == _Phase.sending || phase == _Phase.loading
+                            phase != _Phase.ready ||
+                                d.students.isEmpty ||
+                                (completed && !d.dirty && !uncertain)
                             ? null
                             : conflict
                             ? reloadAfterConflict
@@ -378,8 +431,32 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
                               ? 'Tải lại và đối soát'
                               : uncertain
                               ? 'Kiểm tra và thử lại'
-                              : 'Xem lại',
+                              : completed
+                              ? 'Xem lại và lưu thay đổi'
+                              : 'Xem lại và lưu',
                         ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : c != null && !completed
+            ? SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const FilledButton(
+                        onPressed: null,
+                        child: Text('Lưu điểm danh'),
+                      ),
+                      OutlinedButton(
+                        onPressed: phase == _Phase.loading
+                            ? null
+                            : () => load(),
+                        child: const Text('Kiểm tra lại buổi học'),
                       ),
                     ],
                   ),
@@ -393,6 +470,46 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
   Widget _body(BuildContext context, Data c, QuickAttendanceDraft d) {
     final theme = Theme.of(context);
     final rows = d.visible(filter, query);
+    final historySessions = ref.watch(
+      quickHistorySessionsProvider('${c['classId']}'),
+    );
+    final historyRecords = ref.watch(
+      quickHistoryRecordsProvider('${c['classId']}'),
+    );
+    final historyReady =
+        historySessions.hasValue &&
+        historyRecords.hasValue &&
+        !historySessions.hasError &&
+        !historyRecords.hasError;
+    final historyUids = {
+      for (final r in historyRecords.value ?? <Data>[]) r['studentUid'],
+    };
+    String hintFor(QuickStudent student) {
+      if (!historyReady) return '';
+      final uid =
+          student.historyUid ??
+          (historyUids.contains(student.id)
+              ? student.id
+              : 'student-${student.id}');
+      final slots = studentAttendanceSlots(
+        uid,
+        historySessions.value!,
+        historyRecords.value!,
+      );
+      final summary = AttendanceSummary(
+        slots.map((s) => '${s['status']}'),
+        totalSlots: courseSlotTotal(c['totalSlots']),
+      );
+      return studentAbsenceHint(
+        summary,
+        consecutiveAbsences(
+          uid,
+          historySessions.value!,
+          historyRecords.value!,
+        ).length,
+      );
+    }
+
     // One scroll view: with large text the header must scroll too instead of
     // squeezing the list.
     return CustomScrollView(
@@ -403,6 +520,16 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
           sliver: SliverList.list(
             children: [
+              if (!historyReady)
+                Text(
+                  historySessions.hasError || historyRecords.hasError
+                      ? 'Chưa tải được lịch sử nghỉ. Tải lại để kiểm tra cảnh báo.'
+                      : 'Đang tải lịch sử nghỉ…',
+                ),
+              if (historyReady && courseSlotTotal(c['totalSlots']) == null)
+                const Text(
+                  'Chưa có tổng slot môn học: chỉ hiển thị số slot nghỉ, chưa kết luận tỷ lệ/cấm thi.',
+                ),
               Text(_lessonTitle(c), style: theme.textTheme.titleMedium),
               Text(
                 '${c['room'] != null && '${c['room']}'.isNotEmpty ? 'Phòng ${c['room']} · ' : ''}Sĩ số ${d.students.length}',
@@ -429,11 +556,6 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
                       style: TextStyle(color: theme.colorScheme.error),
                     ),
                   ),
-                ),
-              if (!editable && !completed)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(_notEditableText('${c['state']}')),
                 ),
               if (!editable) ...[
                 const SizedBox(height: 8),
@@ -480,13 +602,16 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
               separatorBuilder: (_, _) => const Divider(height: 1),
               itemBuilder: (_, i) => _StudentTile(
                 student: rows[i],
+                historyHint: hintFor(rows[i]),
                 status: d.statusOf(rows[i].id),
                 changed: d.statusOf(rows[i].id) != rows[i].baseline,
-                enabled: editable && phase != _Phase.sending,
+                enabled: editable && phase == _Phase.ready && !uncertain,
+                disabledReason: uncertain
+                    ? 'Lần gửi trước chưa rõ kết quả. Bấm Kiểm tra và thử lại trước khi chỉnh sửa.'
+                    : phase == _Phase.loading
+                    ? 'Đang tải dữ liệu buổi học.'
+                    : _notEditableText('${c['state']}'),
                 onChanged: (status) => change(rows[i], status),
-                onAdjust: completed && c['sessionId'] != null
-                    ? () => adjust(rows[i], c)
-                    : null,
               ),
             ),
           ),
@@ -494,32 +619,23 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
     );
   }
 
-  /// Late arrival after saving: per-student correction with a reason,
-  /// never re-initialising the whole class.
-  Future<void> adjust(QuickStudent s, Data c) async {
-    await editAttendance(
-      context,
-      ref,
-      sessionId: '${c['sessionId']}',
-      studentUid: 'student-${s.id}',
-      status: s.existing ?? 'present',
-      studentName: s.name,
-      studentCode: s.code,
-      contextLabel: _lessonTitle(c),
-    );
-    if (mounted) await load();
-  }
-
   String _statusText(Data c, QuickAttendanceDraft d) {
     if (phase == _Phase.sending) return 'Đang gửi kết quả điểm danh…';
-    if (completed) {
+    if (completed && saveError == null) {
+      if (d.dirty) {
+        return 'Đang chỉnh sửa điểm danh — thay đổi chưa lưu. Kết quả trước vẫn được giữ.';
+      }
       final at = c['savedAt'] is num && (c['savedAt'] as num) > 0
           ? ' lúc ${localDate(DateTime.fromMillisecondsSinceEpoch((c['savedAt'] as num).toInt(), isUtc: true))}'
           : '';
-      return 'Đã hoàn tất$at. Chạm một sinh viên để điều chỉnh có lý do.';
+      return 'Đã hoàn tất$at. Kết quả đã được lưu.${editable ? ' Có thể chỉnh sửa và lưu lại trước 00:00.' : ''}';
     }
-    if (saveError != null) return 'Lưu chưa thành công — chưa hoàn tất';
-    if (!editable) return 'Chưa điểm danh';
+    if (saveError != null) {
+      return completed
+          ? 'Chưa lưu được điều chỉnh — kết quả trước vẫn được giữ'
+          : 'Lưu chưa thành công — chưa hoàn tất';
+    }
+    if (!editable) return _notEditableText('${c['state']}');
     if (restored) return 'Bản nháp đã khôi phục — chưa lưu';
     if (d.hasExistingResults) {
       return 'Đang hiển thị kết quả đã ghi nhận; người chưa có kết quả được chọn Có mặt — chưa lưu';
@@ -541,6 +657,7 @@ String _displayDate(String iso) {
 
 String _notEditableText(String state) => switch (state) {
   'NOT_YET' => 'Chưa đến thời gian điểm danh của buổi này.',
+  'DAY_EXPIRED' => 'Đã qua 00:00. Không thể điểm danh nhanh cho ngày trước.',
   'ENDED' =>
     'Buổi học đã kết thúc và chưa có kết quả. Xử lý theo quy định điểm danh muộn của nhà trường.',
   'TOO_SHORT' => 'Còn dưới 1 phút giờ học, không thể lưu điểm danh mới.',
@@ -589,15 +706,17 @@ class _StudentTile extends StatelessWidget {
   final QuickStudent student;
   final String status;
   final bool changed, enabled;
+  final String disabledReason;
+  final String historyHint;
   final ValueChanged<String> onChanged;
-  final VoidCallback? onAdjust;
   const _StudentTile({
     required this.student,
     required this.status,
     required this.changed,
     required this.enabled,
+    required this.disabledReason,
+    this.historyHint = '',
     required this.onChanged,
-    this.onAdjust,
   });
   @override
   Widget build(BuildContext context) {
@@ -612,32 +731,28 @@ class _StudentTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(student.code),
+            if (historyHint.isNotEmpty)
+              Text(
+                historyHint,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: scheme.error,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             const SizedBox(height: 2),
             StatusBadge(status),
           ],
         ),
         // Tap toggles Có mặt ↔ Vắng: the common case is one tap per exception.
-        onTap:
-            onAdjust ??
-            (enabled
-                ? () => onChanged(status == 'present' ? 'absent' : 'present')
-                : null),
-        trailing: onAdjust != null
-            ? const Icon(Icons.edit_outlined)
-            : PopupMenuButton<String>(
-                enabled: enabled,
-                tooltip: 'Chọn trạng thái',
-                icon: const Icon(Icons.more_vert),
-                onSelected: onChanged,
-                itemBuilder: (_) => [
-                  for (final s in quickStatuses)
-                    CheckedPopupMenuItem(
-                      value: s,
-                      checked: s == status,
-                      child: Text(quickStatusLabel(s)),
-                    ),
-                ],
-              ),
+        onTap: enabled
+            ? () => onChanged(status == 'present' ? 'absent' : 'present')
+            : null,
+        trailing: Switch(
+          value: status == 'present',
+          onChanged: enabled
+              ? (value) => onChanged(value ? 'present' : 'absent')
+              : null,
+        ),
       ),
     );
   }
@@ -655,53 +770,80 @@ class _ReviewSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final exceptions = draft.exceptions;
-    return CampusActionSheet(
-      title: const Text('Xem lại trước khi lưu'),
-      content: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(title, style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 8),
-            Text(
-              draft.summary(),
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            if (exceptions.isEmpty)
-              const Text('Không có ngoại lệ: toàn bộ lớp Có mặt.')
-            else ...[
-              const Text('Ngoại lệ:'),
-              for (final s in exceptions)
-                ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(s.name.isEmpty ? s.code : s.name),
-                  subtitle: Text(s.code),
-                  trailing: StatusBadge(draft.statusOf(s.id)),
-                ),
-            ],
-            if (retry)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Text(
-                  'Lần gửi trước chưa rõ kết quả. Máy chủ sẽ đối chiếu nên không ghi trùng.',
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * .85,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Xem lại trước khi lưu',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        draft.summary(),
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      if (exceptions.isEmpty)
+                        const Text('Không có ngoại lệ: toàn bộ lớp Có mặt.')
+                      else ...[
+                        const Text('Ngoại lệ:'),
+                        for (final s in exceptions)
+                          ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(s.name.isEmpty ? s.code : s.name),
+                            subtitle: Text(s.code),
+                            trailing: StatusBadge(draft.statusOf(s.id)),
+                          ),
+                      ],
+                      if (retry)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: Text(
+                            'Lần gửi trước chưa rõ kết quả. Máy chủ sẽ đối chiếu nên không ghi trùng.',
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
-          ],
+              const SizedBox(height: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Quay lại sửa'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Xác nhận và lưu'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('Quay lại sửa'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: const Text('Xác nhận và lưu'),
-        ),
-      ],
     );
   }
 }

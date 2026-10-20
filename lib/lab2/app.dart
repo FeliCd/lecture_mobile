@@ -26,6 +26,7 @@ import 'attendance_follow_up.dart';
 import 'dart:convert';
 import 'timetable_domain.dart';
 import 'timetable_card.dart';
+import 'profile_academic_term.dart';
 
 final themeProvider = NotifierProvider<ThemeSettings, ThemeMode>(
   ThemeSettings.new,
@@ -701,6 +702,7 @@ class SettingsPage extends ConsumerWidget {
               ],
             ),
           ),
+          if (u?.isLecturer == true) ProfileAcademicTermSelector(user: u!),
           DropdownButtonFormField<ThemeMode>(
             isExpanded: true,
             style: Theme.of(context).textTheme.bodyLarge,

@@ -33,19 +33,22 @@ void main() {
   test('warning labels follow configured policy and unknown data', () {
     expect(
       attendanceWarningLabel(
-        AttendanceSummary([
-          'absent',
-          'present',
-          'present',
-        ], policy: const AttendancePolicy(limitPercent: 30)),
+        AttendanceSummary(
+          ['absent', 'present', 'present'],
+          totalSlots: 3,
+          policy: const AttendancePolicy(limitPercent: 30),
+        ),
       ),
-      'Vượt ngưỡng vắng 30%',
+      'Cấm thi · Nghỉ vượt 30%',
     );
     expect(
       attendanceWarningLabel(AttendanceSummary(['late'])),
-      contains('Chờ cấu hình'),
+      contains('Chưa cấu hình tổng slot'),
     );
-    expect(attendanceWarningLabel(AttendanceSummary([])), 'Chưa đủ dữ liệu');
+    expect(
+      attendanceWarningLabel(AttendanceSummary([])),
+      'Chưa cấu hình tổng slot môn học',
+    );
   });
   testWidgets('compact student opens existing history with all counts', (
     tester,

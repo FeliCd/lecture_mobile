@@ -39,14 +39,14 @@ void main() {
 
   test('changing one student never touches the others; undo restores', () {
     final draft = QuickAttendanceDraft(roster(5), revision: 'v1');
-    draft.set('s2', 'late');
     draft.set('s2', 'absent');
+    draft.set('s2', 'present');
     expect(
       [for (final s in draft.students) draft.statusOf(s.id)],
-      ['present', 'absent', 'present', 'present', 'present'],
+      ['present', 'present', 'present', 'present', 'present'],
     );
     expect(draft.undo(), 's2');
-    expect(draft.statusOf('s2'), 'late');
+    expect(draft.statusOf('s2'), 'absent');
     expect(draft.undo(), 's2');
     expect(draft.statusOf('s2'), 'present');
     expect(draft.canUndo, isFalse);
@@ -58,7 +58,7 @@ void main() {
   test('filter and search hide rows without losing their choices', () {
     final draft = QuickAttendanceDraft(roster(10), revision: '');
     draft.set('s4', 'absent');
-    draft.set('s9', 'excused');
+    draft.set('s9', 'absent');
     expect(draft.visible(QuickFilter.exceptions, '').map((s) => s.id), [
       's4',
       's9',
@@ -67,16 +67,16 @@ void main() {
     expect(draft.visible(QuickFilter.all, 'sinh viên 4').map((s) => s.id), [
       's4',
     ]);
-    expect(draft.statusOf('s9'), 'excused');
+    expect(draft.statusOf('s9'), 'absent');
     expect(draft.visible(QuickFilter.all, '').map((s) => s.id).first, 's1');
   });
 
   test('existing QR/manual results are kept as baseline, not overwritten', () {
     final draft = QuickAttendanceDraft(
-      roster(3, existing: {1: 'late', 2: 'present'}),
+      roster(3, existing: {1: 'absent', 2: 'present'}),
       revision: 'v2',
     );
-    expect(draft.statusOf('s1'), 'late');
+    expect(draft.statusOf('s1'), 'absent');
     expect(draft.hasExistingResults, isTrue);
     expect(draft.payload(selector, 'r')['exceptions'], isEmpty);
     draft.set('s1', 'present');
@@ -113,4 +113,18 @@ void main() {
       isNot(quickDraftKey('u', {...selector, 'slot': 2})),
     );
   });
+
+  test(
+    'quick search supports unaccented Vietnamese names and extra spaces',
+    () {
+      final draft = QuickAttendanceDraft(const [
+        QuickStudent(id: 's1', code: 'SE01', name: 'Nguyễn  Đức An'),
+        QuickStudent(id: 's2', code: 'SE02', name: 'Bình'),
+      ], revision: '');
+      expect(draft.visible(QuickFilter.all, '  NGUYEN DUC ').map((s) => s.id), [
+        's1',
+      ]);
+      expect(draft.visible(QuickFilter.all, 'se02').single.id, 's2');
+    },
+  );
 }

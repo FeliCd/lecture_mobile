@@ -15,6 +15,8 @@ import 'attendance_actions.dart';
 import 'class_timetable.dart';
 import 'class_tools.dart';
 import 'timetable_card.dart' show roomLabel;
+import 'attendance_history.dart';
+import 'academic_term.dart';
 
 class ClassTile extends StatelessWidget {
   final Data data;
@@ -168,7 +170,7 @@ class ClassList extends ConsumerStatefulWidget {
 }
 
 class _ClassListState extends ConsumerState<ClassList> {
-  String query = '', term = '';
+  String query = '';
   final searchController = TextEditingController();
   @override
   void dispose() {
@@ -177,85 +179,75 @@ class _ClassListState extends ConsumerState<ClassList> {
   }
 
   @override
-  Widget build(BuildContext context) => CampusRefreshList(
-    padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-    children: [
-      CampusSearchField(
-        controller: searchController,
-        hint: 'Tìm lớp hoặc môn',
-        onChanged: (v) => setState(() => query = attendanceSearchText(v)),
-      ),
-      const SizedBox(height: 16),
-      LiveList(
-        source: () => ref.read(repositoryProvider).classes(widget.user),
-        builder: (classes) {
-          final terms = classes.map((c) => '${c['term']}').toSet();
-          final effectiveTerm = terms.contains(term) ? term : '';
-          final filtered = classes
-              .where(
-                (c) =>
-                    (effectiveTerm.isEmpty || c['term'] == effectiveTerm) &&
-                    attendanceSearchText(
-                      '${c['classCode']} ${c['subjectId']} ${c['subjectName']}',
-                    ).contains(query),
-              )
-              .toList();
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Wrap(
-                spacing: 8,
-                children: [
-                  ChoiceChip(
-                    label: const Text('Tất cả kỳ'),
-                    selected: effectiveTerm.isEmpty,
-                    onSelected: (_) => setState(() => term = ''),
+  Widget build(BuildContext context) {
+    final selection = ref.watch(selectedAcademicTermProvider(widget.user.uid));
+    return CampusRefreshList(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      children: [
+        CampusSearchField(
+          controller: searchController,
+          hint: 'Tìm lớp hoặc môn',
+          onChanged: (v) => setState(() => query = attendanceSearchText(v)),
+        ),
+        const SizedBox(height: 16),
+        LiveList(
+          source: () => ref.read(repositoryProvider).classes(widget.user),
+          builder: (classes) {
+            final terms = academicTerms(classes);
+            final effectiveTerm = resolveAcademicTerm(terms, selection.value);
+            final filtered = classes
+                .where(
+                  (c) =>
+                      (effectiveTerm == null || c['term'] == effectiveTerm) &&
+                      attendanceSearchText(
+                        '${c['classCode']} ${c['subjectId']} ${c['subjectName']}',
+                      ).contains(query),
+                )
+                .toList();
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (effectiveTerm != null)
+                  Text(
+                    'Học kỳ $effectiveTerm',
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  ...terms.map(
-                    (t) => ChoiceChip(
-                      label: Text(t),
-                      selected: effectiveTerm == t,
-                      onSelected: (_) => setState(() => term = t),
+                const SizedBox(height: 16),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      '${filtered.length} lớp học',
+                      style: Theme.of(context).textTheme.titleSmall,
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Text(
-                    '${filtered.length} lớp học',
-                    style: Theme.of(context).textTheme.titleSmall,
+                ),
+                if (filtered.isEmpty)
+                  EmptyState(
+                    'Không có lớp phù hợp.',
+                    actionLabel: 'Xóa bộ lọc',
+                    onAction: () => setState(() {
+                      query = '';
+                      searchController.clear();
+                    }),
+                  ),
+                CampusEntrance(
+                  trigger: '$query:$effectiveTerm',
+                  child: Column(
+                    children: [
+                      for (final c in filtered)
+                        ClassTile(key: ValueKey(c['id']), data: c),
+                    ],
                   ),
                 ),
-              ),
-              if (filtered.isEmpty)
-                EmptyState(
-                  'Không có lớp phù hợp.',
-                  actionLabel: 'Xóa bộ lọc',
-                  onAction: () => setState(() {
-                    query = '';
-                    term = '';
-                    searchController.clear();
-                  }),
-                ),
-              CampusEntrance(
-                trigger: '$query:$term',
-                child: Column(
-                  children: [
-                    for (final c in filtered)
-                      ClassTile(key: ValueKey(c['id']), data: c),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    ],
-  );
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
 }
 
 class ClassPage extends ConsumerWidget {
@@ -688,6 +680,7 @@ class _AnalyticsPanelState extends ConsumerState<AnalyticsPanel> {
               .where(
                 (s) =>
                     s['status'] == 'finalized' &&
+                    s['attendanceCompleted'] != false &&
                     (days == 0 ||
                         dateValue(s['opensAt']).isAfter(
                           DateTime.now().subtract(Duration(days: days)),
@@ -703,9 +696,16 @@ class _AnalyticsPanelState extends ConsumerState<AnalyticsPanel> {
               uid: user.isLecturer ? null : user.uid,
             ),
             builder: (all) {
-              final records = all
-                  .where((r) => ids.contains(r['attendanceSessionId']))
-                  .toList();
+              final courseSlots = {
+                for (final uid in all.map((r) => '${r['studentUid']}').toSet())
+                  uid: studentAttendanceSlots(uid, sessions, all),
+              };
+              final records = [
+                for (final slots in courseSlots.values)
+                  for (final r in slots)
+                    if (ids.contains(r['id']))
+                      {...r, 'attendanceSessionId': r['id']},
+              ];
               final summary = attendanceSummary(
                 ref,
                 records.map((r) => r['status'] as String),
@@ -714,10 +714,11 @@ class _AnalyticsPanelState extends ConsumerState<AnalyticsPanel> {
               for (final r in records) {
                 groups.putIfAbsent(r['studentUid'], () => []).add(r);
               }
-              final risk = groups.values.where((r) {
+              final risk = courseSlots.values.where((r) {
                 final student = attendanceSummary(
                   ref,
                   r.map((x) => x['status'] as String),
+                  totalSlots: courseSlotTotal(cls['totalSlots']),
                 );
                 return student.nearAbsenceLimit || student.exceedsAbsenceLimit;
               }).length;
@@ -979,7 +980,10 @@ class _AnalyticsPanelState extends ConsumerState<AnalyticsPanel> {
                   ...entries.map((entry) {
                     final student = attendanceSummary(
                       ref,
-                      entry.value.map((r) => r['status'] as String),
+                      (courseSlots[entry.key] ?? <Data>[]).map(
+                        (r) => r['status'] as String,
+                      ),
+                      totalSlots: courseSlotTotal(cls['totalSlots']),
                     );
                     return CampusCard(
                       child: ListTile(
@@ -987,7 +991,7 @@ class _AnalyticsPanelState extends ConsumerState<AnalyticsPanel> {
                         title: MemberLabel(classId: cls['id'], uid: entry.key),
                         subtitle: Text(
                           'Chuyên cần: ${student.rate?.toStringAsFixed(1) ?? 'Chưa đủ dữ liệu'}${student.rate == null ? '' : '%'}\n'
-                          'Vắng: ${student.absent} • ${student.absenceRate?.toStringAsFixed(1) ?? 'Chưa đủ dữ liệu'}${student.absenceRate == null ? '' : '%'} • ${student.absenceWarning}',
+                          'Nghỉ cả môn: ${student.missedSlots}/${student.totalSlots ?? '?'} slot • ${student.absenceRate?.toStringAsFixed(1) ?? 'Chưa có tổng slot'}${student.absenceRate == null ? '' : '%'} • ${student.absenceWarning}',
                         ),
                         onTap: () => showDialog<void>(
                           context: context,

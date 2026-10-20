@@ -29,8 +29,10 @@ function fixture(now) {
   add('Enrollments',{enrollmentId:'e2',classId:'c1',studentId:'s2'});
   const sheetNames = Object.keys(store);
   const sheet = name => ({getDataRange:()=>({getDisplayValues:()=>store[name].map(r=>r.slice())}),
+    getRange:()=>({setValues:values=>{store[name]=values.map(r=>r.slice());}}),setFrozenRows(){},
     getLastRow:()=>store[name].length,getMaxRows:()=>1000,getSheetId:()=>sheetNames.indexOf(name)});
-  const book = {getId:()=> 'book',getSheetByName:sheet};
+  const book = {getId:()=> 'book',getSheetByName:name=>store[name]?sheet(name):null,
+    insertSheet:name=>{store[name]=[];if(!sheetNames.includes(name))sheetNames.push(name);return sheet(name);}};
   const props = {SPREADSHEET_ID:'book',GOOGLE_CLIENT_ID:'desktop',LAB2_FIREBASE_API_KEY:'public-test-key'};
   c.PropertiesService = {getScriptProperties:()=>({getProperty:k=>props[k]??null})};
   c.SpreadsheetApp = {openById:()=>book};
@@ -69,6 +71,50 @@ function bulkInput(f,id,extra={}) {
     expectedRevision:f.c.lab2Live_(f.book,f.teacher,{sessionId:id}).revision,
     changes:[{studentUid:'student-s1',status:'present'},{studentUid:'student-s2',status:'absent'}],...extra};
 }
+
+test('course slot configuration is owned, validated and exposed to snapshot and quick attendance',()=>{
+  const f=fixture('2026-10-20T03:00:00Z');
+  const saved=f.c.lab2Mutate_(f.book,f.teacher,'setClassAttendanceConfig',{classId:'c1',totalSlots:20});
+  assert.equal(saved.totalSlots,20);
+  const row=f.c.lab2Read_(f.book,'Lab2ClassAttendanceConfig')[0];
+  assert.equal(row.classId,'c1');assert.equal(row.totalSlots,'20');assert.equal(row.updatedBy,f.teacher.firebaseUid);
+  const snapshot=f.c.lab2Snapshot_(f.book,f.teacher);
+  assert.equal(snapshot.collections.classes.find(c=>c.id==='c1').totalSlots,20);
+  assert.ok(!snapshot.collections.classes.some(c=>c.id==='c2'));
+  const date=testSchedule(f);
+  assert.equal(f.c.lab2QuickContext_(f.book,f.teacher,{classId:'c1',sessionDate:date,slot:1}).totalSlots,20);
+  const before=f.writes();
+  for(const totalSlots of [0,-1,20.5,1001,'20',null])
+    assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'setClassAttendanceConfig',{classId:'c1',totalSlots}),/INVALID_INPUT/);
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.student,'setClassAttendanceConfig',{classId:'c1',totalSlots:20}),/PERMISSION_DENIED/);
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'setClassAttendanceConfig',{classId:'c2',totalSlots:20}),/PERMISSION_DENIED/);
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'setClassAttendanceConfig',{classId:'c1',totalSlots:20,lecturerId:'l2'}),/INVALID_INPUT/);
+  assert.equal(f.writes(),before);
+});
+
+test('total slots cannot be below unique confirmed lessons; unconfirmed auto-close is excluded',()=>{
+  const f=fixture();
+  for(const [id,date,slot] of [['a','2026-10-01','1'],['b','2026-10-01','1'],['c','2026-10-01','2'],['pending','2026-10-02','1']])
+    f.add('Sessions',{sessionId:id,classId:'c1',date,slot,status:'CLOSED'});
+  f.add('Lab2AttendanceCompletion',{sessionId:'pending',status:'PENDING'});
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'setClassAttendanceConfig',{classId:'c1',totalSlots:1}),/TOTAL_SLOTS_BELOW_COMPLETED/);
+  assert.equal(f.c.lab2Mutate_(f.book,f.teacher,'setClassAttendanceConfig',{classId:'c1',totalSlots:2}).saved,true);
+  f.c.lab2Mutate_(f.book,f.teacher,'setClassAttendanceConfig',{classId:'c1',totalSlots:20});
+  assert.equal(f.c.lab2Read_(f.book,'Lab2ClassAttendanceConfig').length,1);
+});
+
+test('old books without course slot config remain readable; first explicit save adds only the new table',()=>{
+  const f=fixture();
+  delete f.store.Lab2ClassAttendanceConfig;
+  const before=f.writes();
+  assert.equal(f.c.lab2Snapshot_(f.book,f.teacher).collections.classes[0].totalSlots,null);
+  assert.equal(f.writes(),before);
+  assert.equal(f.store.Lab2ClassAttendanceConfig,undefined);
+  const classes=JSON.stringify(f.store.Classes);
+  f.c.lab2Mutate_(f.book,f.teacher,'setClassAttendanceConfig',{classId:'c1',totalSlots:20});
+  assert.equal(f.c.lab2Read_(f.book,'Lab2ClassAttendanceConfig')[0].totalSlots,'20');
+  assert.equal(JSON.stringify(f.store.Classes),classes);
+});
 test('bulk pending attendance commits all records and audits once, retry is idempotent',()=>{
   const f=fixture(), id=create(f), input=bulkInput(f,id), before=f.writes();
   const result=f.c.lab2Mutate_(f.book,f.teacher,'bulkUpdatePendingAttendance',input);
@@ -754,11 +800,118 @@ test('overnight exception conflicts are checked across adjacent campus dates',()
 });
 
 function quickSelector(f) {
-  return {classId:'c1',sessionDate:testSchedule(f,'1'),slot:'1'};
+  return {classId:'c1',sessionDate:testSchedule(f,'1'),slot:'1',clientRequestId:'quick-test-request'};
 }
 function quickRecords(f,sessionId) {
   return Object.fromEntries(f.c.lab2Read_(f.book,'Attendance').filter(r=>r.sessionId===sessionId).map(r=>[r.studentId,r.status]));
 }
+
+test('quick attendance accepts an ended lesson until 23:59:59 Vietnam and rejects midnight with no writes',()=>{
+  for(const [now,allowed] of [['2026-10-19T16:59:59Z',true],['2026-10-19T17:00:00Z',false]]) {
+    const f=fixture('2026-10-19T02:00:00Z');
+    f.add('Schedules',{scheduleId:'day-slot',lecturerId:'l1',semester:'',subjectCode:'PRM393',classCode:'SE1',dayOfWeek:1,slot:1,startTime:'09:00',endTime:'10:00'});
+    const sel={classId:'c1',sessionDate:'2026-10-19',slot:1,scheduleId:'day-slot',clientRequestId:'day-save'};
+    f.setNow(now);
+    const ctx=f.c.lab2QuickContext_(f.book,f.teacher,sel),before=f.writes();
+    assert.equal(ctx.editable,allowed);
+    const payload={...sel,expectedRevision:ctx.revision,studentIds:['s1','s2'],exceptions:[{studentId:'s2',status:'ABSENT'}]};
+    if(allowed) {
+      const saved=f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',payload);
+      assert.deepEqual(quickRecords(f,saved.sessionId),{s1:'PRESENT',s2:'ABSENT'});
+    } else {
+      assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',payload),/QUICK_ATTENDANCE_DAY_EXPIRED/);
+      assert.equal(f.writes(),before);
+    }
+  }
+});
+
+test('expired QR remains unconfirmed and can be reviewed with present defaults before midnight',()=>{
+  const f=fixture('2026-10-19T02:00:00Z');
+  f.add('Schedules',{scheduleId:'day-slot',lecturerId:'l1',semester:'',subjectCode:'PRM393',classCode:'SE1',dayOfWeek:1,slot:1,startTime:'09:00',endTime:'10:00'});
+  const sel={classId:'c1',sessionDate:'2026-10-19',slot:1,scheduleId:'day-slot',clientRequestId:'recover-expired'};
+  const session=f.c.lab2Mutate_(f.book,f.teacher,'createClassSession',{...sel,durationMinutes:10});
+  f.setNow('2026-10-19T14:00:00Z');
+  const snapshot=f.c.lab2Snapshot_(f.book,f.teacher);
+  assert.equal(snapshot.collections.classSessions[0].status,'scheduled');
+  const ctx=f.c.lab2QuickContext_(f.book,f.teacher,sel);
+  assert.equal(ctx.editable,true);
+  assert.equal(ctx.attendanceCompleted,false);
+  assert.equal(f.c.lab2OccurrenceView_(f.book,f.teacher,sel).quickAttendanceAvailable,true);
+  assert.ok(ctx.students.every(s=>s.status===null));
+  const saved=f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{
+    ...sel,expectedRevision:ctx.revision,studentIds:['s1','s2'],exceptions:[],
+  });
+  assert.equal(saved.sessionId,session.sessionId);
+  assert.deepEqual(quickRecords(f,saved.sessionId),{s1:'PRESENT',s2:'PRESENT'});
+  assert.equal(f.c.lab2QuickContext_(f.book,f.teacher,sel).attendanceCompleted,true);
+  assert.equal(f.c.lab2OccurrenceView_(f.book,f.teacher,sel).quickAttendanceAvailable,true);
+  assert.equal(f.c.lab2Snapshot_(f.book,f.teacher).collections.classSessions[0].status,'completed');
+});
+
+test('quick attendance only accepts present and absent',()=>{
+  const f=fixture(),sel=quickSelector(f),before=f.writes();
+  for(const status of ['LATE','EXCUSED']) {
+    assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{
+      ...sel,expectedRevision:'',studentIds:['s1','s2'],exceptions:[{studentId:'s1',status}],
+    }),/INVALID_INPUT/);
+  }
+  assert.equal(f.writes(),before);
+});
+
+test('partial Apps Script update reports a backend update requirement before any attendance writes',()=>{
+  const f=fixture(),sel=quickSelector(f),before=f.writes();
+  vm.runInContext('const oldTables = {...LAB2_TABLES}; delete oldTables.Lab2AttendanceCompletion;',f.c);
+  // Load the current helper in a context whose schema constant is still old.
+  const source=fs.readFileSync(path.join(__dirname,'../apps_script/AttendanceSafety.gs'),'utf8');
+  vm.runInContext(source.replaceAll('LAB2_TABLES.Lab2AttendanceCompletion','oldTables.Lab2AttendanceCompletion'),f.c);
+  assert.throws(()=>f.c.lab2QuickContext_(f.book,f.teacher,sel),/ATTENDANCE_BACKEND_UPDATE_REQUIRED/);
+  assert.equal(f.writes(),before);
+});
+
+test('confirmed quick attendance can be reviewed and edited until midnight with a fresh revision and request',()=>{
+  const f=fixture('2026-10-19T03:00:00Z'),sel=quickSelector(f);
+  const original={...sel,expectedRevision:'',studentIds:['s1','s2'],exceptions:[{studentId:'s2',status:'ABSENT'}]};
+  const first=f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',original);
+  const oldFirst=f.c.lab2Read_(f.book,'Attendance').find(r=>r.studentId==='s1');
+  f.setNow('2026-10-19T16:59:59Z');
+  const ctx=f.c.lab2QuickContext_(f.book,f.teacher,sel);
+  assert.equal(ctx.attendanceCompleted,true);
+  assert.equal(ctx.editable,true);
+  assert.equal(ctx.students.find(s=>s.studentId==='s2').status,'absent');
+  const correction={...sel,clientRequestId:'correction-1',expectedRevision:ctx.revision,studentIds:['s1','s2'],exceptions:[{studentId:'s2',status:'PRESENT'}]};
+  const saved=f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',correction);
+  assert.equal(saved.sessionId,first.sessionId);
+  assert.deepEqual(quickRecords(f,first.sessionId),{s1:'PRESENT',s2:'PRESENT'});
+  assert.deepEqual(f.c.lab2Read_(f.book,'Attendance').find(r=>r.studentId==='s1'),oldFirst);
+  assert.equal(f.c.lab2Read_(f.book,'Sessions').length,1);
+  assert.ok(f.c.lab2Read_(f.book,'AttendanceAudit').some(a=>a.studentId==='s2'&&a.oldStatus==='ABSENT'&&a.newStatus==='PRESENT'&&a.reason==='Điều chỉnh điểm danh nhanh'));
+  assert.equal(f.c.lab2Snapshot_(f.book,f.teacher).collections.classSessions[0].status,'completed');
+  const writes=f.writes();
+  assert.equal(f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',correction).alreadySaved,true);
+  assert.equal(f.writes(),writes);
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',original),/ATTENDANCE_ALREADY_FINALIZED/);
+  const latest=f.c.lab2QuickContext_(f.book,f.teacher,sel);
+  f.setNow('2026-10-19T17:00:00Z');
+  assert.equal(f.c.lab2QuickContext_(f.book,f.teacher,sel).editable,false);
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{
+    ...correction,clientRequestId:'tomorrow-correction',expectedRevision:latest.revision,exceptions:[{studentId:'s2',status:'ABSENT'}],
+  }),/QUICK_ATTENDANCE_DAY_EXPIRED/);
+  assert.equal(f.writes(),writes);
+});
+
+test('concurrent edits to completed attendance require fresh data and never overwrite the first edit',()=>{
+  const f=fixture('2026-10-19T03:00:00Z'),sel=quickSelector(f);
+  f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{...sel,expectedRevision:'',studentIds:['s1','s2'],exceptions:[]});
+  const revision=f.c.lab2QuickContext_(f.book,f.teacher,sel).revision;
+  const payload={...sel,expectedRevision:revision,studentIds:['s1','s2'],clientRequestId:'edit-a',exceptions:[{studentId:'s1',status:'ABSENT'}]};
+  f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',payload);
+  const writes=f.writes();
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{
+    ...payload,clientRequestId:'edit-b',exceptions:[{studentId:'s2',status:'ABSENT'}],
+  }),/ATTENDANCE_CONFLICT/);
+  assert.deepEqual(quickRecords(f,f.c.lab2Read_(f.book,'Sessions')[0].sessionId),{s1:'ABSENT',s2:'PRESENT'});
+  assert.equal(f.writes(),writes);
+});
 
 test('merged public routes keep bulk and quick attendance with shared conflict detection and results',()=>{
   const f=fixture('2026-10-19T03:00:00Z'), sel=quickSelector(f), id=create(f);
@@ -792,6 +945,61 @@ test('quick attendance context is read-only and lists the roster without creatin
   assert.equal(f.writes(),writes);
 });
 
+test('quick attendance never acknowledges a close by another flow, even when all desired statuses match',()=>{
+  for(const expired of [false,true]) {
+    const f=fixture('2026-10-19T03:00:00Z'),sel=quickSelector(f),id=create(f);
+    const draft=f.c.lab2QuickContext_(f.book,f.teacher,sel);
+    if(expired) f.setNow('2026-10-19T03:11:00Z');
+    else {
+      f.c.lab2Mutate_(f.book,f.teacher,'bulkUpdatePendingAttendance',bulkInput(f,id,{
+        changes:[{studentUid:'student-s1',status:'present'},{studentUid:'student-s2',status:'present'}],
+      }));
+      f.c.lab2Mutate_(f.book,f.teacher,'closeAttendanceSession',{attendanceSessionId:id});
+    }
+    assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{
+      ...sel,expectedRevision:draft.revision,studentIds:['s1','s2'],exceptions:[],
+    }),/ATTENDANCE_CONFLICT/);
+    assert.deepEqual(quickRecords(f,id),expired?{s1:'ABSENT',s2:'ABSENT'}:{s1:'PRESENT',s2:'PRESENT'});
+  }
+});
+
+test('new quick attendance commits session, frozen roster, results and receipt in one atomic batch',()=>{
+  const f=fixture('2026-10-19T03:00:00Z'),sel=quickSelector(f),before=f.writes();
+  const payload={...sel,expectedRevision:'',studentIds:['s1','s2'],exceptions:[]};
+  const batch=f.c.Sheets.Spreadsheets.batchUpdate;
+  f.c.Sheets.Spreadsheets.batchUpdate=()=>{throw Error('SHEETS_UNAVAILABLE');};
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',payload),/SHEETS_UNAVAILABLE/);
+  assert.equal(f.c.lab2Read_(f.book,'Sessions').length,0);
+  assert.equal(f.c.lab2Read_(f.book,'Lab2SessionMeta').length,0);
+  assert.equal(f.c.lab2Read_(f.book,'Attendance').length,0);
+  assert.equal(f.c.lab2Read_(f.book,'AttendanceAudit').length,0);
+  f.c.Sheets.Spreadsheets.batchUpdate=batch;
+  const result=f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',payload);
+  assert.equal(f.writes(),before+1);
+  assert.equal(result.status,'CLOSED');
+  assert.equal(f.c.lab2Read_(f.book,'AttendanceAudit').length,2);
+  const writes=f.writes();
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{
+    ...payload,clientRequestId:'another-request',
+  }),/ATTENDANCE_CONFLICT/);
+  assert.equal(f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',payload).alreadySaved,true);
+  assert.equal(f.writes(),writes);
+  f.c.lab2Mutate_(f.book,f.teacher,'updateAttendanceRecord',{
+    attendanceSessionId:result.sessionId,studentUid:'student-s1',status:'late',notes:'Arrived late',
+  });
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',payload),/ATTENDANCE_ALREADY_FINALIZED/);
+  assert.equal(quickRecords(f,result.sessionId).s1,'LATE');
+});
+
+test('quick attendance rejects empty roster and missing request id without writes',()=>{
+  const f=fixture('2026-10-19T03:00:00Z'),sel=quickSelector(f),before=f.writes();
+  for(const input of [
+    {...sel,studentIds:[],exceptions:[],expectedRevision:''},
+    {...sel,clientRequestId:'',studentIds:['s1','s2'],exceptions:[],expectedRevision:''},
+  ]) assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',input),/INVALID_INPUT/);
+  assert.equal(f.writes(),before);
+});
+
 test('quick attendance saves default PRESENT plus exceptions, closes the session and marks the lesson completed',()=>{
   const f=fixture(), sel=quickSelector(f);
   const out=f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{...sel,expectedRevision:'',studentIds:['s1','s2'],
@@ -807,28 +1015,28 @@ test('quick attendance saves default PRESENT plus exceptions, closes the session
 
 test('quick attendance retry after a lost response is acknowledged without new writes; a different payload is refused',()=>{
   const f=fixture(), sel=quickSelector(f);
-  const payload={...sel,expectedRevision:'',studentIds:['s1','s2'],exceptions:[{studentId:'s2',status:'LATE'}]};
+  const payload={...sel,expectedRevision:'',studentIds:['s1','s2'],exceptions:[{studentId:'s2',status:'ABSENT'}]};
   const first=f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',payload), writes=f.writes();
   const again=f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',payload);
   assert.equal(again.alreadySaved,true);
   assert.equal(again.sessionId,first.sessionId);
   assert.equal(f.writes(),writes);
-  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{...payload,exceptions:[{studentId:'s2',status:'ABSENT'}]}),/ATTENDANCE_ALREADY_FINALIZED/);
-  assert.deepEqual(quickRecords(f,first.sessionId),{s1:'PRESENT',s2:'LATE'});
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{...payload,exceptions:[{studentId:'s2',status:'PRESENT'}]}),/ATTENDANCE_ALREADY_FINALIZED/);
+  assert.deepEqual(quickRecords(f,first.sessionId),{s1:'PRESENT',s2:'ABSENT'});
 });
 
 test('quick attendance keeps existing QR/manual results and rejects stale revisions or a changed roster',()=>{
   const f=fixture(), sel=quickSelector(f), id=create(f);
   f.c.lab2Mutate_(f.book,f.teacher,'updateAttendanceRecord',{attendanceSessionId:id,studentUid:'student-s1',status:'late',notes:'Đến muộn'});
   const ctx=f.c.lab2QuickContext_(f.book,f.teacher,sel);
-  assert.equal(ctx.state,'OPEN');
+  assert.equal(ctx.state,'AVAILABLE');
   assert.equal(ctx.students.find(s=>s.studentId==='s1').status,'late');
   assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{...sel,expectedRevision:'',studentIds:['s1','s2'],exceptions:[]}),/ATTENDANCE_CONFLICT/);
   assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{...sel,expectedRevision:ctx.revision,studentIds:['s1'],exceptions:[]}),/ROSTER_CHANGED/);
   assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{...sel,expectedRevision:ctx.revision,studentIds:['s1','s2'],exceptions:[{studentId:'s9',status:'ABSENT'}]}),/ROSTER_CHANGED/);
   const out=f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{...sel,expectedRevision:ctx.revision,studentIds:['s1','s2'],exceptions:[]});
   assert.equal(out.sessionId,id);
-  assert.deepEqual(quickRecords(f,id),{s1:'LATE',s2:'PRESENT'});
+  assert.deepEqual(quickRecords(f,id),{s1:'PRESENT',s2:'PRESENT'});
 });
 
 test('quick attendance changing an existing record writes an audit row; other lecturers and bad input are refused',()=>{
@@ -836,10 +1044,10 @@ test('quick attendance changing an existing record writes an audit row; other le
   f.c.lab2Mutate_(f.book,f.teacher,'updateAttendanceRecord',{attendanceSessionId:id,studentUid:'student-s1',status:'present',notes:'QR lỗi'});
   const auditsBefore=f.c.lab2Read_(f.book,'AttendanceAudit').length;
   const ctx=f.c.lab2QuickContext_(f.book,f.teacher,sel);
-  f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{...sel,expectedRevision:ctx.revision,studentIds:['s1','s2'],exceptions:[{studentId:'s1',status:'EXCUSED'}]});
+  f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{...sel,expectedRevision:ctx.revision,studentIds:['s1','s2'],exceptions:[{studentId:'s1',status:'ABSENT'}]});
   const audits=f.c.lab2Read_(f.book,'AttendanceAudit');
-  assert.equal(audits.length,auditsBefore+1);
-  assert.equal(audits.at(-1).newStatus,'EXCUSED');
+  assert.equal(audits.length,auditsBefore+2);
+  assert.equal(audits.find(a=>a.studentId==='s1'&&a.reason==='Điểm danh nhanh').newStatus,'ABSENT');
   const other=f.c.lab2Actor_({email:'other@fpt.edu.vn',firebaseUid:'firebase-other'},f.c.config_(),f.book);
   assert.throws(()=>f.c.lab2QuickContext_(f.book,other,sel),/PERMISSION_DENIED|OCCURRENCE/);
   assert.throws(()=>f.c.lab2Mutate_(f.book,f.student,'submitQuickAttendance',{...sel,expectedRevision:'',studentIds:['s1'],exceptions:[]}),/PERMISSION_DENIED/);

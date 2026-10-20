@@ -15,6 +15,7 @@ import 'lecturer_reminders.dart';
 import 'quick_attendance.dart';
 import 'package:go_router/go_router.dart';
 import 'attendance_follow_up.dart';
+import 'academic_term.dart';
 
 TeachingPeriod? todayFocus(List<TeachingPeriod> periods, DateTime now) {
   final candidates =
@@ -37,7 +38,6 @@ class TodayPanel extends ConsumerStatefulWidget {
 }
 
 class _TodayPanelState extends ConsumerState<TodayPanel> {
-  String? term;
   Timer? clock;
   @override
   void initState() {
@@ -55,6 +55,9 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final termSelection = ref.watch(
+      selectedAcademicTermProvider(widget.user.uid),
+    );
     final repo = ref.read(repositoryProvider), day = campusDay(DateTime.now());
     final exceptions = ref.watch(teachingExceptionsProvider(widget.user.uid));
     if (exceptions.hasError) {
@@ -98,29 +101,19 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
           source: () => repo.classes(widget.user),
           empty: 'Chưa có lớp được phân công.',
           builder: (classes) {
-            final terms = classes.map((c) => '${c['term']}').toSet().toList()
-              ..sort();
-            final selected = terms.contains(term)
-                ? term
-                : terms.length == 1
-                ? terms.single
-                : null;
+            final terms = academicTerms(classes);
+            final selected = resolveAcademicTerm(terms, termSelection.value);
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(
                   children: [
                     Expanded(
-                      child: DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        initialValue: selected,
-                        decoration: const InputDecoration(labelText: 'Học kỳ'),
-                        items: terms
-                            .map(
-                              (t) => DropdownMenuItem(value: t, child: Text(t)),
-                            )
-                            .toList(),
-                        onChanged: (v) => setState(() => term = v),
+                      child: Text(
+                        selected == null
+                            ? 'Chưa có học kỳ'
+                            : 'Học kỳ $selected',
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -131,7 +124,8 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                     ),
                   ],
                 ),
-                if (selected == null) const EmptyState('Chọn học kỳ'),
+                if (selected == null)
+                  const EmptyState('Chưa có học kỳ được phân công.'),
                 if (selected != null)
                   LiveList(
                     source: () => repo.watch('schedules'),
@@ -183,6 +177,7 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                         final others = periods
                             .where(
                               (p) =>
+                                  !attendancePending(p, now) &&
                                   !identical(p, focus) &&
                                   attendanceFollowUp(p, now) == null,
                             )
@@ -221,6 +216,7 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                             if (pending.isNotEmpty)
                               PendingAttendanceSection(periods: pending),
                             if (focus != null &&
+                                !attendancePending(focus, now) &&
                                 attendanceFollowUp(focus, now) == null) ...[
                               CampusSectionHeader(
                                 title: focus.scheduledStartAt.isAfter(now)
@@ -274,6 +270,7 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                     tilePadding: EdgeInsets.zero,
                     title: const Text('Cài đặt nhắc điểm danh'),
                     children: [
+                      const AttendanceNotificationHint(),
                       AttendanceReminderToggle(
                         uid: widget.user.uid,
                         term: selected,
@@ -403,7 +400,7 @@ class PendingAttendanceSection extends StatelessWidget {
         CampusSectionHeader(
           title: 'Buổi chưa hoàn tất điểm danh (${periods.length})',
           description:
-              'Buổi đã hết giờ nhưng chưa có kết quả. Bản nháp chưa lưu không được tính.',
+              'Các buổi trong ngày chưa được xác nhận. Chọn Có mặt/Vắng, xem lại và lưu trước 00:00.',
         ),
         for (final p in periods)
           Card(

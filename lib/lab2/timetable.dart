@@ -9,6 +9,8 @@ import 'dashboard_widgets.dart';
 import 'timetable_domain.dart';
 import 'timetable_card.dart';
 import 'import_page.dart';
+import 'weekly_timetable.dart';
+import 'academic_term.dart';
 
 final teachingClassesProvider = StreamProvider.autoDispose
     .family<List<Data>, String>((ref, uid) {
@@ -49,7 +51,6 @@ class LecturerTimetable extends ConsumerStatefulWidget {
 class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
   late DateTime selectedDay;
   late ScrollController dayScroll;
-  String? selectedTerm;
   String subject = '';
   bool weekly = false;
   bool filtersOpen = false;
@@ -98,6 +99,9 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
     if (!widget.user.isLecturer) {
       return const EmptyState('Lịch dạy dành cho giảng viên.');
     }
+    final termSelection = ref.watch(
+      selectedAcademicTermProvider(widget.user.uid),
+    );
     final classesData = ref.watch(teachingClassesProvider(widget.user.uid));
     final schedulesData = ref.watch(teachingSchedulesProvider(widget.user.uid));
     final exceptions = ref.watch(teachingExceptionsProvider(widget.user.uid));
@@ -119,15 +123,8 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
     }
     final schedules = schedulesData.value!;
     final sessions = sources.expand((s) => s.value!).toList();
-    final terms = {
-      ...classes.map((c) => '${c['term'] ?? ''}'),
-      ...schedules.map((s) => '${s['term'] ?? ''}'),
-    }.where((t) => t.isNotEmpty).toList()..sort();
-    final term = terms.contains(selectedTerm)
-        ? selectedTerm
-        : terms.length == 1
-        ? terms.single
-        : null;
+    final terms = academicTerms([...classes, ...schedules]);
+    final term = resolveAcademicTerm(terms, termSelection.value);
     final subjects = {
       ...classes
           .where((c) => c['term'] == term)
@@ -353,27 +350,11 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
             ),
           ],
         ),
-        if (filtersOpen || term == null)
+        if (filtersOpen)
           Wrap(
             spacing: 12,
             runSpacing: 12,
             children: [
-              SizedBox(
-                width: filterWidth,
-                child: DropdownButtonFormField<String>(
-                  key: ValueKey('term-$term-${terms.join()}'),
-                  initialValue: term,
-                  decoration: const InputDecoration(labelText: 'Học kỳ'),
-                  isExpanded: true,
-                  items: terms
-                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                      .toList(),
-                  onChanged: (value) => setState(() {
-                    selectedTerm = value;
-                    subject = '';
-                  }),
-                ),
-              ),
               SizedBox(
                 width: filterWidth,
                 child: DropdownButtonFormField<String>(
@@ -405,18 +386,14 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
             ),
           ),
         if (term == null)
-          EmptyState(
-            terms.isEmpty
-                ? 'Chưa có lịch hoặc lớp được phân công.'
-                : 'Chọn học kỳ để xem lịch dạy.',
-          )
+          EmptyState('Chưa có lịch hoặc lớp được phân công.')
         else ...[
           DashboardHeading(
             title: weekly
                 ? 'Lịch tuần • $total buổi'
                 : '${teachingDayName(selectedDay.weekday)}, ${timetableDate(selectedDay)}',
             subtitle: weekly
-                ? 'Theo ngày'
+                ? '4 slot mỗi ngày · Chạm buổi học để quản lý'
                 : '${byDay[selectedDay]!.length} buổi học',
           ),
           if ((weekly && total == 0) ||
@@ -433,7 +410,12 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
           else if (weekly)
             CampusEntrance(
               trigger: selectedDay,
-              child: _WeekTimetable(days: days, byDay: byDay),
+              child: WeeklyTimetable(
+                days: days,
+                byDay: byDay,
+                selectedDay: selectedDay,
+                onSelectDay: selectDay,
+              ),
             )
           else
             ...byDay[selectedDay]!.map(
@@ -463,37 +445,6 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
             label: const Text('Nhập thời khóa biểu'),
           ),
         ),
-      ],
-    );
-  }
-}
-
-class _WeekTimetable extends StatelessWidget {
-  final List<DateTime> days;
-  final Map<DateTime, List<TeachingPeriod>> byDay;
-  const _WeekTimetable({required this.days, required this.byDay});
-  @override
-  Widget build(BuildContext context) {
-    if (byDay.values.every((rows) => rows.isEmpty)) {
-      return const EmptyState('Không có lịch dạy trong tuần này.');
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final day in days.where((d) => byDay[d]!.isNotEmpty)) ...[
-          CampusSectionHeader(
-            title: '${teachingDayName(day.weekday)} • ${timetableDate(day)}',
-            description: '${byDay[day]!.length} buổi học',
-          ),
-          for (final p in byDay[day]!)
-            TeachingPeriodCard(
-              period: p,
-              compact: true,
-              conflict: byDay[day]!.any(
-                (o) => !identical(p, o) && p.overlaps(o),
-              ),
-            ),
-        ],
       ],
     );
   }

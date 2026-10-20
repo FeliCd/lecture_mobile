@@ -2,10 +2,11 @@ import 'dart:convert';
 import 'domain.dart';
 
 /// Statuses a lecturer can choose in quick attendance, in display order.
-const quickStatuses = ['present', 'absent', 'late', 'excused'];
+const quickStatuses = ['present', 'absent'];
 
 class QuickStudent {
   final String id, code, name;
+  final String? historyUid;
 
   /// Official status already saved on the server (QR or manual), if any.
   final String? existing;
@@ -14,17 +15,19 @@ class QuickStudent {
     required this.code,
     required this.name,
     this.existing,
+    this.historyUid,
   });
   factory QuickStudent.fromMap(Data d) => QuickStudent(
     id: '${d['studentId'] ?? '${d['studentUid']}'.replaceFirst('student-', '')}',
     code: '${d['studentCode'] ?? ''}',
     name: '${d['displayName'] ?? ''}',
     existing: d['status'] == null ? null : attendanceStatus('${d['status']}'),
+    historyUid: d['studentUid'] as String?,
   );
 
   /// What the draft starts with: the saved result, otherwise PRESENT.
   String get baseline =>
-      existing == null || existing == 'pending' ? 'present' : existing!;
+      existing == 'absent' || existing == 'excused' ? 'absent' : 'present';
 }
 
 enum QuickFilter { all, exceptions }
@@ -83,14 +86,14 @@ class QuickAttendanceDraft {
 
   /// Filtering never changes stored choices or the original order.
   List<QuickStudent> visible(QuickFilter filter, String query) {
-    final q = query.trim().toLowerCase();
+    final q = attendanceSearchText(query);
     return students.where((s) {
       if (filter == QuickFilter.exceptions && statusOf(s.id) == 'present') {
         return false;
       }
       return q.isEmpty ||
-          s.name.toLowerCase().contains(q) ||
-          s.code.toLowerCase().contains(q);
+          attendanceSearchText(s.name).contains(q) ||
+          attendanceSearchText(s.code).contains(q);
     }).toList();
   }
 

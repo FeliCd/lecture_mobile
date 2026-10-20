@@ -3,6 +3,8 @@
  * Add this file to the existing Desktop Apps Script project and call setupLab2Free.
  */
 const LAB2_TABLES = Object.freeze({
+  Lab2ClassAttendanceConfig: ['classId','totalSlots','updatedBy','updatedAt'],
+  Lab2AttendanceCompletion: ['sessionId','status','confirmedAt','confirmedBy'],
   Lab2SessionMeta: ['sessionId','title','opensAt','closesAt','lateThresholdAt','eligibleStudentIds'],
   Lab2SharedArticles: ['id','classId','articleId','article','sharedBy','note','sharedAt'],
   Lab2ArticleCache: ['id','article','subjectIds','expiresAt'],
@@ -69,7 +71,7 @@ function diagnoseLab2Sheets() {
 /** Owner-only editor check. Not exposed by doPost; prints counts, never roster or keys. */
 function verifyLab2Free() {
   const book=SpreadsheetApp.openById(config_().id), tables={}, counts={};
-  for(const name of ['Lecturers','Classes','Students','Enrollments','Sessions','Attendance','Lab2SessionMeta','Lab2SharedArticles']) {
+  for(const name of ['Lecturers','Classes','Students','Enrollments','Sessions','Attendance','Lab2SessionMeta','Lab2AttendanceCompletion','Lab2SharedArticles']) {
     try { tables[name]=lab2Read_(book,name); counts[name]=tables[name].length; }
     catch(error) {
       console.log(JSON.stringify({schemaError:name,header:book.getSheetByName(name).getDataRange().getDisplayValues()[0]}));
@@ -93,7 +95,7 @@ function verifyLab2Free() {
 }
 function lab2Health_() {
   const p = PropertiesService.getScriptProperties();
-  return {version: 'lab2-shared-sheets-v2', capabilities:['attendanceSafety','subjectInsights','scheduleExceptions','rosterAudit','scheduleDrivenSessions','bulkPendingAttendance'], quizEnabled:false,
+  return {version: 'lab2-shared-sheets-v2', capabilities:['attendanceSafety','subjectInsights','scheduleExceptions','rosterAudit','scheduleDrivenSessions','bulkPendingAttendance','quickAttendanceDaily','courseSlotAttendance'], quizEnabled:false,
     firebaseProject:p.getProperty('LAB2_FIREBASE_PROJECT_ID') || 'fap-attendance-88920',
     authConfigured:!!p.getProperty('LAB2_FIREBASE_API_KEY'),
     openAlexConfigured:!!p.getProperty('OPENALEX_API_KEY')};
@@ -237,14 +239,15 @@ function lab2Meta_(book,session) {
   return {sessionId:session.sessionId,title:'Slot '+session.slot,opensAt:lab2Millis_(session.date,session.startTime),
     closesAt:lab2Millis_(session.date,session.endTime)+(session.endTime<session.startTime?86400000:0),lateThresholdAt:null,eligibleStudentIds:null};
 }
-function lab2Finalize_(book,session) {
+function lab2Finalize_(book,session,automatic=false) {
   if (session.status !== 'OPEN') return;
   const meta = lab2Meta_(book,session);
   const eligible = meta.eligibleStudentIds || lab2Read_(book,'Attendance').filter(e => e.sessionId === session.sessionId).map(e => e.studentId);
   if (eligible.length > 400) throw Error('CLASS_TOO_LARGE');
   const attendance = lab2Read_(book,'Attendance').filter(a => a.sessionId === session.sessionId);
   const now = new Date().toISOString();
-  const changes = [{table:'Sessions',row:{...session,status:'CLOSED',currentToken:'',tokenExpiredAt:''}}];
+  const changes = [{table:'Sessions',row:{...session,status:'CLOSED',currentToken:'',tokenExpiredAt:''}},
+    {table:'Lab2AttendanceCompletion',row:{sessionId:session.sessionId,status:automatic?'PENDING':'CONFIRMED',confirmedAt:automatic?'':now,confirmedBy:automatic?'':session.createdBy}}];
   for (const id of new Set(eligible)) if (!attendance.some(a => a.studentId === id)) {
     changes.push({table:'Attendance',row:{attendanceId:Utilities.getUuid(),sessionId:session.sessionId,studentId:id,
       status:'ABSENT',checkInTime:'',updatedAt:now,note:'Lab2 finalized',updatedBy:session.createdBy}});
@@ -279,7 +282,8 @@ function lab2SnapshotFrom_(tables,actor) {
     const students = tables.Students.filter(s => tables.Enrollments.some(e => e.classId===cls.classId && e.studentId===s.studentId));
     c.classes.push({id:cls.classId,classCode:cls.classCode,subjectId:cls.subjectCode,subjectName:cls.subjectName,term:cls.semester,
       lecturerUids:['lecturer-'+cls.lecturerId],studentUids:actor.role==='lecturer'?students.map(s=>'student-'+s.studentId):[actor.uid],
-      studentCount:students.length,status:'active'});
+      studentCount:students.length,status:'active',
+      totalSlots:Number((tables.Lab2ClassAttendanceConfig||[]).find(r=>r.classId===cls.classId)?.totalSlots)||null});
     c['classes/'+cls.classId+'/members'] = students.filter(s => actor.role==='lecturer'||s.studentId===actor.entity.studentId)
       .map(s=>({id:'student-'+s.studentId,studentUid:'student-'+s.studentId,studentCode:s.studentCode,displayName:s.fullName,schoolEmail:s.schoolEmail,active:true}));
   }
@@ -294,9 +298,10 @@ function lab2SnapshotFrom_(tables,actor) {
     const room=lab2EffectiveRoom_(tables,s,cls);
     c.classSessions.push({id:s.sessionId,classId:s.classId,subjectId:cls.subjectCode,subjectName:cls.subjectName,classCode:cls.classCode,title:raw?raw.title:'Slot '+s.slot,
       room,lecturerUid:'lecturer-'+cls.lecturerId,slot:Number(s.slot),startsAt:lab2Millis_(s.date,s.startTime),endsAt:lab2Millis_(s.date,s.endTime)+(s.endTime<s.startTime?86400000:0),
-      status:s.status==='CLOSED'?'completed':'scheduled'});
+      status:s.status==='CLOSED'&&!tables.Lab2AttendanceCompletion.some(m=>m.sessionId===s.sessionId&&m.status==='PENDING')?'completed':'scheduled'});
     c.attendanceSessions.push({id:s.sessionId,classId:s.classId,classSessionId:s.sessionId,subjectId:cls.subjectCode,subjectName:cls.subjectName,classCode:cls.classCode,room,slot:Number(s.slot),opensAt:opens,closesAt:closes,
       lateThresholdAt:raw?Number(raw.lateThresholdAt):null,status:s.status==='CLOSED'?'finalized':'open',
+      sessionDate:s.date,attendanceCompleted:s.status==='CLOSED'&&!tables.Lab2AttendanceCompletion.some(m=>m.sessionId===s.sessionId&&m.status==='PENDING'),
       eligibleStudentUids:eligible.filter(id=>actor.role==='lecturer'||id===actor.entity.studentId).map(id=>'student-'+id),
       checkedInCount:records.filter(a=>['PRESENT','LATE'].includes(a.status)&&(actor.role==='lecturer'||a.studentId===actor.entity.studentId)).length,
       eligibleCount:eligible.filter(id=>actor.role==='lecturer'||id===actor.entity.studentId).length,
@@ -316,7 +321,8 @@ function lab2SnapshotFrom_(tables,actor) {
 }
 function lab2Snapshot_(book,actor) {
   const tables = {};
-  for (const name of ['Schedules','Classes','Students','Enrollments','Sessions','Attendance','Lab2SessionMeta','Lab2SharedArticles','ScheduleExceptions']) tables[name]=lab2Read_(book,name);
+  tables.Lab2ClassAttendanceConfig=lab2ClassAttendanceConfigs_(book);
+  for (const name of ['Schedules','Classes','Students','Enrollments','Sessions','Attendance','Lab2SessionMeta','Lab2AttendanceCompletion','Lab2SharedArticles','ScheduleExceptions']) tables[name]=lab2Read_(book,name);
   const allowed = new Set(tables.Classes.filter(c => actor.role==='lecturer' ? c.lecturerId===actor.entity.lecturerId :
     tables.Enrollments.some(e=>e.classId===c.classId&&e.studentId===actor.entity.studentId)).map(c=>c.classId));
   const expired = tables.Sessions.filter(s=>s.status==='OPEN'&&allowed.has(s.classId)&&
@@ -327,10 +333,11 @@ function lab2Snapshot_(book,actor) {
     try {
       for(const old of expired) {
         const current=lab2Read_(book,'Sessions').find(s=>s.sessionId===old.sessionId);
-        if(current&&current.status==='OPEN') lab2Finalize_(book,current);
+        if(current&&current.status==='OPEN') lab2Finalize_(book,current,true);
       }
       tables.Sessions=lab2Read_(book,'Sessions');
       tables.Attendance=lab2Read_(book,'Attendance');
+      tables.Lab2AttendanceCompletion=lab2Read_(book,'Lab2AttendanceCompletion');
     } finally { lock.releaseLock(); }
   }
   return lab2SnapshotFrom_(tables,actor);
@@ -387,6 +394,7 @@ function lab2Mutate_(book,actor,name,d) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(15000)) throw Error('RATE_LIMITED');
   try {
+    if(name==='setClassAttendanceConfig') return lab2SetClassAttendanceConfig_(book,actor,d);
     if(name==='importTimetable') return lab2ImportTimetable_(book,actor,d);
     if(name==='importClassStudents') return lab2ImportStudents_(book,actor,d);
     if(name==='saveScheduleException') return lab2SaveException_(book,actor,d);
@@ -568,7 +576,7 @@ function lab2Handle_(request) {
   if(name==='getQuickAttendanceContext') return lab2QuickContext_(book,actor,d);
   if(name==='getSubjectUpdates') return subjectUpdates_(book,actor,d);
   if(name==='getSubjectTopics') return subjectTopics_(book,actor,d);
-  if(!['createClassSession','openAttendanceSession','getQrToken','checkInWithQr','closeAttendanceSession','rotateAttendanceQr','updateAttendanceRecord','submitQuickAttendance','bulkUpdatePendingAttendance','importTimetable','importClassStudents','saveScheduleException','updateClassStudent'].includes(name)) throw Error('FEATURE_DISABLED');
+  if(!['setClassAttendanceConfig','createClassSession','openAttendanceSession','getQrToken','checkInWithQr','closeAttendanceSession','rotateAttendanceQr','updateAttendanceRecord','submitQuickAttendance','bulkUpdatePendingAttendance','importTimetable','importClassStudents','saveScheduleException','updateClassStudent'].includes(name)) throw Error('FEATURE_DISABLED');
   return lab2Mutate_(book,actor,name,d);
 }
 

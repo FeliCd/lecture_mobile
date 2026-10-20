@@ -12,7 +12,7 @@ import 'package:lecturer_companion/lab2/domain.dart';
 import 'package:lecturer_companion/lab2/repository.dart';
 import 'package:lecturer_companion/lab2/theme.dart';
 import 'package:lecturer_companion/lab2/timetable.dart';
-import 'package:lecturer_companion/lab2/timetable_card.dart';
+import 'package:lecturer_companion/lab2/weekly_timetable.dart';
 import 'phase2_ui_test.dart' show ClassFixture, lecturer;
 import 'timetable_test.dart' show teachingClasses, teachingSchedules, teacher;
 
@@ -276,7 +276,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Xem tất cả môn'));
       await tester.pumpAndSettle();
-      expect(find.byType(TeachingPeriodCard), findsNWidgets(2));
+      final week = tester.widget<WeeklyTimetable>(find.byType(WeeklyTimetable));
+      expect(week.byDay.values.expand((rows) => rows).length, 2);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     },

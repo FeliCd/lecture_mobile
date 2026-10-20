@@ -288,9 +288,7 @@ void main() {
         find.text('22 sinh viên còn chờ · Giữ các kết quả đã ghi nhận'),
         findsOneWidget,
       );
-      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Vắng').last);
+      await tester.tap(find.byType(SwitchListTile).first);
       await tester.pumpAndSettle();
       await tester.enterText(
         find.descendant(

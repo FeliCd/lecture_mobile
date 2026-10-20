@@ -2,11 +2,6 @@ import 'domain.dart';
 import 'timetable_card.dart' show roomLabel;
 import 'timetable_domain.dart';
 
-/// F02 reminder offsets. ASSUMPTION pending team decision (handoff §11):
-/// the 10–15 minute values from the interview summary are not final.
-const attendanceReminderBeforeStart = Duration(minutes: 10);
-const attendanceReminderBeforeEnd = Duration(minutes: 10);
-
 /// A lesson that has already ended without completed attendance (not
 /// cancelled, linked to an assigned class). Drafts never count as done.
 /// A lesson still in progress is shown as the "Đang dạy" card and gets the
@@ -15,6 +10,7 @@ bool attendancePending(TeachingPeriod p, DateTime now) =>
     !p.cancelled &&
     !p.completed &&
     p.classId != null &&
+    campusDay(now) == p.day &&
     !p.scheduledEndAt.isAfter(now);
 
 List<TeachingPeriod> pendingAttendancePeriods(
@@ -45,41 +41,52 @@ String _lessonLabel(TeachingPeriod p) => [
   if (p.room.isNotEmpty) roomLabel(p.room),
 ].join(' · ');
 
-/// Schedule reminders (before start) and "not finished" reminders (before
-/// end) for future lessons only. Completed or cancelled lessons produce
-/// nothing, so re-planning after a save removes their pending reminders.
+/// Bounded follow-ups for forgotten attendance, all before the day closes.
 List<AttendanceReminder> planAttendanceReminders(
   List<TeachingPeriod> periods,
-  DateTime now, {
-  Duration beforeStart = attendanceReminderBeforeStart,
-  Duration beforeEnd = attendanceReminderBeforeEnd,
-}) {
+  DateTime now,
+) {
   final out = <AttendanceReminder>[];
+  final seen = <String>{};
   for (final p in periods) {
-    if (p.cancelled || p.completed || p.classId == null) continue;
+    if (p.cancelled || p.completed || p.classId == null || p.slot == null) {
+      continue;
+    }
     final id =
         '${p.classId}|${p.sessionDate}|${p.slot}|${p.scheduleId ?? ''}|${p.exceptionId ?? ''}';
-    final start = p.scheduledStartAt.subtract(beforeStart);
-    if (start.isAfter(now)) {
+    if (!seen.add(id)) continue;
+    final deadline = p.day.add(const Duration(days: 1, hours: -7));
+    final middle = p.scheduledStartAt.add(
+      Duration(
+        milliseconds:
+            p.scheduledEndAt.difference(p.scheduledStartAt).inMilliseconds ~/ 2,
+      ),
+    );
+    final evening = p.day.add(const Duration(hours: 14));
+    final times = <DateTime>{};
+    for (final entry in [
+      ('mid', middle),
+      if (p.scheduledEndAt.isAfter(p.scheduledStartAt)) ...[
+        if (p.scheduledEndAt
+            .subtract(const Duration(minutes: 5))
+            .isAfter(middle))
+          ('before-end', p.scheduledEndAt.subtract(const Duration(minutes: 5))),
+        ('overdue', p.scheduledEndAt.add(const Duration(minutes: 10))),
+      ],
+      ('evening', evening),
+    ]) {
+      if (!entry.$2.isAfter(now) || !entry.$2.isBefore(deadline)) continue;
+      if (entry.$1 == 'evening' && p.scheduledStartAt.isAfter(evening)) {
+        continue;
+      }
+      if (!times.add(entry.$2)) continue;
       out.add(
         AttendanceReminder(
-          key: 'start|$id',
-          at: start,
-          title: 'Sắp đến giờ dạy',
+          key: '${entry.$1}|$id',
+          at: entry.$2,
+          title: 'Nhắc điểm danh · ${p.classCode}',
           body:
-              '${_lessonLabel(p)} bắt đầu lúc ${teachingTime(p.start)}. Chạm để mở buổi.',
-          selector: p.selector,
-        ),
-      );
-    }
-    final end = p.scheduledEndAt.subtract(beforeEnd);
-    if (end.isAfter(now)) {
-      out.add(
-        AttendanceReminder(
-          key: 'end|$id',
-          at: end,
-          title: 'Điểm danh chưa hoàn tất',
-          body: '${_lessonLabel(p)} sắp kết thúc. Điểm danh chưa hoàn tất.',
+              '${_lessonLabel(p)} ngày ${p.sessionDate} chưa hoàn tất điểm danh. Chạm để điểm danh nhanh trước 00:00.',
           selector: p.selector,
         ),
       );

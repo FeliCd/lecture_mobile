@@ -93,9 +93,9 @@ void main() {
     },
   );
   test(
-    'present, late, excused, missing and ambiguous records break the chain',
+    'present, late, missing and ambiguous records break the chain',
     () {
-      for (final status in ['present', 'late', 'excused', 'pending']) {
+      for (final status in ['present', 'late', 'pending']) {
         expect(
           consecutiveAbsences(
             'a',

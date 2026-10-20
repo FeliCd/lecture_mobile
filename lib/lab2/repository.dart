@@ -132,6 +132,7 @@ class CampusRepository {
               'rotateAttendanceQr',
               'updateAttendanceRecord',
               'getQuickAttendanceContext',
+              'setClassAttendanceConfig',
               'submitQuickAttendance',
               'bulkUpdatePendingAttendance',
             ].contains(name)) {

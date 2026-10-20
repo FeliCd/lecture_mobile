@@ -11,15 +11,15 @@ void main() {
     AttendanceSummary summary(int absent, int present) => AttendanceSummary([
       ...List.filled(absent, 'absent'),
       ...List.filled(present, 'present'),
-    ]);
-    expect(summary(0, 0).absenceRate, isNull);
+    ], totalSlots: 20);
+    expect(summary(0, 0).absenceRate, 0);
     expect(summary(1, 9).nearAbsenceLimit, false);
     expect(summary(3, 17).nearAbsenceLimit, true);
     expect(summary(4, 16).nearAbsenceLimit, true);
     expect(summary(4, 16).exceedsAbsenceLimit, false);
     expect(summary(5, 15).exceedsAbsenceLimit, true);
     expect(summary(5, 15).nearAbsenceLimit, false);
-    expect(summary(1, 0).exceedsAbsenceLimit, true);
+    expect(summary(1, 0).exceedsAbsenceLimit, false);
   });
 
   testWidgets(
@@ -71,7 +71,12 @@ void main() {
             home: Scaffold(
               body: SingleChildScrollView(
                 child: ClassAttendanceOverview(
-                  cls: {'id': 'c', 'classCode': 'SE1', 'subjectId': 'PRM'},
+                  cls: {
+                    'id': 'c',
+                    'classCode': 'SE1',
+                    'subjectId': 'PRM',
+                    'totalSlots': 20,
+                  },
                   showStudents: true,
                 ),
               ),

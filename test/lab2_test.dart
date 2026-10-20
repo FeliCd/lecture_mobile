@@ -16,6 +16,7 @@ void main() {
     expect(AttendanceSummary(['absent', 'absent', 'late']).atRisk, false);
     final summary = AttendanceSummary(
       ['present', 'late', 'absent', 'excused'],
+      totalSlots: 5,
       policy: const AttendancePolicy(
         lateCountsAsPresent: true,
         excusedInDenominator: false,

@@ -37,7 +37,7 @@ function lab2OccurrenceSession_(book,o) {
   if(current.length>1) throw Error('INVALID_SHEET_IDS');
   let session=current[0];
   if(session&&session.status==='OPEN'&&lab2Meta_(book,session).closesAt<=Date.now()) {
-    lab2Finalize_(book,session);session=lab2Read_(book,'Sessions').find(s=>s.sessionId===session.sessionId);
+    lab2Finalize_(book,session,true);session=lab2Read_(book,'Sessions').find(s=>s.sessionId===session.sessionId);
   }
   return {session,resetOnly:!session&&all.length>0};
 }
@@ -70,8 +70,10 @@ function lab2OccurrenceView_(book,actor,d) {
         scheduledStartTime:s.startTime,scheduledEndTime:s.endTime,scheduledStartAt:lab2Millis_(s.date,s.startTime),scheduledEndAt:lab2Millis_(s.date,s.endTime)+(s.endTime<s.startTime?86400000:0),historical:true};
     }
     const existing=lab2OccurrenceSession_(book,o),now=Date.now();
+    const quickAttendanceAvailable=!existing.resetOnly&&o.sessionDate===Utilities.formatDate(new Date(now),'Asia/Ho_Chi_Minh','yyyy-MM-dd')&&
+      (!existing.session||existing.session.status!=='RESET');
     return {...o,state:lab2OccurrenceState_(o,existing,now),serverTime:now,earliestOpenAt:o.scheduledStartAt-15*60000,
-      remainingMinutes:Math.max(0,(o.scheduledEndAt-now)/60000),...(existing.session?lab2SessionReceipt_(book,existing.session):{})};
+      quickAttendanceAvailable,remainingMinutes:Math.max(0,(o.scheduledEndAt-now)/60000),...(existing.session?lab2SessionReceipt_(book,existing.session):{})};
   } finally {lock.releaseLock();}
 }
 function lab2CreateFromOccurrence_(book,actor,d,desktop=null,resetOld=null) {

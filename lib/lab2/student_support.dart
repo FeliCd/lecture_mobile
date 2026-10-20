@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'domain.dart';
 import 'repository.dart';
 import 'timetable_domain.dart';
+import 'attendance_history.dart';
 
 /// Latest uninterrupted absences. Missing/ambiguous data never counts as absent.
 List<Data> consecutiveAbsences(
@@ -14,14 +15,7 @@ List<Data> consecutiveAbsences(
   List<Data> sessions,
   List<Data> records,
 ) {
-  final ordered = sessions
-      .where(
-        (s) =>
-            s['status'] == 'finalized' &&
-            (s['eligibleStudentUids'] is! List ||
-                (s['eligibleStudentUids'] as List).contains(uid)),
-      )
-      .toList();
+  final ordered = studentAttendanceSlots(uid, sessions, records);
   if (ordered.any((s) => dateValue(s['opensAt']).millisecondsSinceEpoch <= 0)) {
     return [];
   }
@@ -39,15 +33,8 @@ List<Data> consecutiveAbsences(
                 dateValue(ordered[i + 1]['opensAt']))) {
       break;
     }
-    final matching = records
-        .where(
-          (r) =>
-              r['studentUid'] == uid &&
-              r['attendanceSessionId'] == session['id'],
-        )
-        .toList();
-    if (matching.length != 1 || matching.single['status'] != 'absent') break;
-    result.add(session);
+    if (!['absent', 'excused'].contains(session['status'])) break;
+    result.add({...session, 'status': 'finalized'});
   }
   return result;
 }
