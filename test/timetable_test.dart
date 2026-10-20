@@ -341,7 +341,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(DesktopSessionDialog), findsOneWidget);
     expect(repo.calls.single['scheduleId'], 's1');
-    expect(find.text('Mở phiên điểm danh'), findsNothing);
+    expect(find.text('Bắt đầu điểm danh'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 }

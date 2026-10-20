@@ -2,6 +2,29 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 typedef Data = Map<String, dynamic>;
 
+/// Search only: never changes identifiers or saved names.
+String attendanceSearchText(String value) {
+  var text = value.toLowerCase();
+  const groups = {
+    'a': 'àáạảãâầấậẩẫăằắặẳẵ',
+    'e': 'èéẹẻẽêềếệểễ',
+    'i': 'ìíịỉĩ',
+    'o': 'òóọỏõôồốộổỗơờớợởỡ',
+    'u': 'ùúụủũưừứựửữ',
+    'y': 'ỳýỵỷỹ',
+    'd': 'đ',
+  };
+  for (final entry in groups.entries) {
+    for (final letter in entry.value.split('')) {
+      text = text.replaceAll(letter, entry.key);
+    }
+  }
+  return text
+      .replaceAll(RegExp(r'[\u0300-\u036f]'), '')
+      .trim()
+      .replaceAll(RegExp(r'\s+'), ' ');
+}
+
 class UserProfile {
   final String uid, name, role;
   final List<String> subjectIds;
@@ -172,6 +195,8 @@ String errorMessage(Object error) {
     };
   }
   const messages = {
+    'BULK_ROSTER_REQUIRED':
+        'Phiên cũ chưa có danh sách lớp cố định. Hãy sửa từng sinh viên.',
     'GOOGLE_ONLY':
         'Vui lòng đăng nhập bằng Google để sử dụng ứng dụng giảng viên.',
     'LECTURER_REQUIRED':

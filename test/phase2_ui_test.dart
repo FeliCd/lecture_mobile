@@ -155,7 +155,7 @@ void main() {
           .selected,
       {true},
     );
-    expect(find.text('Kết thúc và chốt điểm danh'), findsNothing);
+    expect(find.text('Kết thúc điểm danh'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets(
@@ -170,7 +170,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       await chooseStudents(tester);
-      await tester.tap(find.text('Kết thúc và chốt điểm danh'));
+      await tester.tap(find.text('Kết thúc điểm danh'));
       await tester.pumpAndSettle();
       expect(find.text('Kết thúc điểm danh?'), findsOneWidget);
       expect(repo.calls, isNot(contains('closeAttendanceSession')));
@@ -181,7 +181,7 @@ void main() {
         1,
       );
       expect(find.text('Đã kết thúc'), findsOneWidget);
-      expect(find.text('Kết thúc và chốt điểm danh'), findsNothing);
+      expect(find.text('Kết thúc điểm danh'), findsNothing);
       await tester.pumpWidget(const SizedBox());
     },
   );

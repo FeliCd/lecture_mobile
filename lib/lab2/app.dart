@@ -22,6 +22,10 @@ import 'roster_assignment.dart';
 import 'lecturer_workspace.dart';
 import 'lecturer_reminders.dart';
 import 'quick_attendance.dart';
+import 'attendance_follow_up.dart';
+import 'dart:convert';
+import 'timetable_domain.dart';
+import 'timetable_card.dart';
 
 final themeProvider = NotifierProvider<ThemeSettings, ThemeMode>(
   ThemeSettings.new,
@@ -117,6 +121,49 @@ class _CampusAppState extends ConsumerState<CampusApp> {
         ),
         GoRoute(path: '/settings', builder: (_, _) => const SettingsPage()),
         GoRoute(
+          path: '/attendance-reminder',
+          builder: (_, s) {
+            final d = Map<String, dynamic>.from(
+              jsonDecode(s.uri.queryParameters['data']!) as Map,
+            );
+            final p = TeachingPeriod(
+              day: DateTime.parse(d['day']),
+              classId: d['classId'],
+              sessionId: d['sessionId'],
+              scheduleId: d['scheduleId'],
+              exceptionId: d['exceptionId'],
+              classCode: d['classCode'],
+              subjectId: d['subjectId'],
+              subjectName: d['subjectName'],
+              room: d['room'],
+              term: d['term'],
+              slot: d['slot'],
+              start: d['start'],
+              end: d['end'],
+              recurring: d['sessionId'] == null,
+            );
+            return Scaffold(
+              appBar: AppBar(
+                title: const Text('Kiểm tra buổi học'),
+                leading: IconButton(
+                  icon: const Icon(Icons.home_outlined),
+                  onPressed: () => router.go('/'),
+                ),
+              ),
+              body: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  Text('Lịch đã tải · ${p.sessionDate}'),
+                  TeachingPeriodCard(period: p, showAction: true),
+                  const Text(
+                    'Mở buổi học để lấy trạng thái mới nhất từ hệ thống.',
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+        GoRoute(
           path: '/workspace',
           builder: (_, s) => LecturerWorkspacePage(
             user: ref.read(profileProvider).value!,
@@ -141,10 +188,11 @@ class _CampusAppState extends ConsumerState<CampusApp> {
       if (next.isLoading) return;
       final uid = next.value?.uid;
       if (uid != previous?.value?.uid) {
-        LecturerReminders.instance.onOpen = (id) =>
-            router.go('/workspace?task=${Uri.encodeQueryComponent(id)}');
-        // F02: a reminder opens exactly its class/date/slot; a lesson that was
-        // completed meanwhile shows the official result instead of a draft.
+        LecturerReminders.instance.onOpen = (id) => id.startsWith('lesson:')
+            ? router.go(
+                '/attendance-reminder?data=${Uri.encodeQueryComponent(id.substring(7))}',
+              )
+            : router.go('/workspace?task=${Uri.encodeQueryComponent(id)}');
         LecturerReminders.instance.onOpenAttendance = (selector) =>
             router.push(quickAttendanceLocation(selector));
         LecturerReminders.instance
@@ -154,6 +202,16 @@ class _CampusAppState extends ConsumerState<CampusApp> {
     });
     return MaterialApp.router(
       title: 'FAP Attendance',
+      builder: (context, child) {
+        final user = ref.watch(profileProvider).value;
+        return user?.isLecturer == true
+            ? AttendanceReminderCoordinator(
+                key: ValueKey(user!.uid),
+                user: user,
+                child: child!,
+              )
+            : child!;
+      },
       debugShowCheckedModeBanner: false,
       theme: campusTheme(Brightness.light),
       darkTheme: campusTheme(Brightness.dark),

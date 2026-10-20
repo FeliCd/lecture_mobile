@@ -133,6 +133,7 @@ class CampusRepository {
               'updateAttendanceRecord',
               'getQuickAttendanceContext',
               'submitQuickAttendance',
+              'bulkUpdatePendingAttendance',
             ].contains(name)) {
           throw StateError('ATTENDANCE_BACKEND_UPDATE_REQUIRED');
         }

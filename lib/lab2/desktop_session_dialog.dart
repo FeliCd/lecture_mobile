@@ -129,6 +129,8 @@ class _DesktopSessionDialogState extends ConsumerState<DesktopSessionDialog>
   @override
   Widget build(BuildContext context) {
     final p = widget.period, state = occurrence?['state'];
+    final displayedDay =
+        DateTime.tryParse('${occurrence?['sessionDate'] ?? ''}') ?? p.day;
     final remaining = (occurrence?['remainingMinutes'] as num?)?.toDouble();
     return PopScope(
       canPop: !submitting,
@@ -144,7 +146,7 @@ class _DesktopSessionDialogState extends ConsumerState<DesktopSessionDialog>
               ),
               Text('Lớp ${occurrence?['classCode'] ?? p.classCode}'),
               Text(
-                'Ngày ${occurrence?['sessionDate'] ?? p.sessionDate} • Slot ${occurrence?['slot'] ?? p.slot}',
+                'Ngày ${timetableDate(displayedDay)}/${displayedDay.year} • Slot ${occurrence?['slot'] ?? p.slot}',
               ),
               Text(
                 '${occurrence?['scheduledStartTime'] ?? teachingTime(p.start)} – ${occurrence?['scheduledEndTime'] ?? teachingTime(p.end)}',
@@ -154,15 +156,13 @@ class _DesktopSessionDialogState extends ConsumerState<DesktopSessionDialog>
                 const CampusLoadingState(
                   message: 'Đang kiểm tra buổi học với máy chủ…',
                 ),
-              const Text(
-                'Giờ học và thời hạn được kiểm tra theo máy chủ (UTC+7). Phiên không kéo dài quá giờ kết thúc buổi học.',
-              ),
+              const Text('Hết thời gian, sinh viên không thể quét thêm.'),
               if (state == 'AVAILABLE') ...[
                 DropdownButtonFormField<int>(
                   isExpanded: true,
                   initialValue: duration,
                   decoration: const InputDecoration(
-                    labelText: 'Thời lượng điểm danh',
+                    labelText: 'Cho phép quét trong',
                   ),
                   items: [5, 10, 15, 20, 30]
                       .map(
@@ -228,7 +228,7 @@ class _DesktopSessionDialogState extends ConsumerState<DesktopSessionDialog>
           if (state == 'AVAILABLE')
             FilledButton(
               onPressed: loading || submitting ? null : submit,
-              child: Text(submitting ? 'Đang mở…' : 'Mở phiên điểm danh'),
+              child: Text(submitting ? 'Đang mở…' : 'Bắt đầu điểm danh'),
             ),
           if (state == 'OPEN' || state == 'CLOSED')
             FilledButton(
