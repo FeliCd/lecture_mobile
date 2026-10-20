@@ -131,6 +131,8 @@ class CampusRepository {
               'importClassStudents',
               'rotateAttendanceQr',
               'updateAttendanceRecord',
+              'getQuickAttendanceContext',
+              'submitQuickAttendance',
             ].contains(name)) {
           throw StateError('ATTENDANCE_BACKEND_UPDATE_REQUIRED');
         }

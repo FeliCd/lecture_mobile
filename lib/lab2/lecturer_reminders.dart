@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
+import 'attendance_reminders.dart';
 import 'lecturer_workspace_store.dart';
 
 /// Single serialized owner, including logout, so old saves cannot resurrect alarms.
@@ -32,7 +33,86 @@ class LecturerReminders {
   void _open(String? payload) {
     if (payload == null) return;
     final d = jsonDecode(payload) as Map;
-    if (owner != null && d['uid'] == owner) onOpen?.call('${d['id']}');
+    if (owner == null || d['uid'] != owner) return;
+    if (d['type'] == 'attendance') {
+      onOpenAttendance?.call(Map<String, dynamic>.from(d['selector'] as Map));
+    } else {
+      onOpen?.call('${d['id']}');
+    }
+  }
+
+  void Function(Map<String, dynamic>)? onOpenAttendance;
+  String? _attendanceSignature;
+
+  static bool _isAttendance(String? payload) {
+    try {
+      return payload != null &&
+          (jsonDecode(payload) as Map)['type'] == 'attendance';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Cancels only one kind, so task and attendance reminders never erase
+  /// each other.
+  Future<void> _cancelKind({required bool attendance}) async {
+    for (final r in await plugin.pendingNotificationRequests()) {
+      if (_isAttendance(r.payload) == attendance) await plugin.cancel(id: r.id);
+    }
+  }
+
+  /// F02: replaces this lecturer's attendance reminders. Skipped when the
+  /// plan is unchanged so periodic rebuilds do not reschedule.
+  Future<void> syncAttendance(String uid, List<AttendanceReminder> plan) {
+    final signature =
+        '$uid|${plan.map((r) => '${r.key}@${r.at.millisecondsSinceEpoch}').join(',')}';
+    if (signature == _attendanceSignature) return Future.value();
+    return _queue(() async {
+      if (owner != uid || !supported) return;
+      await _initialize();
+      await _cancelKind(attendance: true);
+      // Remember the plan only once it is really scheduled, so enabling the
+      // permission later schedules it on the next refresh.
+      _attendanceSignature = null;
+      if (!await enabled() || owner != uid) return;
+      _attendanceSignature = signature;
+      final taken = {
+        for (final r in await plugin.pendingNotificationRequests()) r.id,
+      };
+      for (final r in plan) {
+        if (owner != uid) return;
+        final bytes = sha256.convert(utf8.encode('att/$uid/${r.key}')).bytes;
+        var id =
+            ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) &
+            0x7fffffff;
+        while (!taken.add(id)) {
+          id = (id + 1) & 0x7fffffff;
+        }
+        await plugin.zonedSchedule(
+          id: id,
+          title: r.title,
+          body: r.body,
+          scheduledDate: tz.TZDateTime.from(r.at, tz.UTC),
+          notificationDetails: const NotificationDetails(
+            android: AndroidNotificationDetails(
+              'lecturer_attendance',
+              'Nhắc điểm danh',
+              channelDescription:
+                  'Nhắc lịch dạy và buổi chưa hoàn tất điểm danh',
+              importance: Importance.high,
+              priority: Priority.high,
+              visibility: NotificationVisibility.private,
+            ),
+          ),
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          payload: jsonEncode({
+            'uid': uid,
+            'type': 'attendance',
+            'selector': r.selector,
+          }),
+        );
+      }
+    });
   }
 
   Future<bool> enable() async {
@@ -59,6 +139,7 @@ class LecturerReminders {
 
   Future<void> activate(String? uid) {
     owner = uid;
+    _attendanceSignature = null;
     return _queue(() async {
       await _initialize();
       if (!supported) return;
@@ -78,7 +159,7 @@ class LecturerReminders {
   Future<void> sync(String uid, WorkspaceData data) => _queue(() async {
     if (owner != uid || !supported) return;
     await _initialize();
-    await plugin.cancelAll();
+    await _cancelKind(attendance: false);
     await _schedule(uid, data);
   });
   Future<void> _schedule(String uid, WorkspaceData data) async {

@@ -703,3 +703,76 @@ test('overnight exception conflicts are checked across adjacent campus dates',()
   assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'saveScheduleException',move),/SCHEDULE_CONFLICT/);
   assert.doesNotThrow(()=>f.c.lab2Mutate_(f.book,f.teacher,'saveScheduleException',{...move,startTime:'00:30'}));
 });
+
+function quickSelector(f) {
+  return {classId:'c1',sessionDate:testSchedule(f,'1'),slot:'1'};
+}
+function quickRecords(f,sessionId) {
+  return Object.fromEntries(f.c.lab2Read_(f.book,'Attendance').filter(r=>r.sessionId===sessionId).map(r=>[r.studentId,r.status]));
+}
+
+test('quick attendance context is read-only and lists the roster without creating a session',()=>{
+  const f=fixture(), sel=quickSelector(f), sessionsBefore=f.store.Sessions.length, writes=f.writes();
+  const ctx=f.c.lab2QuickContext_(f.book,f.teacher,sel);
+  assert.equal(ctx.state,'AVAILABLE');
+  assert.equal(ctx.editable,true);
+  assert.equal(ctx.revision,'');
+  assert.deepEqual(Array.from(ctx.students,s=>[s.studentId,s.status]),[['s1',null],['s2',null]]);
+  assert.equal(f.store.Sessions.length,sessionsBefore);
+  assert.equal(f.writes(),writes);
+});
+
+test('quick attendance saves default PRESENT plus exceptions, closes the session and marks the lesson completed',()=>{
+  const f=fixture(), sel=quickSelector(f);
+  const out=f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{...sel,expectedRevision:'',studentIds:['s1','s2'],
+    clientRequestId:'r1',exceptions:[{studentUid:'student-s2',status:'absent'}]});
+  assert.equal(out.status,'CLOSED');
+  assert.equal(out.alreadySaved,false);
+  assert.equal(out.counts.present,1);
+  assert.equal(out.counts.absent,1);
+  assert.deepEqual(quickRecords(f,out.sessionId),{s1:'PRESENT',s2:'ABSENT'});
+  const snap=f.c.lab2Snapshot_(f.book,f.teacher);
+  assert.equal(snap.collections.classSessions.find(s=>s.id===out.sessionId).status,'completed');
+});
+
+test('quick attendance retry after a lost response is acknowledged without new writes; a different payload is refused',()=>{
+  const f=fixture(), sel=quickSelector(f);
+  const payload={...sel,expectedRevision:'',studentIds:['s1','s2'],exceptions:[{studentId:'s2',status:'LATE'}]};
+  const first=f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',payload), writes=f.writes();
+  const again=f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',payload);
+  assert.equal(again.alreadySaved,true);
+  assert.equal(again.sessionId,first.sessionId);
+  assert.equal(f.writes(),writes);
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{...payload,exceptions:[{studentId:'s2',status:'ABSENT'}]}),/ATTENDANCE_ALREADY_FINALIZED/);
+  assert.deepEqual(quickRecords(f,first.sessionId),{s1:'PRESENT',s2:'LATE'});
+});
+
+test('quick attendance keeps existing QR/manual results and rejects stale revisions or a changed roster',()=>{
+  const f=fixture(), sel=quickSelector(f), id=create(f);
+  f.c.lab2Mutate_(f.book,f.teacher,'updateAttendanceRecord',{attendanceSessionId:id,studentUid:'student-s1',status:'late',notes:'Đến muộn'});
+  const ctx=f.c.lab2QuickContext_(f.book,f.teacher,sel);
+  assert.equal(ctx.state,'OPEN');
+  assert.equal(ctx.students.find(s=>s.studentId==='s1').status,'late');
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{...sel,expectedRevision:'',studentIds:['s1','s2'],exceptions:[]}),/ATTENDANCE_CONFLICT/);
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{...sel,expectedRevision:ctx.revision,studentIds:['s1'],exceptions:[]}),/ROSTER_CHANGED/);
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{...sel,expectedRevision:ctx.revision,studentIds:['s1','s2'],exceptions:[{studentId:'s9',status:'ABSENT'}]}),/ROSTER_CHANGED/);
+  const out=f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{...sel,expectedRevision:ctx.revision,studentIds:['s1','s2'],exceptions:[]});
+  assert.equal(out.sessionId,id);
+  assert.deepEqual(quickRecords(f,id),{s1:'LATE',s2:'PRESENT'});
+});
+
+test('quick attendance changing an existing record writes an audit row; other lecturers and bad input are refused',()=>{
+  const f=fixture(), sel=quickSelector(f), id=create(f);
+  f.c.lab2Mutate_(f.book,f.teacher,'updateAttendanceRecord',{attendanceSessionId:id,studentUid:'student-s1',status:'present',notes:'QR lỗi'});
+  const auditsBefore=f.c.lab2Read_(f.book,'AttendanceAudit').length;
+  const ctx=f.c.lab2QuickContext_(f.book,f.teacher,sel);
+  f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{...sel,expectedRevision:ctx.revision,studentIds:['s1','s2'],exceptions:[{studentId:'s1',status:'EXCUSED'}]});
+  const audits=f.c.lab2Read_(f.book,'AttendanceAudit');
+  assert.equal(audits.length,auditsBefore+1);
+  assert.equal(audits.at(-1).newStatus,'EXCUSED');
+  const other=f.c.lab2Actor_({email:'other@fpt.edu.vn',firebaseUid:'firebase-other'},f.c.config_(),f.book);
+  assert.throws(()=>f.c.lab2QuickContext_(f.book,other,sel),/PERMISSION_DENIED|OCCURRENCE/);
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.student,'submitQuickAttendance',{...sel,expectedRevision:'',studentIds:['s1'],exceptions:[]}),/PERMISSION_DENIED/);
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{...sel,expectedRevision:'',studentIds:['s1','s1'],exceptions:[]}),/INVALID_INPUT/);
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'submitQuickAttendance',{...sel,expectedRevision:'',studentIds:['s1','s2'],exceptions:[{studentId:'s1',status:'MAYBE'}]}),/INVALID_INPUT/);
+});

@@ -198,6 +198,13 @@ String errorMessage(Object error) {
     'SCHEDULE_CONFLICT': 'Thời gian trùng với lịch dạy khác.',
     'CONTENT_CHANGED':
         'Bảng tin đã thay đổi. Tải lại trước khi xem trang tiếp theo.',
+    'ATTENDANCE_CONFLICT':
+        'Dữ liệu điểm danh vừa thay đổi. Tải lại và đối soát trước khi lưu.',
+    'ROSTER_CHANGED':
+        'Danh sách lớp đã thay đổi. Tải lại và kiểm tra trước khi lưu.',
+    'ATTENDANCE_ALREADY_FINALIZED':
+        'Buổi này đã hoàn tất điểm danh. Điều chỉnh từng sinh viên kèm lý do.',
+    'CLASS_TOO_LARGE': 'Lớp vượt giới hạn 400 sinh viên cho một buổi.',
     'LOCK_BUSY': 'Hệ thống đang xử lý thao tác khác. Vui lòng thử lại.',
     'ATTENDANCE_BACKEND_UPDATE_REQUIRED':
         'Cần cập nhật Apps Script để sử dụng nhập liệu và quản lý điểm danh mới.',

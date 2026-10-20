@@ -394,6 +394,7 @@ function lab2Mutate_(book,actor,name,d) {
     if (name==='createClassSession') {
       return lab2CreateFromOccurrence_(book,actor,d);
     }
+    if(name==='submitQuickAttendance') return lab2QuickSubmit_(book,actor,d);
     if(name==='checkInWithQr') {
       if(actor.role!=='student') throw Error('PERMISSION_DENIED');
       const text=String(d.token||'');
@@ -563,9 +564,10 @@ function lab2Handle_(request) {
   if(name==='shareArticle') return lab2Share_(book,actor,d);
   if(name==='getTeachingOccurrence') return lab2OccurrenceView_(book,actor,d);
   if(name==='getAttendanceSessionLive') return lab2Live_(book,actor,d);
+  if(name==='getQuickAttendanceContext') return lab2QuickContext_(book,actor,d);
   if(name==='getSubjectUpdates') return subjectUpdates_(book,actor,d);
   if(name==='getSubjectTopics') return subjectTopics_(book,actor,d);
-  if(!['createClassSession','openAttendanceSession','getQrToken','checkInWithQr','closeAttendanceSession','rotateAttendanceQr','updateAttendanceRecord','importTimetable','importClassStudents','saveScheduleException','updateClassStudent'].includes(name)) throw Error('FEATURE_DISABLED');
+  if(!['createClassSession','openAttendanceSession','getQrToken','checkInWithQr','closeAttendanceSession','rotateAttendanceQr','updateAttendanceRecord','submitQuickAttendance','importTimetable','importClassStudents','saveScheduleException','updateClassStudent'].includes(name)) throw Error('FEATURE_DISABLED');
   return lab2Mutate_(book,actor,name,d);
 }
 

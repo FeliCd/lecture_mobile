@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'domain.dart';
+import 'quick_attendance.dart';
 import 'repository.dart';
 import 'timetable_domain.dart';
 import 'timetable_card.dart' show roomLabel;
@@ -21,6 +22,10 @@ Future<void> openAttendanceForPeriod(
     builder: (_) => DesktopSessionDialog(period: period),
   );
   if (result == null || !context.mounted) return;
+  if (result['quick'] == true) {
+    context.push(quickAttendanceLocation(period.selector));
+    return;
+  }
   if (result['status'] == 'OPEN' && result['effectiveDurationMinutes'] is num) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -211,6 +216,14 @@ class _DesktopSessionDialogState extends ConsumerState<DesktopSessionDialog>
             TextButton(
               onPressed: loading || submitting ? null : load,
               child: const Text('Kiểm tra lại'),
+            ),
+          if (state == 'AVAILABLE' || state == 'OPEN')
+            OutlinedButton.icon(
+              onPressed: loading || submitting
+                  ? null
+                  : () => Navigator.pop(context, {'quick': true}),
+              icon: const Icon(Icons.checklist_rtl),
+              label: const Text('Điểm danh nhanh'),
             ),
           if (state == 'AVAILABLE')
             FilledButton(

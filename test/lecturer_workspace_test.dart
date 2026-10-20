@@ -11,6 +11,7 @@ import 'package:lecturer_companion/lab2/domain.dart';
 import 'package:lecturer_companion/lab2/lecturer_workspace.dart';
 import 'package:lecturer_companion/lab2/lecturer_workspace_store.dart';
 import 'package:lecturer_companion/lab2/lecturer_weekly_report.dart';
+import 'package:lecturer_companion/lab2/attendance_reminders.dart';
 import 'package:lecturer_companion/lab2/lecturer_reminders.dart';
 import 'package:lecturer_companion/lab2/timetable_domain.dart';
 
@@ -115,12 +116,31 @@ void main() {
         'dexterous.com/flutter/local_notifications',
       );
       final calls = <MethodCall>[];
+      final pending = <Map<String, dynamic>>[];
       var granted = true;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, (call) async {
             calls.add(call);
             if (call.method == 'initialize') return true;
             if (call.method == 'areNotificationsEnabled') return granted;
+            if (call.method == 'zonedSchedule') {
+              final a = Map<String, dynamic>.from(call.arguments as Map);
+              pending
+                ..removeWhere((p) => p['id'] == a['id'])
+                ..add({
+                  'id': a['id'],
+                  'title': a['title'],
+                  'body': a['body'],
+                  'payload': a['payload'],
+                });
+            }
+            if (call.method == 'cancel') {
+              pending.removeWhere(
+                (p) => p['id'] == (call.arguments as Map)['id'],
+              );
+            }
+            if (call.method == 'cancelAll') pending.clear();
+            if (call.method == 'pendingNotificationRequests') return pending;
             if (call.method == 'getNotificationAppLaunchDetails') {
               return {'notificationLaunchedApp': false};
             }
@@ -146,7 +166,9 @@ void main() {
       final data = WorkspaceData(tasks: [task], quiet: false);
       calls.clear();
       await reminders.sync('u', data);
-      expect(calls.first.method, 'cancelAll');
+      // Task sync only cancels task alarms; attendance reminders survive.
+      expect(calls.first.method, 'pendingNotificationRequests');
+      expect(calls.any((c) => c.method == 'cancelAll'), isFalse);
       final first =
           calls.singleWhere((c) => c.method == 'zonedSchedule').arguments
               as Map;
@@ -168,8 +190,56 @@ void main() {
           quiet: false,
         ),
       );
-      expect(calls.any((c) => c.method == 'cancelAll'), isTrue);
+      expect(calls.any((c) => c.method == 'cancel'), isTrue);
       expect(calls.any((c) => c.method == 'zonedSchedule'), isFalse);
+      expect(pending, isEmpty);
+      // An attendance reminder is kept when task alarms are re-synced.
+      await reminders.syncAttendance('u', [
+        AttendanceReminder(
+          key: 'end|c1|2026-10-19|2',
+          at: DateTime.now().add(const Duration(hours: 2)),
+          title: 'Điểm danh chưa hoàn tất',
+          body: 'Lớp SE1 · Slot 2 sắp kết thúc. Điểm danh chưa hoàn tất.',
+          selector: const {
+            'classId': 'c1',
+            'sessionDate': '2026-10-19',
+            'slot': 2,
+          },
+        ),
+      ]);
+      expect(pending, hasLength(1));
+      await reminders.sync('u', data);
+      expect(pending, hasLength(2));
+      expect(
+        pending.where((p) => '${p['payload']}'.contains('attendance')),
+        hasLength(1),
+      );
+      await reminders.syncAttendance('u', const []);
+      expect(pending, hasLength(1));
+      // Permission off: nothing scheduled; turning it on schedules the same
+      // plan on the next refresh instead of being skipped as "unchanged".
+      final plan = [
+        AttendanceReminder(
+          key: 'start|c1|2026-10-19|3',
+          at: DateTime.now().add(const Duration(hours: 3)),
+          title: 'Sắp đến giờ dạy',
+          body: 'Lớp SE1 · Slot 3 bắt đầu lúc 12:50.',
+          selector: const {
+            'classId': 'c1',
+            'sessionDate': '2026-10-19',
+            'slot': 3,
+          },
+        ),
+      ];
+      bool isAttendance(Map<String, dynamic> p) =>
+          '${p['payload']}'.contains('attendance');
+      granted = false;
+      await reminders.syncAttendance('u', plan);
+      expect(pending.where(isAttendance), isEmpty);
+      granted = true;
+      await reminders.syncAttendance('u', plan);
+      expect(pending.where(isAttendance), hasLength(1));
+      await reminders.syncAttendance('u', const []);
       granted = false;
       calls.clear();
       await reminders.sync('u', data);

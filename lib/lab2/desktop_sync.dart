@@ -138,6 +138,7 @@ class DesktopSync {
     final result = await request('lab2Call', {'name': name, 'input': input});
     if (![
       'getTeachingOccurrence',
+      'getQuickAttendanceContext',
       'getQrToken',
       'discoverArticles',
       'getAttendanceSessionLive',
