@@ -11,7 +11,6 @@ import 'widgets.dart';
 import 'import_page.dart';
 import 'desktop_sync.dart';
 import 'class_attendance_overview.dart';
-import 'dashboard_widgets.dart';
 import 'attendance_actions.dart';
 import 'class_timetable.dart';
 import 'class_tools.dart';
@@ -120,7 +119,7 @@ class ClassTile extends StatelessWidget {
                       onPressed: () =>
                           context.push('/class/${data['id']}?tab=2'),
                       icon: const Icon(Icons.how_to_reg_outlined, size: 18),
-                      label: const Text('Điểm danh'),
+                      label: const Text('Chọn buổi điểm danh'),
                     ),
                     FilledButton.icon(
                       style: FilledButton.styleFrom(
@@ -134,7 +133,7 @@ class ClassTile extends StatelessWidget {
                       label: const Text('Chi tiết lớp'),
                     ),
                   ];
-                  return constraints.maxWidth < 270 ||
+                  return constraints.maxWidth < 360 ||
                           MediaQuery.textScalerOf(context).scale(1) > 1.3
                       ? Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -181,27 +180,24 @@ class _ClassListState extends ConsumerState<ClassList> {
   Widget build(BuildContext context) => CampusRefreshList(
     padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
     children: [
-      const DashboardHeading(
-        title: 'Lớp học của bạn',
-        subtitle: 'Danh sách lớp, sinh viên và tình hình điểm danh',
-      ),
       CampusSearchField(
         controller: searchController,
         hint: 'Tìm lớp hoặc môn',
-        onChanged: (v) => setState(() => query = v.toLowerCase()),
+        onChanged: (v) => setState(() => query = attendanceSearchText(v)),
       ),
       const SizedBox(height: 16),
       LiveList(
         source: () => ref.read(repositoryProvider).classes(widget.user),
         builder: (classes) {
           final terms = classes.map((c) => '${c['term']}').toSet();
+          final effectiveTerm = terms.contains(term) ? term : '';
           final filtered = classes
               .where(
                 (c) =>
-                    (term.isEmpty || c['term'] == term) &&
-                    '${c['classCode']} ${c['subjectId']} ${c['subjectName']}'
-                        .toLowerCase()
-                        .contains(query),
+                    (effectiveTerm.isEmpty || c['term'] == effectiveTerm) &&
+                    attendanceSearchText(
+                      '${c['classCode']} ${c['subjectId']} ${c['subjectName']}',
+                    ).contains(query),
               )
               .toList();
           return Column(
@@ -212,13 +208,13 @@ class _ClassListState extends ConsumerState<ClassList> {
                 children: [
                   ChoiceChip(
                     label: const Text('Tất cả kỳ'),
-                    selected: term.isEmpty,
+                    selected: effectiveTerm.isEmpty,
                     onSelected: (_) => setState(() => term = ''),
                   ),
                   ...terms.map(
                     (t) => ChoiceChip(
                       label: Text(t),
-                      selected: term == t,
+                      selected: effectiveTerm == t,
                       onSelected: (_) => setState(() => term = t),
                     ),
                   ),

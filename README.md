@@ -5,6 +5,7 @@ Flutter Android/iOS, entry `lib/main.dart` → `lib/lab2/app.dart`. Bản shared
 ## Chức năng
 
 - **Hôm nay:** lịch thật theo học kỳ, tạo hoặc tiếp tục phiên từ buổi học.
+- **Cần xử lý & nhắc điểm danh:** phát hiện buổi chưa mở phiên/sắp hết hạn; nhắc Android theo học kỳ và lịch đã tải. Điểm danh nhanh cho sinh viên còn chờ có xem trước, lý do, kiểm tra xung đột và audit. [Phạm vi, giới hạn và cập nhật backend](docs/ATTENDANCE_ASSISTANT_PHASE1.md).
 - **Trợ lý giảng dạy:** việc cá nhân, nhắc Android theo ngày, sổ tay buổi dạy tự lưu trên máy và tổng kết tuần xuất Excel. Mở từ Hôm nay hoặc thẻ buổi học; chưa đồng bộ dữ liệu cá nhân. [Phạm vi và kiểm thử](docs/LECTURER_MVP1_IMPLEMENTATION.md).
 - **Lịch dạy:** xem ngày/tuần, môn, lịch định kỳ và ngoại lệ theo ngày.
 - **Lớp học:** roster, QR/secret, live polling, chốt phiên, điều chỉnh có lý do/audit, thống kê và CSV. Giữ OCR/Excel/CSV; sửa tên/email có kiểm soát; hủy/dời/bù/đổi phòng.
@@ -40,6 +41,7 @@ Functions/emulator giữ source nghiệp vụ cũ để regression, không phả
 
 ## Tài liệu và giới hạn
 
+- [Theo dõi và hỗ trợ sinh viên — đợt 2](docs/STUDENT_SUPPORT_PHASE2.md): chuỗi vắng, danh sách Cần theo dõi và ghi chú riêng trên thiết bị; kèm trạng thái triển khai còn chờ.
 - [Hồ sơ persona và nghiên cứu UX](ux/README.md): ba proto-persona, evidence/coverage matrix, stakeholder/affinity, ba user flow và kế hoạch usability. Chưa có nghiên cứu giảng viên thực tế; các giả định được gắn nhãn riêng.
 - [Kiến trúc và luồng backend](docs/ARCHITECTURE.md), [blueprint](docs/REFACTOR_BLUEPRINT.md), [báo cáo từng phase](docs/IMPLEMENTATION_REPORT.md).
 - Live polling8s foreground, backoff khi lỗi; full snapshot30s. Class cap400; không có Firestore mirror attendance.

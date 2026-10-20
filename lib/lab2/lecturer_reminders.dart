@@ -5,6 +5,61 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 import 'lecturer_workspace_store.dart';
+import 'timetable_domain.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class LessonAlarm {
+  final DateTime at;
+  final String key, payload;
+  const LessonAlarm(this.at, this.key, this.payload);
+}
+
+List<LessonAlarm> lessonAlarms(
+  List<TeachingPeriod> periods,
+  DateTime now,
+  bool quiet,
+) {
+  final result = <LessonAlarm>[];
+  for (final p in periods) {
+    if (p.cancelled ||
+        p.completed ||
+        p.classId == null ||
+        p.slot == null ||
+        !p.scheduledEndAt.isAfter(now)) {
+      continue;
+    }
+    final payload = jsonEncode({
+      ...p.selector,
+      'day': p.sessionDate,
+      'classCode': p.classCode,
+      'subjectId': p.subjectId,
+      'subjectName': p.subjectName,
+      'room': p.room,
+      'term': p.term,
+      'start': p.start,
+      'end': p.end,
+    });
+    for (final entry in [
+      if (p.sessionId == null)
+        ('before', p.scheduledStartAt.subtract(const Duration(minutes: 10))),
+      ('end', p.scheduledEndAt.subtract(const Duration(minutes: 2))),
+    ]) {
+      final local = entry.$2.toUtc().add(const Duration(hours: 7));
+      if (!entry.$2.isAfter(now) ||
+          quiet && (local.hour >= 22 || local.hour < 7)) {
+        continue;
+      }
+      result.add(
+        LessonAlarm(
+          entry.$2,
+          '${workspaceKey(p)}/${entry.$1}',
+          'lesson:$payload',
+        ),
+      );
+    }
+  }
+  return result;
+}
 
 /// Single serialized owner, including logout, so old saves cannot resurrect alarms.
 class LecturerReminders {
@@ -13,6 +68,10 @@ class LecturerReminders {
   String? owner;
   bool initialized = false;
   bool launchChecked = false;
+  List<TeachingPeriod> _lessons = [];
+  String _lessonSignature = '';
+  static String lessonPreference(String uid) =>
+      'attendance-reminders-${sha256.convert(utf8.encode(uid))}';
   Future<void> _tail = Future.value();
   void Function(String)? onOpen;
   bool get supported =>
@@ -59,6 +118,8 @@ class LecturerReminders {
 
   Future<void> activate(String? uid) {
     owner = uid;
+    _lessons = [];
+    _lessonSignature = '';
     return _queue(() async {
       await _initialize();
       if (!supported) return;
@@ -74,6 +135,43 @@ class LecturerReminders {
       }
     });
   }
+
+  Future<void> setLessonReminders(String uid, bool value, String term) async {
+    final p = await SharedPreferences.getInstance();
+    if (!await p.setString('${lessonPreference(uid)}-term', term)) {
+      throw StateError('SAVE_FAILED');
+    }
+    if (!await p.setBool(lessonPreference(uid), value)) {
+      throw StateError('SAVE_FAILED');
+    }
+    _lessonSignature = '';
+    await sync(uid, await WorkspaceStore(uid).read());
+  }
+
+  Future<void> syncLessons(String uid, List<TeachingPeriod> periods) => _queue(
+    () async {
+      if (owner != uid || !supported) return;
+      final data = await WorkspaceStore(uid).read();
+      final preferences = await SharedPreferences.getInstance();
+      final term = preferences.getString('${lessonPreference(uid)}-term');
+      final alarms = lessonAlarms(
+        periods.where((p) => p.term == term).toList(),
+        DateTime.now(),
+        data.quiet,
+      );
+      final enabled = preferences.getBool(lessonPreference(uid)) ?? false;
+      final signature = jsonEncode([
+        enabled,
+        alarms.map((a) => [a.key, a.at.toIso8601String(), a.payload]).toList(),
+      ]);
+      _lessons = periods;
+      if (signature == _lessonSignature) return;
+      await _initialize();
+      await plugin.cancelAll();
+      await _schedule(uid, data);
+      _lessonSignature = signature;
+    },
+  );
 
   Future<void> sync(String uid, WorkspaceData data) => _queue(() async {
     if (owner != uid || !supported) return;
@@ -91,9 +189,9 @@ class LecturerReminders {
       final bytes = sha256.convert(utf8.encode('$uid/${task['id']}')).bytes;
       var id =
           ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) &
-          0x7fffffff;
+          0x3fffffff;
       while (!usedIds.add(id)) {
-        id = (id + 1) & 0x7fffffff;
+        id = (id + 1) & 0x3fffffff;
       }
       await plugin.zonedSchedule(
         id: id,
@@ -112,6 +210,42 @@ class LecturerReminders {
         ),
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         payload: jsonEncode({'uid': uid, 'id': task['id']}),
+      );
+    }
+    final preferences = await SharedPreferences.getInstance();
+    if (preferences.getBool(lessonPreference(uid)) != true) return;
+    final term = preferences.getString('${lessonPreference(uid)}-term');
+    for (final alarm in lessonAlarms(
+      _lessons.where((p) => p.term == term).toList(),
+      DateTime.now(),
+      data.quiet,
+    )) {
+      if (owner != uid) return;
+      final bytes = sha256.convert(utf8.encode('$uid/${alarm.key}')).bytes;
+      var id =
+          (((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) &
+              0x3fffffff) |
+          0x40000000;
+      while (!usedIds.add(id)) {
+        id = ((id + 1) & 0x3fffffff) | 0x40000000;
+      }
+      await plugin.zonedSchedule(
+        id: id,
+        title: 'FPT Lecturer • Kiểm tra điểm danh',
+        body:
+            'Đến giờ kiểm tra buổi học theo lịch đã tải. Chạm để cập nhật trạng thái.',
+        scheduledDate: tz.TZDateTime.from(alarm.at, tz.UTC),
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'lecturer_attendance',
+            'Nhắc điểm danh',
+            importance: Importance.high,
+            priority: Priority.high,
+            visibility: NotificationVisibility.private,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        payload: jsonEncode({'uid': uid, 'id': alarm.payload}),
       );
     }
   }

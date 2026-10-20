@@ -592,7 +592,7 @@ class _NotebookState extends ConsumerState<LessonNotebookPage> {
     'prep': 'Chuẩn bị (mỗi dòng một việc)',
     'resources': 'Link slide / code / tài liệu',
     'taught': 'Nội dung đã dạy',
-    'next': 'Việc nối tiếp / ghi chú lần sau',
+    'next': 'Ghi nhớ buổi sau',
   };
   final fields = <String, TextEditingController>{};
   Data metadata = {};
@@ -617,6 +617,9 @@ class _NotebookState extends ConsumerState<LessonNotebookPage> {
       minLines: 2,
       maxLines: 8,
       maxLength: 10000,
+      buildCounter:
+          (context, {required currentLength, required isFocused, maxLength}) =>
+              currentLength >= 9000 ? Text('$currentLength/$maxLength') : null,
       decoration: InputDecoration(
         labelText: labels[key],
         alignLabelWithHint: true,
@@ -791,10 +794,9 @@ class _NotebookState extends ConsumerState<LessonNotebookPage> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CampusInfoBanner(
-                icon: Icons.menu_book_outlined,
-                title: '${widget.metadata['label'] ?? ''}',
-                subtitle: 'Sổ tay buổi dạy · Lưu trên thiết bị',
+              Text(
+                '${widget.metadata['label'] ?? ''}',
+                style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 8),
               Semantics(
@@ -861,20 +863,6 @@ class _NotebookState extends ConsumerState<LessonNotebookPage> {
                 onSelectionChanged: (v) => setState(() => phase = v.single),
               ),
             const SizedBox(height: 16),
-            CampusEntrance(
-              trigger: phase,
-              child: Text(
-                phase == 0
-                    ? 'Sẵn sàng cho buổi dạy'
-                    : 'Ghi lại để buổi sau tiếp nối',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ),
-            Text(
-              phase == 0
-                  ? 'Chốt mục tiêu, chuẩn bị tài liệu và kiểm tra checklist.'
-                  : 'Ghi nội dung đã hoàn thành và phần cần tiếp tục.',
-            ),
             if (phase == 0) ...[
               ExpansionTile(
                 tilePadding: EdgeInsets.zero,

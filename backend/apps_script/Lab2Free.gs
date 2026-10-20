@@ -93,7 +93,7 @@ function verifyLab2Free() {
 }
 function lab2Health_() {
   const p = PropertiesService.getScriptProperties();
-  return {version: 'lab2-shared-sheets-v2', capabilities:['attendanceSafety','subjectInsights','scheduleExceptions','rosterAudit','scheduleDrivenSessions'], quizEnabled:false,
+  return {version: 'lab2-shared-sheets-v2', capabilities:['attendanceSafety','subjectInsights','scheduleExceptions','rosterAudit','scheduleDrivenSessions','bulkPendingAttendance'], quizEnabled:false,
     firebaseProject:p.getProperty('LAB2_FIREBASE_PROJECT_ID') || 'fap-attendance-88920',
     authConfigured:!!p.getProperty('LAB2_FIREBASE_API_KEY'),
     openAlexConfigured:!!p.getProperty('OPENALEX_API_KEY')};
@@ -426,6 +426,7 @@ function lab2Mutate_(book,actor,name,d) {
     const s=lab2Read_(book,'Sessions').find(s=>s.sessionId===sessionId);
     if(!s) throw Error('PERMISSION_DENIED');
     lab2Class_(book,actor,s.classId,true);
+    if(name==='bulkUpdatePendingAttendance') return lab2BulkPending_(book,actor,s,d);
     if(name==='updateAttendanceRecord') {
       if(s.status==='RESET') throw Error('SESSION_CLOSED');
       const status=String(d.status||'').toUpperCase(), notes=String(d.notes||'').trim();
@@ -565,7 +566,7 @@ function lab2Handle_(request) {
   if(name==='getAttendanceSessionLive') return lab2Live_(book,actor,d);
   if(name==='getSubjectUpdates') return subjectUpdates_(book,actor,d);
   if(name==='getSubjectTopics') return subjectTopics_(book,actor,d);
-  if(!['createClassSession','openAttendanceSession','getQrToken','checkInWithQr','closeAttendanceSession','rotateAttendanceQr','updateAttendanceRecord','importTimetable','importClassStudents','saveScheduleException','updateClassStudent'].includes(name)) throw Error('FEATURE_DISABLED');
+  if(!['createClassSession','openAttendanceSession','getQrToken','checkInWithQr','closeAttendanceSession','rotateAttendanceQr','updateAttendanceRecord','bulkUpdatePendingAttendance','importTimetable','importClassStudents','saveScheduleException','updateClassStudent'].includes(name)) throw Error('FEATURE_DISABLED');
   return lab2Mutate_(book,actor,name,d);
 }
 

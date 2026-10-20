@@ -147,7 +147,7 @@ void main() {
       expect(find.text('60 phút'), findsNothing);
       await tester.tap(find.text('30 phút').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Mở phiên điểm danh'));
+      await tester.tap(find.text('Bắt đầu điểm danh'));
       await tester.pump();
       expect(find.text('Đang mở…'), findsOneWidget);
       await tester.tap(find.text('Đang mở…'));
@@ -201,7 +201,7 @@ void main() {
       await openDialog(tester, repo);
       expect(find.byType(DesktopSessionDialog), findsOneWidget);
       expect(repo.calls.single['name'], 'getTeachingOccurrence');
-      expect(find.text('Mở phiên điểm danh'), findsNothing);
+      expect(find.text('Bắt đầu điểm danh'), findsNothing);
       expect(find.byType(DropdownButtonFormField<int>), findsNothing);
       if (state == 'OPEN') {
         expect(find.text('Tiếp tục điểm danh'), findsOneWidget);
@@ -222,10 +222,10 @@ void main() {
       final repo = SlotFixture()..loseFirstResponse = true;
       Data? result;
       await openDialog(tester, repo, result: (v) => result = v);
-      await tester.tap(find.text('Mở phiên điểm danh'));
+      await tester.tap(find.text('Bắt đầu điểm danh'));
       await tester.pumpAndSettle();
       expect(find.text('Không thể kết nối. Vui lòng thử lại.'), findsOneWidget);
-      await tester.tap(find.text('Mở phiên điểm danh'));
+      await tester.tap(find.text('Bắt đầu điểm danh'));
       await tester.pumpAndSettle();
       final writes = repo.calls
           .where((r) => r['name'] == 'createClassSession')
@@ -268,8 +268,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       if (entry == 'Today') {
-        await tester.ensureVisible(find.text('Bắt đầu điểm danh'));
-        await tester.tap(find.text('Bắt đầu điểm danh'));
+        await tester.ensureVisible(find.textContaining('Chưa mở điểm danh'));
+        await tester.tap(find.textContaining('Chưa mở điểm danh'));
       } else if (entry == 'Timetable') {
         await tester.tap(find.byType(TeachingPeriodCard));
       } else {
@@ -277,7 +277,12 @@ void main() {
       }
       await tester.pumpAndSettle();
       expect(repo.calls.single['name'], 'getTeachingOccurrence');
-      await tester.tap(find.text('Mở phiên điểm danh'));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(DesktopSessionDialog),
+          matching: find.text('Bắt đầu điểm danh'),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(find.text('Actual actual'), findsOneWidget);
       expect(repo.calls.last['slot'], 1);

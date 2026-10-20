@@ -1,4 +1,5 @@
 import 'motion.dart';
+import 'dart:math' as math;
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,7 @@ import 'attendance_actions.dart';
 import 'widgets.dart';
 import 'timetable_card.dart' show roomLabel;
 import 'theme.dart';
+import 'bulk_attendance.dart';
 
 class LiveAttendancePage extends ConsumerStatefulWidget {
   final String sessionId;
@@ -28,7 +30,7 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
   final searchController = TextEditingController();
   String search = '', filter = 'all';
   bool studentsMode = false;
-  bool expandedQr = false;
+  bool fullScreenQr = false;
   final controlsKey = GlobalKey(debugLabel: 'attendance-controls');
   final qrScroll = ScrollController(), studentsScroll = ScrollController();
   bool get open => live?['status'] == 'OPEN';
@@ -144,6 +146,89 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
     if (mounted) setState(() => writing = false);
   }
 
+  Future<void> bulkAttendance() async {
+    if (writing ||
+        loading ||
+        failure != null ||
+        !canCheckIn ||
+        live?['revision'] == null) {
+      return;
+    }
+    final snapshot = Map<String, dynamic>.from(live!);
+    if (search.isNotEmpty || filter != 'all') return;
+    bool needsCheck = false;
+    setState(() => writing = true);
+    poll?.cancel();
+    try {
+      await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        isDismissible: false,
+        enableDrag: false,
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * .92,
+        ),
+        builder: (_) => BulkAttendanceSheet(
+          students: [
+            for (final r in snapshot['students'] as List)
+              Map<String, dynamic>.from(r as Map),
+          ],
+          contextLabel: '${snapshot['classCode']} · Slot ${snapshot['slot']}',
+          onSave: (input) async {
+            try {
+              return await ref
+                  .read(repositoryProvider)
+                  .call('bulkUpdatePendingAttendance', {
+                    ...input,
+                    'attendanceSessionId': widget.sessionId,
+                    'expectedRevision': snapshot['revision'],
+                  });
+            } catch (_) {
+              needsCheck = true;
+              rethrow;
+            }
+          },
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => writing = false);
+        await refresh();
+        if (mounted && needsCheck && failure == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Đã tải lại danh sách. Hãy đối chiếu kết quả vừa gửi.',
+              ),
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> correctStudent(Data row) async {
+    if (writing || loading || failure != null) return;
+    await editAttendance(
+      context,
+      ref,
+      sessionId: widget.sessionId,
+      studentUid: row['studentUid'],
+      studentName: row['displayName'] as String?,
+      studentCode: row['studentCode'] as String?,
+      contextLabel: '${live!['classCode']} · Slot ${live!['slot']}',
+      status: row['status'],
+      notes: row['notes'] ?? '',
+    );
+    await refresh();
+  }
+
+  void showFullScreenQr() {
+    ScaffoldMessenger.of(context).removeCurrentSnackBar();
+    setState(() => fullScreenQr = true);
+  }
+
   @override
   Widget build(BuildContext context) {
     final rows = (live?['students'] as List? ?? [])
@@ -152,9 +237,9 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
     final visible = rows
         .where(
           (r) =>
-              '${r['displayName']} ${r['studentCode']}'.toLowerCase().contains(
-                search,
-              ) &&
+              attendanceSearchText(
+                '${r['displayName']} ${r['studentCode']}',
+              ).contains(attendanceSearchText(search)) &&
               (filter == 'all' || r['status'] == filter),
         )
         .toList();
@@ -169,6 +254,62 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                   1000)
               .clamp(0, 86400);
     final scheme = Theme.of(context).colorScheme;
+    if (fullScreenQr && canCheckIn && qrCurrent) {
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) setState(() => fullScreenQr = false);
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('Mã QR'),
+            leading: IconButton(
+              tooltip: 'Trở lại điểm danh',
+              icon: const Icon(Icons.close),
+              onPressed: () => setState(() => fullScreenQr = false),
+            ),
+          ),
+          body: SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    '${live!['classCode']} · ${roomLabel(live!['room'] as String?)}',
+                  ),
+                ),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (_, box) {
+                      final size = math.max(
+                        1.0,
+                        math.min(box.maxWidth, box.maxHeight) - 24,
+                      );
+                      return Center(
+                        child: QrImageView(
+                          data: qr!['token'],
+                          size: size,
+                          padding: const EdgeInsets.all(12),
+                          backgroundColor: Colors.white,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                if (qr!['secretEnabled'] == true)
+                  Text('Mã xác nhận: ${qr!['secretCode']}'),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    'Còn ${remaining ~/ 60}:${(remaining % 60).toString().padLeft(2, '0')} để quét',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     final controls = Material(
       key: controlsKey,
       color: Theme.of(context).scaffoldBackgroundColor,
@@ -190,6 +331,27 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
               },
             ),
             if (studentsMode) ...[
+              if (search.isEmpty &&
+                  filter == 'all' &&
+                  live?['revision'] != null &&
+                  open &&
+                  rows.any((r) => r['status'] == 'pending'))
+                TextButton.icon(
+                  onPressed:
+                      writing || loading || failure != null || !canCheckIn
+                      ? null
+                      : bulkAttendance,
+                  icon: const Icon(Icons.playlist_add_check),
+                  label: Text('Điền cho ${counts['pending'] ?? 0} sinh viên'),
+                ),
+              if (search.isNotEmpty && visible.length == 1)
+                TextButton.icon(
+                  onPressed: writing || loading || failure != null
+                      ? null
+                      : () => correctStudent(visible.single),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Sửa sinh viên này'),
+                ),
               const SizedBox(height: 12),
               CampusSearchField(
                 controller: searchController,
@@ -258,6 +420,12 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
               : '${live!['classCode']} · Slot ${live!['slot']}',
         ),
         actions: [
+          if (!studentsMode && canCheckIn && qrCurrent)
+            IconButton(
+              tooltip: 'QR toàn màn hình',
+              icon: const Icon(Icons.fullscreen),
+              onPressed: showFullScreenQr,
+            ),
           const CampusHelpButton(
             title: 'Hướng dẫn điểm danh',
             message:
@@ -297,9 +465,7 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                             await mutate('closeAttendanceSession');
                           }
                         },
-                  child: Text(
-                    writing ? 'Đang xử lý…' : 'Kết thúc và chốt điểm danh',
-                  ),
+                  child: Text(writing ? 'Đang xử lý…' : 'Kết thúc điểm danh'),
                 ),
               ),
             )
@@ -341,10 +507,11 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                           ),
                         ),
                       if (live != null) ...[
-                        Text(
-                          '${live!['subjectName']} • ${live!['classCode']} • Slot ${live!['slot']}',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
+                        if (studentsMode)
+                          Text(
+                            '${live!['subjectName']} • ${live!['classCode']} • Slot ${live!['slot']}',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
                         Text(roomLabel(live!['room'] as String?)),
                         const SizedBox(height: 12),
                         Wrap(
@@ -371,28 +538,33 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                             ),
                             if (canCheckIn)
                               Text(
-                                'Còn ${remaining ~/ 60}:${(remaining % 60).toString().padLeft(2, '0')}',
-                                style: Theme.of(context).textTheme.titleLarge,
+                                'Còn ${remaining ~/ 60}:${(remaining % 60).toString().padLeft(2, '0')} để quét',
+                                style: Theme.of(context).textTheme.titleMedium,
                               ),
                           ],
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          '${checkedIn ?? '—'}/${counts['eligible'] ?? '—'} đã điểm danh',
-                          style: Theme.of(context).textTheme.titleLarge,
+                          studentsMode
+                              ? '${checkedIn ?? '—'}/${counts['eligible'] ?? '—'} đã điểm danh'
+                              : 'Có mặt: ${checkedIn ?? '—'}/${counts['eligible'] ?? '—'}',
+                          style: studentsMode
+                              ? Theme.of(context).textTheme.titleLarge
+                              : Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 16,
-                          runSpacing: 4,
-                          children: [
-                            Text('Có mặt ${counts['present'] ?? 0}'),
-                            Text('Đi trễ ${counts['late'] ?? 0}'),
-                            Text('Còn chờ ${counts['pending'] ?? 0}'),
-                            Text('Vắng ${counts['absent'] ?? 0}'),
-                            Text('Vắng có phép ${counts['excused'] ?? 0}'),
-                          ],
-                        ),
+                        if (studentsMode)
+                          Wrap(
+                            spacing: 16,
+                            runSpacing: 4,
+                            children: [
+                              Text('Có mặt ${counts['present'] ?? 0}'),
+                              Text('Đi trễ ${counts['late'] ?? 0}'),
+                              Text('Còn chờ ${counts['pending'] ?? 0}'),
+                              Text('Vắng ${counts['absent'] ?? 0}'),
+                              Text('Vắng có phép ${counts['excused'] ?? 0}'),
+                            ],
+                          ),
                       ],
                     ],
                   ),
@@ -409,12 +581,15 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                   children: [
                     if (live != null) ...[
                       if (!studentsMode && canCheckIn && qrCurrent) ...[
+                        TextButton.icon(
+                          onPressed: showFullScreenQr,
+                          icon: const Icon(Icons.fullscreen),
+                          label: const Text('Toàn màn hình'),
+                        ),
                         const SizedBox(height: 16),
                         Center(
                           child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxWidth: expandedQr ? 480 : 260,
-                            ),
+                            constraints: BoxConstraints(maxWidth: 260),
                             child: LayoutBuilder(
                               builder: (_, constraints) => Container(
                                 padding: const EdgeInsets.all(10),
@@ -445,16 +620,6 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                                 ),
                               ),
                             ),
-                          ),
-                        ),
-                        TextButton.icon(
-                          onPressed: () =>
-                              setState(() => expandedQr = !expandedQr),
-                          icon: Icon(
-                            expandedQr ? Icons.zoom_out : Icons.zoom_in,
-                          ),
-                          label: Text(
-                            expandedQr ? 'Thu gọn QR' : 'Phóng to QR',
                           ),
                         ),
                         if (qr!['secretEnabled'] == true)
