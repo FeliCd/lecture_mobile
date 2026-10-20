@@ -2,11 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lecturer_companion/lab2/attendance_reminders.dart';
 import 'package:lecturer_companion/lab2/domain.dart';
 import 'package:lecturer_companion/lab2/quick_attendance.dart';
 import 'package:lecturer_companion/lab2/repository.dart';
-import 'package:lecturer_companion/lab2/timetable_domain.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'lab2_navigation_test.dart' show FixtureRepository;
 
@@ -384,85 +382,5 @@ void main() {
     expect(tester.takeException(), isNull);
     await tapStudent(tester, 'Sinh viên 01');
     expect(tester.takeException(), isNull);
-  });
-
-  group('F02 reminders', () {
-    TeachingPeriod lesson({
-      bool completed = false,
-      bool cancelled = false,
-      int start = 7 * 60 + 30,
-      int end = 9 * 60 + 50,
-      int slot = 1,
-    }) => TeachingPeriod(
-      day: DateTime.utc(2026, 10, 19),
-      classId: 'c1',
-      sessionId: null,
-      scheduleId: 's$slot',
-      exceptionId: '',
-      classCode: 'SE1928',
-      subjectId: 'PRM393',
-      subjectName: 'Mobile',
-      room: 'A201',
-      term: 'FA26',
-      slot: slot,
-      start: start,
-      end: end,
-      recurring: true,
-      completed: completed,
-      cancelled: cancelled,
-    );
-    // 07:00 Vietnam time on 19/10.
-    final morning = DateTime.utc(2026, 10, 19, 0);
-
-    test('plans a schedule reminder and a not-finished reminder', () {
-      final plan = planAttendanceReminders([lesson()], morning);
-      expect(plan.map((r) => r.title), [
-        'Sắp đến giờ dạy',
-        'Điểm danh chưa hoàn tất',
-      ]);
-      expect(plan.first.at, DateTime.utc(2026, 10, 19, 0, 20));
-      expect(plan.last.at, DateTime.utc(2026, 10, 19, 2, 40));
-      expect(
-        plan.last.body,
-        'Lớp SE1928 · Slot 1 · Phòng A201 sắp kết thúc. Điểm danh chưa hoàn tất.',
-      );
-      expect(plan.last.selector['slot'], 1);
-    });
-
-    test('completed or cancelled lessons produce no reminders', () {
-      expect(
-        planAttendanceReminders([
-          lesson(completed: true),
-          lesson(cancelled: true, slot: 2),
-        ], morning),
-        isEmpty,
-      );
-    });
-
-    test('two slots of one class on one day have distinct targets', () {
-      final plan = planAttendanceReminders([
-        lesson(),
-        lesson(slot: 3, start: 12 * 60 + 50, end: 15 * 60 + 10),
-      ], morning);
-      final keys = plan.map((r) => r.key).toSet();
-      expect(keys, hasLength(4));
-      expect(plan.map((r) => r.selector['slot']).toSet(), {1, 3});
-    });
-
-    test('pending list holds ended, unfinished lessons only', () {
-      // 09:00: slot 1 (07:30–09:50) is still in progress, not pending yet.
-      expect(
-        pendingAttendancePeriods([lesson()], DateTime.utc(2026, 10, 19, 2)),
-        isEmpty,
-      );
-      // 10:00: slot 1 ended without completion; slot 3 has not ended.
-      final at9 = DateTime.utc(2026, 10, 19, 3);
-      final pending = pendingAttendancePeriods([
-        lesson(),
-        lesson(completed: true, slot: 2),
-        lesson(slot: 3, start: 12 * 60 + 50, end: 15 * 60 + 10),
-      ], at9);
-      expect(pending.map((p) => p.slot), [1]);
-    });
   });
 }

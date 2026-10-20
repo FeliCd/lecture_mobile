@@ -20,6 +20,46 @@ function lab2Correct_(book,actor,session,studentId,status,reason,old) {
     {table:'AttendanceAudit',row:audit}]);
 }
 
+// Caller holds the same script lock as QR check-in and closing the session.
+// Only pending students may be filled; an explicit correction stays separate.
+function lab2BulkPending_(book,actor,session,d) {
+  const entries=d.changes, reason=String(d.notes||'').trim(), requestId=String(d.requestId||'');
+  if(!Array.isArray(entries)||!entries.length||entries.length>400||!reason||reason.length>500||
+      !/^[a-zA-Z0-9-]{16,80}$/.test(requestId)||typeof d.expectedRevision!=='string') throw Error('INVALID_INPUT');
+  const seen=new Set(), changes=entries.map(e=>{
+    if(!e||typeof e!=='object'||Array.isArray(e)) throw Error('INVALID_INPUT');
+    const id=String(e.studentUid||'').replace(/^student-/,''), status=String(e.status||'').toUpperCase();
+    if(!id||seen.has(id)||!['PRESENT','LATE','ABSENT','EXCUSED'].includes(status)) throw Error('INVALID_INPUT');
+    seen.add(id); return {id,status};
+  });
+  const actorUid=actor.firebaseUid||actor.uid;
+  const prefix='bulk-'+lab2Hash_(JSON.stringify([session.sessionId,actorUid,requestId]))+'-';
+  const audits=lab2Read_(book,'AttendanceAudit').filter(a=>a.id.startsWith(prefix));
+  if(audits.length) {
+    if(audits.length!==changes.length||changes.some((e,i)=>!audits.some(a=>a.id===prefix+i&&
+        a.studentId===e.id&&a.newStatus===e.status&&a.reason===reason))) throw Error('INVALID_INPUT');
+    return {updated:changes.length,alreadyApplied:true};
+  }
+  const meta=lab2Meta_(book,session);
+  if(session.status!=='OPEN'||Date.now()>=meta.closesAt) throw Error('SESSION_CLOSED');
+  // Legacy sessions without captured membership must use individual corrections.
+  if(!meta.eligibleStudentIds) throw Error('BULK_ROSTER_REQUIRED');
+  const records=lab2Read_(book,'Attendance').filter(a=>a.sessionId===session.sessionId);
+  if(new Set(records.map(a=>a.studentId)).size!==records.length) throw Error('INVALID_SHEET_IDS');
+  if(d.expectedRevision!==lab2Hash_(JSON.stringify([session.status,records]))) throw Error('ATTENDANCE_CONFLICT');
+  if(changes.some(e=>!meta.eligibleStudentIds.includes(e.id))) throw Error('NOT_ENROLLED');
+  if(changes.some(e=>records.some(a=>a.studentId===e.id))) throw Error('ATTENDANCE_CONFLICT');
+  const now=new Date().toISOString(), writes=[];
+  changes.forEach((e,i)=>{
+    writes.push({table:'Attendance',row:{attendanceId:Utilities.getUuid(),sessionId:session.sessionId,
+      studentId:e.id,status:e.status,checkInTime:'',updatedAt:now,note:reason,updatedBy:actor.email}});
+    writes.push({table:'AttendanceAudit',row:{id:prefix+i,sessionId:session.sessionId,studentId:e.id,
+      actorUid,changedAt:now,oldStatus:'PENDING',newStatus:e.status,reason}});
+  });
+  lab2Write_(book,writes);
+  return {updated:changes.length,alreadyApplied:false};
+}
+
 /** Editor/time-trigger only. Only sessions with captured roster/deadline are reconciled. */
 function reconcileExpiredSessions() {
   const book=SpreadsheetApp.openById(config_().id), lock=LockService.getScriptLock();

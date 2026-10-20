@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:lecturer_companion/lab2/domain.dart';
 import 'package:lecturer_companion/lab2/repository.dart';
 import 'package:lecturer_companion/lab2/live_attendance.dart';
@@ -57,6 +58,29 @@ class LiveFixture extends FixtureRepository {
 }
 
 void main() {
+  testWidgets('fullscreen QR is removed immediately after access is revoked', (
+    tester,
+  ) async {
+    final repo = LiveFixture();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [repositoryProvider.overrideWithValue(repo)],
+        child: const MaterialApp(home: LiveAttendancePage(sessionId: 's')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('QR toàn màn hình'));
+    await tester.pumpAndSettle();
+    expect(find.byType(QrImageView), findsOneWidget);
+    expect(find.byTooltip('Trở lại điểm danh'), findsOneWidget);
+    repo.fail = true;
+    repo.failureCode = 'PERMISSION_DENIED';
+    await tester.pump(const Duration(seconds: 8));
+    await tester.pumpAndSettle();
+    expect(find.byType(QrImageView), findsNothing);
+    expect(find.byTooltip('Trở lại điểm danh'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
   testWidgets(
     'ownership denial clears cached roster and stops automatic requests',
     (tester) async {

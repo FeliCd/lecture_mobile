@@ -169,12 +169,6 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
     return CampusRefreshList(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
-        CampusInfoBanner(
-          icon: Icons.calendar_month_outlined,
-          title: 'Lịch giảng dạy · ${term ?? 'Chọn học kỳ'}',
-          subtitle: '$total buổi trong tuần · ${classes.length} lớp phụ trách',
-        ),
-        const SizedBox(height: 12),
         CampusEntrance(
           trigger: selectedDay,
           child: CampusCard(
@@ -345,13 +339,16 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
                 ],
               ),
             ),
-            IconButton(
-              tooltip: 'Lọc lịch dạy',
-              onPressed: () => setState(() => filtersOpen = !filtersOpen),
-              icon: Icon(
-                filtersOpen
-                    ? Icons.filter_list_off_rounded
-                    : Icons.tune_rounded,
+            Tooltip(
+              message: 'Lọc lịch dạy',
+              child: TextButton.icon(
+                onPressed: () => setState(() => filtersOpen = !filtersOpen),
+                icon: Icon(
+                  filtersOpen
+                      ? Icons.filter_list_off_rounded
+                      : Icons.tune_rounded,
+                ),
+                label: Text(filtersOpen ? 'Ẩn lọc' : 'Lọc'),
               ),
             ),
           ],
@@ -407,14 +404,6 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
               label: const Text('Xóa lọc môn'),
             ),
           ),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: () => openImport(context),
-            icon: const Icon(Icons.file_upload_outlined, size: 18),
-            label: const Text('Nhập thời khóa biểu'),
-          ),
-        ),
         if (term == null)
           EmptyState(
             terms.isEmpty
@@ -427,16 +416,25 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
                 ? 'Lịch tuần • $total buổi'
                 : '${teachingDayName(selectedDay.weekday)}, ${timetableDate(selectedDay)}',
             subtitle: weekly
-                ? 'Các buổi học theo ngày • Xếp theo giờ bắt đầu'
-                : '${byDay[selectedDay]!.length} buổi dạy • Xếp theo giờ bắt đầu',
+                ? 'Theo ngày'
+                : '${byDay[selectedDay]!.length} buổi học',
           ),
-          if (weekly)
+          if ((weekly && total == 0) ||
+              (!weekly && byDay[selectedDay]!.isEmpty))
+            EmptyState(
+              effectiveSubject.isNotEmpty
+                  ? 'Không có buổi học môn $effectiveSubject ${weekly ? 'tuần này' : 'ngày này'}.'
+                  : 'Không có lịch dạy ${weekly ? 'trong tuần này' : 'trong ngày này'}.',
+              actionLabel: effectiveSubject.isNotEmpty
+                  ? 'Xem tất cả môn'
+                  : null,
+              onAction: () => setState(() => subject = ''),
+            )
+          else if (weekly)
             CampusEntrance(
               trigger: selectedDay,
               child: _WeekTimetable(days: days, byDay: byDay),
             )
-          else if (byDay[selectedDay]!.isEmpty)
-            const EmptyState('Không có lịch dạy trong ngày này.')
           else
             ...byDay[selectedDay]!.map(
               (p) => TeachingPeriodCard(
@@ -457,6 +455,14 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
             ),
           ),
         ],
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => openImport(context),
+            icon: const Icon(Icons.file_upload_outlined, size: 18),
+            label: const Text('Nhập thời khóa biểu'),
+          ),
+        ),
       ],
     );
   }

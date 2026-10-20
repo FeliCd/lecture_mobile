@@ -2,6 +2,29 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 typedef Data = Map<String, dynamic>;
 
+/// Search only: never changes identifiers or saved names.
+String attendanceSearchText(String value) {
+  var text = value.toLowerCase();
+  const groups = {
+    'a': 'àáạảãâầấậẩẫăằắặẳẵ',
+    'e': 'èéẹẻẽêềếệểễ',
+    'i': 'ìíịỉĩ',
+    'o': 'òóọỏõôồốộổỗơờớợởỡ',
+    'u': 'ùúụủũưừứựửữ',
+    'y': 'ỳýỵỷỹ',
+    'd': 'đ',
+  };
+  for (final entry in groups.entries) {
+    for (final letter in entry.value.split('')) {
+      text = text.replaceAll(letter, entry.key);
+    }
+  }
+  return text
+      .replaceAll(RegExp(r'[\u0300-\u036f]'), '')
+      .trim()
+      .replaceAll(RegExp(r'\s+'), ' ');
+}
+
 class UserProfile {
   final String uid, name, role;
   final List<String> subjectIds;
@@ -172,6 +195,10 @@ String errorMessage(Object error) {
     };
   }
   const messages = {
+    'ATTENDANCE_CONFLICT':
+        'Danh sách đã thay đổi. Tải lại và kiểm tra trước khi xác nhận.',
+    'BULK_ROSTER_REQUIRED':
+        'Phiên cũ chưa có danh sách lớp cố định. Hãy sửa từng sinh viên.',
     'GOOGLE_ONLY':
         'Vui lòng đăng nhập bằng Google để sử dụng ứng dụng giảng viên.',
     'LECTURER_REQUIRED':
@@ -198,8 +225,6 @@ String errorMessage(Object error) {
     'SCHEDULE_CONFLICT': 'Thời gian trùng với lịch dạy khác.',
     'CONTENT_CHANGED':
         'Bảng tin đã thay đổi. Tải lại trước khi xem trang tiếp theo.',
-    'ATTENDANCE_CONFLICT':
-        'Dữ liệu điểm danh vừa thay đổi. Tải lại và đối soát trước khi lưu.',
     'ROSTER_CHANGED':
         'Danh sách lớp đã thay đổi. Tải lại và kiểm tra trước khi lưu.',
     'ATTENDANCE_ALREADY_FINALIZED':

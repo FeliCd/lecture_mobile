@@ -26,13 +26,14 @@ Quy tắc đã thực thi:
 
 ### F02 — Nhắc tránh quên điểm danh
 
-| Thành phần | File | Ghi chú |
-|---|---|---|
-| Lập lịch nhắc (thuần) | `lib/lab2/attendance_reminders.dart` | Nhắc trước giờ bắt đầu ("Sắp đến giờ dạy") và trước giờ kết thúc ("Điểm danh chưa hoàn tất"); bỏ qua buổi hoàn tất hoặc bị hủy |
-| Thông báo trên máy | `lecturer_reminders.dart` | `syncAttendance` tách vùng thông báo; nhắc việc và nhắc điểm danh không xóa lẫn nhau (bỏ `cancelAll` khi đồng bộ nhắc việc). Chạm thông báo mở đúng `/quick` của buổi |
-| Trong app | `today.dart` → `PendingAttendanceSection` | Buổi **đã hết giờ** nhưng chưa hoàn tất. Vẫn hiện khi tắt quyền thông báo, kèm nút bật lại |
+Dùng bản của nhánh `feature/FE_uxfold` (đã merge vào nhánh này ngày 20/10/2026): `attendance_follow_up.dart` (mục "Cần xử lý" ở Hôm nay), `lessonAlarms` trong `lecturer_reminders.dart` (bật/tắt theo học kỳ, 10 phút trước giờ học, 2 phút trước giờ kết thúc), route `/attendance-reminder`. Bản F02 riêng của nhánh này (`attendance_reminders.dart`, `syncAttendance`, `PendingAttendanceSection`) đã bỏ để không nhắc trùng.
 
-Lịch nhắc được tính lại mỗi khi Hôm nay cập nhật dữ liệu (cho hôm nay và ngày mai). Buổi vừa hoàn tất, bị hủy hoặc đổi lịch sẽ tự rút khỏi kế hoạch nhắc.
+### Gộp với `feature/FE_uxfold`
+
+- Ưu tiên code FE_uxfold khi trùng: nhắc điểm danh, mục Hôm nay, thông báo lỗi `ATTENDANCE_CONFLICT`.
+- Buổi **đang mở phiên** (OPEN): dùng "Điểm danh nhanh" của FE_uxfold trong màn điểm danh trực tiếp (`bulk_attendance.dart`, điền những sinh viên còn chờ, có lý do).
+- Buổi **chưa mở phiên** (AVAILABLE): nút "Điểm danh nhanh" trong hộp thoại buổi học mở màn `/quick` của nhánh này (mặc định Có mặt, chọn ngoại lệ, chốt luôn).
+- Backend giữ cả `bulkUpdatePendingAttendance` và `getQuickAttendanceContext` / `submitQuickAttendance`.
 
 ## Thật / giả lập / phụ thuộc
 

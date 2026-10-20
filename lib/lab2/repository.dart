@@ -131,6 +131,7 @@ class CampusRepository {
               'importClassStudents',
               'rotateAttendanceQr',
               'updateAttendanceRecord',
+              'bulkUpdatePendingAttendance',
               'getQuickAttendanceContext',
               'submitQuickAttendance',
             ].contains(name)) {
