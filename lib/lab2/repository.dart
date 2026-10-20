@@ -131,6 +131,7 @@ class CampusRepository {
               'importClassStudents',
               'rotateAttendanceQr',
               'updateAttendanceRecord',
+              'bulkUpdatePendingAttendance',
             ].contains(name)) {
           throw StateError('ATTENDANCE_BACKEND_UPDATE_REQUIRED');
         }

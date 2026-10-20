@@ -86,11 +86,15 @@ void main() {
       };
       roster.add(members);
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Chuyên cần'));
+      await tester.pumpAndSettle();
       expect(find.text('3 sinh viên'), findsOneWidget);
       expect(find.text('Buổi đã chốt: 20'), findsOneWidget);
       expect(find.text('Vắng: 8'), findsOneWidget);
       expect(find.text('Sắp vượt 20%: 1'), findsOneWidget);
       expect(find.text('Vượt 20%: 1'), findsOneWidget);
+      await tester.tap(find.text('Chuyên cần'));
+      await tester.pumpAndSettle();
       expect(
         find.descendant(
           of: find.byType(StudentAttendanceRow),
@@ -110,7 +114,7 @@ void main() {
         'added': {'displayName': 'Dung', 'studentCode': 'SE004'},
       });
       await tester.pumpAndSettle();
-      expect(find.text('4 sinh viên'), findsOneWidget);
+      expect(find.textContaining('4 sinh viên ·'), findsOneWidget);
       expect(find.text('SE004'), findsOneWidget);
       await tester.enterText(find.byType(TextField), 'SE003');
       await tester.pumpAndSettle();
@@ -162,6 +166,8 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('SE001'), findsOneWidget);
+    await tester.tap(find.text('Chuyên cần'));
+    await tester.pumpAndSettle();
     expect(find.text('Buổi đã chốt: 0'), findsOneWidget);
     expect(find.text('Vượt 20%: 0'), findsOneWidget);
     expect(tester.takeException(), isNull);

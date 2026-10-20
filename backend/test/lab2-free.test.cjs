@@ -64,6 +64,55 @@ function create(f,extra={}) {
   return f.c.lab2Mutate_(f.book,f.teacher,'createClassSession',{classId:'c1',sessionDate:date,slot:'1',durationMinutes:10,...extra}).classSessionId;
 }
 
+function bulkInput(f,id,extra={}) {
+  return {attendanceSessionId:id,requestId:'request-test-12345678',notes:'Checked in classroom',
+    expectedRevision:f.c.lab2Live_(f.book,f.teacher,{sessionId:id}).revision,
+    changes:[{studentUid:'student-s1',status:'present'},{studentUid:'student-s2',status:'absent'}],...extra};
+}
+test('bulk pending attendance commits all records and audits once, retry is idempotent',()=>{
+  const f=fixture(), id=create(f), input=bulkInput(f,id), before=f.writes();
+  const result=f.c.lab2Mutate_(f.book,f.teacher,'bulkUpdatePendingAttendance',input);
+  assert.equal(result.updated,2);assert.equal(f.writes(),before+1);
+  assert.equal(f.c.lab2Read_(f.book,'Attendance').length,2);
+  assert.equal(f.c.lab2Read_(f.book,'AttendanceAudit').length,2);
+  assert.ok(f.c.lab2Read_(f.book,'AttendanceAudit').every(a=>a.oldStatus==='PENDING'&&a.actorUid===f.teacher.firebaseUid));
+  assert.equal(f.c.lab2Mutate_(f.book,f.teacher,'bulkUpdatePendingAttendance',input).alreadyApplied,true);
+  assert.equal(f.writes(),before+1);
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'bulkUpdatePendingAttendance',{...input,notes:'different'}),/INVALID_INPUT/);
+});
+test('bulk rejects concurrent QR check-in and never overwrites existing records',()=>{
+  const f=fixture(), id=create(f), input=bulkInput(f,id), qr=f.c.lab2Mutate_(f.book,f.teacher,'getQrToken',{attendanceSessionId:id});
+  f.c.lab2Mutate_(f.book,f.student,'checkInWithQr',{token:qr.token});
+  const before=f.writes();
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'bulkUpdatePendingAttendance',input),/ATTENDANCE_CONFLICT/);
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'bulkUpdatePendingAttendance',bulkInput(f,id)),/ATTENDANCE_CONFLICT/);
+  assert.equal(f.writes(),before);assert.equal(f.c.lab2Read_(f.book,'Attendance')[0].status,'PRESENT');
+});
+test('bulk validates whole batch, frozen roster, role and ownership without partial writes',()=>{
+  const f=fixture(), id=create(f), input=bulkInput(f,id), before=f.writes();
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.student,'bulkUpdatePendingAttendance',input),/PERMISSION_DENIED/);
+  assert.throws(()=>f.c.lab2Mutate_(f.book,{...f.teacher,entity:{lecturerId:'l2'}},'bulkUpdatePendingAttendance',input),/PERMISSION_DENIED/);
+  for(const changes of [[],[input.changes[0],input.changes[0]],[input.changes[0],{studentUid:'student-missing',status:'present'}],
+      [input.changes[0],{studentUid:'student-s2',status:'unknown'}]]) {
+    assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'bulkUpdatePendingAttendance',{...input,changes}),/INVALID_INPUT|NOT_ENROLLED/);
+  }
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'bulkUpdatePendingAttendance',{...input,notes:' '}),/INVALID_INPUT/);
+  f.add('Students',{studentId:'s3',studentCode:'SE3'});f.add('Enrollments',{enrollmentId:'e3',classId:'c1',studentId:'s3'});
+  assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'bulkUpdatePendingAttendance',{
+    ...input,changes:[{studentUid:'student-s3',status:'present'}]}),/NOT_ENROLLED/);
+  assert.equal(f.writes(),before);
+});
+test('bulk cannot write closed, reset or expired sessions',()=>{
+  for(const status of ['CLOSED','RESET','EXPIRED']) {
+    const f=fixture('2026-10-19T03:00:00Z'), id=create(f), input=bulkInput(f,id);
+    if(status==='EXPIRED') f.setNow('2026-10-19T03:11:00Z');
+    else f.store.Sessions[1][f.store.Sessions[0].indexOf('status')]=status;
+    const before=f.writes();
+    assert.throws(()=>f.c.lab2Mutate_(f.book,f.teacher,'bulkUpdatePendingAttendance',input),/SESSION_CLOSED/);
+    assert.equal(f.writes(),before);
+  }
+});
+
 test('public web path validates mobile QR deadline, token rotation and frozen roster before Google/code check-in',()=>{
   const f=fixture(), id=create(f);
   const session=f.c.lab2Read_(f.book,'Sessions').find(s=>s.sessionId===id);
@@ -446,8 +495,8 @@ test('corrections append atomic audit with server actor, preserve status, and do
 
 test('Desktop create captures roster; close and correction reuse shared rules and original envelope',()=>{
   const f=fixture(), lecturer=f.teacher.entity;
-  testSchedule(f);
-  const request={action:'createSession',classId:'c1',date:'2026-10-11',slot:'1',startTime:'08:00',endTime:'09:00',currentToken:'qr-desktop',tokenExpiredAt:new Date(Date.now()+600000).toISOString()};
+  const date=testSchedule(f);
+  const request={action:'createSession',classId:'c1',date,slot:'1',startTime:'08:00',endTime:'09:00',currentToken:'qr-desktop',tokenExpiredAt:new Date(Date.now()+600000).toISOString()};
   const s=f.c.handleSession_(f.book,f.c.config_(),lecturer,request);
   assert.equal(f.c.handleSession_(f.book,f.c.config_(),lecturer,request).sessionId,s.sessionId);
   assert.equal(f.store.Lab2SessionMeta.length,2);

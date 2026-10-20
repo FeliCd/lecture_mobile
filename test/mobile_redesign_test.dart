@@ -200,7 +200,7 @@ void main() {
           expect(tester.takeException(), isNull, reason: screen);
           if (screen == 'today') {
             await tester.scrollUntilVisible(
-              find.text('Chưa cập nhật phòng'),
+              find.textContaining('Chưa cập nhật phòng').first,
               160,
               scrollable: find.byType(Scrollable).first,
             );

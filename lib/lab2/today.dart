@@ -10,6 +10,7 @@ import 'widgets.dart';
 import 'timetable.dart';
 import 'lecturer_workspace.dart';
 import 'lecturer_workspace_store.dart';
+import 'attendance_follow_up.dart';
 
 TeachingPeriod? todayFocus(List<TeachingPeriod> periods, DateTime now) {
   final candidates =
@@ -77,11 +78,10 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
       padding: const EdgeInsets.all(20),
       children: [
         Text(
-          'Chào ${widget.user.name} 👋',
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.w700,
-            fontSize: 22,
-          ),
+          widget.user.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.titleMedium,
         ),
         Text(
           '${teachingDayName(day.weekday)}, ${timetableDate(day)} · ${day.year}',
@@ -175,9 +175,17 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                             .length;
                         final now = DateTime.now().toUtc();
                         final focus = todayFocus(periods, now);
+                        final others = periods
+                            .where(
+                              (p) =>
+                                  !identical(p, focus) &&
+                                  attendanceFollowUp(p, now) == null,
+                            )
+                            .toList();
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
+                            AttendanceFollowUpPanel(periods: periods, now: now),
                             Padding(
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               child: Wrap(
@@ -200,7 +208,8 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                                 ],
                               ),
                             ),
-                            if (focus != null) ...[
+                            if (focus != null &&
+                                attendanceFollowUp(focus, now) == null) ...[
                               CampusSectionHeader(
                                 title: focus.scheduledStartAt.isAfter(now)
                                     ? 'Sắp dạy'
@@ -211,12 +220,12 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                                 showAction: true,
                                 featured: true,
                               ),
-                            ] else
+                            ] else if (focus == null)
                               const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 16),
                                 child: Text('Hết lịch hôm nay'),
                               ),
-                            if (periods.any((p) => !identical(p, focus)))
+                            if (others.isNotEmpty)
                               ExpansionTile(
                                 key: PageStorageKey(
                                   'other-lessons:${widget.user.uid}:$day',
@@ -230,15 +239,13 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                                       : const Duration(milliseconds: 220),
                                 ),
                                 title: Text(
-                                  '${focus == null ? 'Buổi học' : 'Buổi khác'} (${periods.where((p) => !identical(p, focus)).length})',
+                                  '${focus == null ? 'Buổi học' : 'Buổi khác'} (${others.length})',
                                   style: Theme.of(
                                     context,
                                   ).textTheme.titleMedium,
                                 ),
                                 children: [
-                                  for (final p in periods.where(
-                                    (p) => !identical(p, focus),
-                                  ))
+                                  for (final p in others)
                                     TeachingPeriodCard(
                                       period: p,
                                       compact: true,
@@ -249,6 +256,17 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                         );
                       },
                     ),
+                  ),
+                if (selected != null)
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: const Text('Cài đặt nhắc điểm danh'),
+                    children: [
+                      AttendanceReminderToggle(
+                        uid: widget.user.uid,
+                        term: selected,
+                      ),
+                    ],
                   ),
               ],
             );

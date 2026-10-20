@@ -7,6 +7,7 @@ import 'widgets.dart';
 import 'desktop_sync.dart';
 import 'dashboard_widgets.dart';
 import 'theme.dart';
+import 'student_support.dart';
 
 final classAttendanceSessionsProvider = StreamProvider.autoDispose
     .family<List<Data>, String>(
@@ -56,6 +57,10 @@ class _ClassAttendanceOverviewState
   @override
   Widget build(BuildContext context) {
     final id = widget.cls['id'] as String;
+    final user = ref.watch(profileProvider).value;
+    final support = widget.showStudents && user?.isLecturer == true
+        ? ref.watch(studentSupportProvider(user!.uid))
+        : null;
     final sessions = ref.watch(classAttendanceSessionsProvider(id));
     final records = ref.watch(classAttendanceRecordsProvider(id));
     final members = ref.watch(memberNamesProvider(id));
@@ -107,12 +112,24 @@ class _ClassAttendanceOverviewState
     final exceeded = currentSummaries
         .where((s) => s.exceedsAbsenceLimit)
         .length;
+    final runs = {
+      for (final uid in members.value!.keys)
+        uid: consecutiveAbsences(uid, sessions.value!, groups[uid] ?? []),
+    };
+    Data noteFor(String uid) =>
+        support?.value?[studentSupportKey(id, uid)] ?? {};
+    bool needsFollowUp(String uid) =>
+        runs[uid]!.length >= 2 ||
+        studentSummaries[uid]!.nearAbsenceLimit ||
+        studentSummaries[uid]!.exceedsAbsenceLimit ||
+        noteFor(uid)['followUp'] == true;
     final students = members.value!.entries.where((entry) {
       final s = studentSummaries[entry.key]!;
-      return '${entry.value['displayName']} ${entry.value['studentCode']}'
-              .toLowerCase()
-              .contains(search) &&
+      return attendanceSearchText(
+            '${entry.value['displayName']} ${entry.value['studentCode']}',
+          ).contains(search) &&
           (filter == 'all' ||
+              filter == 'followUp' && needsFollowUp(entry.key) ||
               filter == 'near' && s.nearAbsenceLimit ||
               filter == 'exceeded' && s.exceedsAbsenceLimit);
     }).toList();
@@ -124,181 +141,180 @@ class _ClassAttendanceOverviewState
           ? riskOrder
           : '${a.value['displayName']}'.compareTo('${b.value['displayName']}');
     });
+    final overview = CampusCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widget.showIdentity) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${widget.cls['classCode']}',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${widget.cls['subjectId']} • ${widget.cls['term'] ?? 'Học kỳ hiện tại'}',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (!widget.showStudents)
+                  IconButton(
+                    onPressed: () => context.push('/class/$id'),
+                    tooltip: 'Quản lý lớp và điểm danh',
+                    icon: const Icon(Icons.arrow_outward_rounded, size: 20),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              SoftLabel(
+                '${members.value!.length} sinh viên',
+                icon: Icons.people_outline,
+              ),
+              SoftLabel(
+                'Buổi đã chốt: ${finalized.length}',
+                icon: Icons.event_available_outlined,
+              ),
+            ],
+          ),
+          const Divider(),
+          Text(
+            'TỶ LỆ CHUYÊN CẦN',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontSize: 13,
+              letterSpacing: 1.2,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            summary.rate == null
+                ? 'Chưa đủ dữ liệu'
+                : '${summary.rate!.toStringAsFixed(1)}%',
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+              fontSize: summary.rate == null ? 18 : 28,
+            ),
+          ),
+          const SizedBox(height: 14),
+          AttendanceBar(counts: summary),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 16,
+            runSpacing: 10,
+            children: [
+              for (final item in {
+                'present': 'Có mặt: ${summary.present}',
+                'late': 'Đi trễ: ${summary.late}',
+                'excused': 'Vắng có phép: ${summary.excused}',
+                'absent': 'Vắng: ${summary.absent}',
+              }.entries)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: CampusColors.status(
+                          item.key,
+                          Theme.of(context).brightness == Brightness.dark,
+                        ),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        item.value,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+          const Divider(),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              SoftLabel(
+                'Sắp vượt $limit%: $near',
+                icon: Icons.warning_amber_rounded,
+                color: CampusColors.status(
+                  'late',
+                  Theme.of(context).brightness == Brightness.dark,
+                ),
+              ),
+              SoftLabel(
+                'Vượt $limit%: $exceeded',
+                icon: Icons.error_outline,
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ],
+          ),
+          if (widget.showStudents) ...[
+            const SizedBox(height: 8),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 12),
+              dense: true,
+              title: Text(
+                'Cách tính & ngưỡng cảnh báo',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              children: [
+                Text(
+                  'Tỷ lệ vắng tính trên các buổi đã chốt. Cảnh báo từ $warning% đến $limit%; vượt ngưỡng khi trên $limit%. Đi muộn và vắng có phép được giữ riêng; khi thiếu quy định tính các trạng thái này, tỷ lệ sẽ hiển thị chưa đủ cấu hình.',
+                  style: TextStyle(fontSize: 14, height: 1.6),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        CampusCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (widget.showIdentity) ...[
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${widget.cls['classCode']}',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${widget.cls['subjectId']} • ${widget.cls['term'] ?? 'Học kỳ hiện tại'}',
-                            style: TextStyle(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (!widget.showStudents)
-                      IconButton(
-                        onPressed: () => context.push('/class/$id'),
-                        tooltip: 'Quản lý lớp và điểm danh',
-                        icon: const Icon(Icons.arrow_outward_rounded, size: 20),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-              ],
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  SoftLabel(
-                    '${members.value!.length} sinh viên',
-                    icon: Icons.people_outline,
-                  ),
-                  SoftLabel(
-                    'Buổi đã chốt: ${finalized.length}',
-                    icon: Icons.event_available_outlined,
-                  ),
-                ],
-              ),
-              const Divider(),
-              Text(
-                'TỶ LỆ CHUYÊN CẦN',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  fontSize: 13,
-                  letterSpacing: 1.2,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                summary.rate == null
-                    ? 'Chưa đủ dữ liệu'
-                    : '${summary.rate!.toStringAsFixed(1)}%',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontSize: summary.rate == null ? 18 : 28,
-                ),
-              ),
-              const SizedBox(height: 14),
-              AttendanceBar(counts: summary),
-              const SizedBox(height: 14),
-              Wrap(
-                spacing: 16,
-                runSpacing: 10,
-                children: [
-                  for (final item in {
-                    'present': 'Có mặt: ${summary.present}',
-                    'late': 'Đi trễ: ${summary.late}',
-                    'excused': 'Vắng có phép: ${summary.excused}',
-                    'absent': 'Vắng: ${summary.absent}',
-                  }.entries)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 7,
-                          height: 7,
-                          decoration: BoxDecoration(
-                            color: CampusColors.status(
-                              item.key,
-                              Theme.of(context).brightness == Brightness.dark,
-                            ),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            item.value,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                ],
-              ),
-              const Divider(),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  SoftLabel(
-                    'Sắp vượt $limit%: $near',
-                    icon: Icons.warning_amber_rounded,
-                    color: CampusColors.status(
-                      'late',
-                      Theme.of(context).brightness == Brightness.dark,
-                    ),
-                  ),
-                  SoftLabel(
-                    'Vượt $limit%: $exceeded',
-                    icon: Icons.error_outline,
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                ],
-              ),
-              if (widget.showStudents) ...[
-                const SizedBox(height: 8),
-                ExpansionTile(
-                  tilePadding: EdgeInsets.zero,
-                  childrenPadding: const EdgeInsets.only(bottom: 12),
-                  dense: true,
-                  title: Text(
-                    'Cách tính & ngưỡng cảnh báo',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  children: [
-                    Text(
-                      'Tỷ lệ vắng tính trên các buổi đã chốt. Cảnh báo từ $warning% đến $limit%; vượt ngưỡng khi trên $limit%. Đi muộn và vắng có phép được giữ riêng; khi thiếu quy định tính các trạng thái này, tỷ lệ sẽ hiển thị chưa đủ cấu hình.',
-                      style: TextStyle(fontSize: 14, height: 1.6),
-                    ),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
+        if (widget.showStudents)
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('Chuyên cần'),
+            subtitle: Text('Sắp vượt: $near · Vượt ngưỡng: $exceeded'),
+            children: [overview],
+          )
+        else
+          overview,
         if (widget.showStudents) ...[
           const SizedBox(height: 12),
-          DashboardHeading(
-            title: 'Sinh viên',
-            subtitle: useSharedDesktop
-                ? 'Đồng bộ từ Sheet • Tự cập nhật mỗi 30 giây'
-                : 'Theo dõi chuyên cần và lịch sử từng sinh viên',
-          ),
           CampusSearchField(
             controller: searchController,
             hint: 'Tìm tên hoặc MSSV',
             onChanged: (value) =>
-                setState(() => search = value.toLowerCase().trim()),
+                setState(() => search = attendanceSearchText(value)),
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -307,6 +323,7 @@ class _ClassAttendanceOverviewState
             children: [
               for (final option in {
                 'all': 'Tất cả',
+                'followUp': 'Cần theo dõi',
                 'near': 'Sắp vượt $limit%',
                 'exceeded': 'Vượt $limit%',
               }.entries)
@@ -317,9 +334,37 @@ class _ClassAttendanceOverviewState
                 ),
             ],
           ),
-          if (students.isEmpty)
+          if (filter == 'followUp')
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Vắng từ 2 buổi liên tiếp đã chốt, chạm ngưỡng cảnh báo hoặc được đánh dấu cần trao đổi.',
+              ),
+            ),
+          if (support?.hasError == true)
+            TextButton.icon(
+              onPressed: () =>
+                  ref.invalidate(studentSupportProvider(user!.uid)),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Chưa tải được ghi chú riêng · Thử lại'),
+            ),
+          if (filter == 'followUp' &&
+              support != null &&
+              !support.hasValue &&
+              !support.hasError)
+            const Padding(
+              padding: EdgeInsets.all(8),
+              child: Text('Đang tải ghi chú riêng…'),
+            ),
+          if (students.isEmpty &&
+              !(filter == 'followUp' &&
+                  support != null &&
+                  !support.hasValue &&
+                  !support.hasError))
             EmptyState(
-              'Không có sinh viên phù hợp.',
+              filter == 'followUp' && support?.hasError == true
+                  ? 'Chưa thấy cảnh báo từ điểm danh. Ghi chú riêng chưa tải được.'
+                  : 'Không có sinh viên phù hợp.',
               actionLabel: search.isNotEmpty || filter != 'all'
                   ? 'Xóa bộ lọc'
                   : null,
@@ -333,7 +378,7 @@ class _ClassAttendanceOverviewState
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Text(
-                '${students.length} sinh viên • Ưu tiên tỷ lệ vắng cao',
+                '${students.length} sinh viên · Vắng nhiều trước${useSharedDesktop ? ' · Đồng bộ từ Sheet' : ''}',
                 style: TextStyle(
                   fontSize: 14,
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -347,6 +392,14 @@ class _ClassAttendanceOverviewState
               name: '${entry.value['displayName'] ?? 'Chưa có tên'}',
               code: '${entry.value['studentCode'] ?? 'Chưa có MSSV'}',
               summary: s,
+              attention: [
+                if (runs[entry.key]!.length >= 2)
+                  'Vắng ${runs[entry.key]!.length} buổi liên tiếp',
+                if (noteFor(entry.key)['followUp'] == true)
+                  'Cần trao đổi'
+                else if (noteFor(entry.key).isNotEmpty)
+                  'Có ghi chú riêng',
+              ].join(' · '),
               onTap: () => showDialog<void>(
                 context: context,
                 builder: (context) => AlertDialog(
@@ -367,6 +420,63 @@ class _ClassAttendanceOverviewState
                         ),
                         const SizedBox(height: 8),
                         Text(attendanceWarningLabel(s)),
+                        if (runs[entry.key]!.length >= 2) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            'Vắng ${runs[entry.key]!.length} buổi liên tiếp',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          ...runs[entry.key]!.map(
+                            (session) => Text(absenceRunDate(session)),
+                          ),
+                          const Text(
+                            'Chỉ đếm Vắng ở các buổi đã chốt gần nhất; bản ghi thiếu, đi trễ hoặc có phép ngắt chuỗi.',
+                          ),
+                        ],
+                        if (user?.isLecturer == true)
+                          Consumer(
+                            builder: (context, ref, _) {
+                              final current = ref.watch(
+                                studentSupportProvider(user!.uid),
+                              );
+                              final note =
+                                  current.value?[studentSupportKey(
+                                    id,
+                                    entry.key,
+                                  )] ??
+                                  {};
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if ('${note['note'] ?? ''}'.isNotEmpty)
+                                    Text('Ghi chú riêng: ${note['note']}'),
+                                  if ('${note['next'] ?? ''}'.isNotEmpty)
+                                    Text('Trao đổi buổi sau: ${note['next']}'),
+                                  TextButton.icon(
+                                    onPressed:
+                                        !current.hasValue || current.hasError
+                                        ? null
+                                        : () => showModalBottomSheet<void>(
+                                            context: context,
+                                            isScrollControlled: true,
+                                            isDismissible: false,
+                                            enableDrag: false,
+                                            builder: (_) => StudentSupportEditor(
+                                              accountUid: user.uid,
+                                              classId: id,
+                                              studentUid: entry.key,
+                                              name:
+                                                  '${entry.value['displayName']}',
+                                              initial: note,
+                                            ),
+                                          ),
+                                    icon: const Icon(Icons.edit_note),
+                                    label: const Text('Ghi chú riêng'),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
                         const SizedBox(height: 8),
                         const Text(
                           'Tính từ các bản ghi điểm danh đã chốt. Đi trễ và vắng có phép phụ thuộc quy định đã cấu hình.',
@@ -411,6 +521,7 @@ String attendanceWarningLabel(AttendanceSummary summary) {
 /// Compact summary; the existing history action exposes counts and records.
 class StudentAttendanceRow extends StatelessWidget {
   final String name, code;
+  final String attention;
   final AttendanceSummary summary;
   final VoidCallback onTap;
   const StudentAttendanceRow({
@@ -418,6 +529,7 @@ class StudentAttendanceRow extends StatelessWidget {
     required this.name,
     required this.code,
     required this.summary,
+    this.attention = '',
     required this.onTap,
   });
 
@@ -459,6 +571,15 @@ class StudentAttendanceRow extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
+                    if (attention.isNotEmpty) ...[
+                      Text(
+                        attention,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                    ],
                     Text(
                       summary.absenceRate == null
                           ? 'Tỷ lệ vắng: Chưa đủ dữ liệu'
