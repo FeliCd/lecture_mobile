@@ -1,5 +1,7 @@
 # FAP Attendance — Mobile giảng viên
 
+Bổ sung 02/11/2026: [Firebase Lab 3 và nhóm học tập](docs/LAB3_GROUPS_IMPLEMENTATION.md), [kế hoạch Analytics](docs/analytics-plan.md), [ca nghiệm thu Android/ARTEMIS](docs/LAB3_ACCEPTANCE_CASES.md). Source có chia nhóm/chat/tệp dùng chung Mobile-Desktop-Student Web; cần cập nhật Apps Script và bật dịch vụ Firebase theo hướng dẫn trước khi nghiệm thu cloud.
+
 Flutter Android/iOS, entry `lib/main.dart` → `lib/lab2/app.dart`. Bản shared hiện hành dành cho giảng viên; sinh viên điểm danh bằng Google trên Student Web. Lớp, lịch, roster, phiên và attendance dùng chung Apps Script/Google Sheets với Desktop. Firebase Auth xác thực; Firestore lưu thư viện bài viết riêng. Quiz đang tắt.
 
 ## Chức năng

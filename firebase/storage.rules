@@ -1,0 +1,14 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /reports/{uid}/{file} {
+      function owner() { return request.auth != null && request.auth.uid == uid && request.auth.token.email_verified == true; }
+      allow read, delete: if owner();
+      allow create: if owner() && resource == null && request.resource.size > 0 && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        && file.matches('[A-Za-z0-9_-]+[.]xlsx');
+      allow update: if false;
+    }
+    match /{path=**} { allow read, write: if false; }
+  }
+}

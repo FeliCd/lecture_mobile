@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../cloud/cloud_services.dart';
 import 'domain.dart';
 import 'theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -454,6 +455,7 @@ Future<void> runAction(
   try {
     await action();
   } catch (e) {
+    await CloudTelemetry.handled('user_action', e);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

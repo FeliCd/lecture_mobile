@@ -1,5 +1,11 @@
 # Kiến trúc hiện hành — 11/10/2026
 
+## Bổ sung 02/11/2026
+
+Firebase Lab 3: View -> Riverpod controllers (`cloud_view_model.dart`) -> injected RemoteSettingsService/ReportStorageService -> SDK. Telemetry/error handlers và FCM nằm trong `lib/cloud`, UI không import SDK trực tiếp. Push history dùng SharedPreferencesAsync theo UID Firebase/message, token không ghi log, route whitelist và auth guard. Report owner path dùng UID Firebase, độc lập ID nghiệp vụ Sheets. Xem [triển khai](LAB3_GROUPS_IMPLEMENTATION.md).
+
+Nhóm: ba client -> authenticated portal/lab2 handlers -> `StudyGroups.gs` -> `PortalGroupPlans`/`PortalGroupMessages`, private Drive attachments. Lecturer ownership + current enrollment/group membership kiểm lại mỗi request. Giữ hai Firebase project hiện tại, không dùng token của project này truy cập Firestore project khác. Chat polling 10s, tối đa 50 tin/trang và file 500 KB; chưa có socket/background group push. Shared Flutter group workspace nhận GroupCall dependency, không gọi Firebase SDK.
+
 Mobile giảng viên, Desktop và Student Web đọc/ghi cùng workbook Sheets qua cùng Apps Script deployment. Source tại máy đã refactor; deployment thật cần migration theo [IMPLEMENTATION_REPORT](IMPLEMENTATION_REPORT.md). Mô tả cũ lưu trong [ARCHITECTURE_LEGACY](ARCHITECTURE_LEGACY.md).
 
 ```mermaid
@@ -88,3 +94,7 @@ Live foreground8s, lỗi backoff16..60s, pause background, stop CLOSED. QR/roste
 Functions/emulator source giữ cho regression, không phải backend chính shared. Quiz tắt; Mobile không có student workspace. FAP bridge là luồng Desktop riêng, Mobile không tự gửi FAP.
 
 Tests VM/widget/rules/emulator và APK được kiểm tại máy. Chưa có deployment refactor, real-account E2E/50 concurrent benchmark hay iOS device evidence. Xem báo cáo để biết checklist release.
+# Cập nhật Lab 3 ngày 03/11/2026
+
+Các tác vụ F01 mở phiên, F02 sửa điểm danh, F03 lưu sổ tay đi qua Riverpod controllers trong `lib/lab2/session_view_model.dart` và `notebook_view_model.dart`. Auth actions dùng `auth_view_model.dart` với `AuthSessionService`; quyền push dùng `cloud/push_view_model.dart` với `PushPermissionService`. Widget giữ text controller, lựa chọn, điều hướng và lifecycle; ViewModel giữ busy/error và tác vụ bất đồng bộ; repository/service giữ I/O. Xem `LAB3_ADDITIONS_2026-11-03.md` cho phạm vi và nghiệm thu còn thiếu.
+

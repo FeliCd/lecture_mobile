@@ -3,6 +3,15 @@
  * Add this file to the existing Desktop Apps Script project and call setupLab2Free.
  */
 const LAB2_TABLES = Object.freeze({
+  PortalGroupPlans: ['classId','groups','version','updatedAt','updatedBy','requestKey'],
+  PortalGroupReceipts: ['id','classId','groupId','actor','receipts'],
+  PortalGroupMessages: ['id','classId','groupId','sender','senderName','text','fileId','fileName','mimeType','size','createdAt','requestKey'],
+  PortalLeaveRequests: ['id','classId','studentId','occurrenceId','scheduleId','exceptionId','sessionDate','slot','startTime','endTime','reason','status','submittedAt','reviewedAt','reviewedBy','reviewNote','version','requestKey'],
+  PortalGradebooks: ['classId','components','version','activePublicationId','updatedAt','updatedBy'],
+  PortalGradeDrafts: ['id','classId','studentId','grades','comment'],
+  PortalPublications: ['id','classId','version','components','publishedAt','publishedBy','requestKey'],
+  PortalPublishedGrades: ['id','publicationId','studentId','grades','comment'],
+  PortalAudit: ['id','classId','entityId','actor','action','at','detail'],
   Lab2ClassAttendanceConfig: ['classId','totalSlots','updatedBy','updatedAt'],
   Lab2AttendanceCompletion: ['sessionId','status','confirmedAt','confirmedBy'],
   Lab2SessionMeta: ['sessionId','title','opensAt','closesAt','lateThresholdAt','eligibleStudentIds'],
@@ -137,10 +146,10 @@ function lab2Hash_(text) {
   return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,text)
     .map(b => ('0'+((b+256)%256).toString(16)).slice(-2)).join('');
 }
-function lab2FirebaseIdentity_(token) {
+function lab2FirebaseIdentity_(token, firebaseConfig) {
   const p = PropertiesService.getScriptProperties();
-  const key = p.getProperty('LAB2_FIREBASE_API_KEY');
-  const project = p.getProperty('LAB2_FIREBASE_PROJECT_ID') || 'fap-attendance-88920';
+  const key = firebaseConfig ? firebaseConfig.key : p.getProperty('LAB2_FIREBASE_API_KEY');
+  const project = firebaseConfig ? firebaseConfig.project : p.getProperty('LAB2_FIREBASE_PROJECT_ID') || 'fap-attendance-88920';
   if (!key) throw Error('SHARED_BACKEND_SETUP_REQUIRED');
   if (typeof token !== 'string' || token.length > 10000 || token.split('.').length !== 3)
     throw Error('UNAUTHENTICATED');
@@ -248,9 +257,10 @@ function lab2Finalize_(book,session,automatic=false) {
   const now = new Date().toISOString();
   const changes = [{table:'Sessions',row:{...session,status:'CLOSED',currentToken:'',tokenExpiredAt:''}},
     {table:'Lab2AttendanceCompletion',row:{sessionId:session.sessionId,status:automatic?'PENDING':'CONFIRMED',confirmedAt:automatic?'':now,confirmedBy:automatic?'':session.createdBy}}];
+  const excused = typeof portalApprovedForSession_ === 'function' ? portalApprovedForSession_(book,session) : new Map();
   for (const id of new Set(eligible)) if (!attendance.some(a => a.studentId === id)) {
     changes.push({table:'Attendance',row:{attendanceId:Utilities.getUuid(),sessionId:session.sessionId,studentId:id,
-      status:'ABSENT',checkInTime:'',updatedAt:now,note:'Lab2 finalized',updatedBy:session.createdBy}});
+      status:excused.has(id)?'EXCUSED':'ABSENT',checkInTime:'',updatedAt:now,note:excused.has(id)?'Approved leave: '+excused.get(id).id:'Lab2 finalized',updatedBy:session.createdBy}});
   }
   lab2Write_(book,changes);
 }
@@ -569,6 +579,12 @@ function lab2Handle_(request) {
   }
   const d=request.input;
   if(!d||typeof d!=='object'||Array.isArray(d)) throw Error('INVALID_INPUT');
+  if(name==='groupCall') {
+    const lock=LockService.getScriptLock();
+    if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
+    try {return groupCall_(book,actor,String(d.method||''),d.data||{});}
+    finally {lock.releaseLock();}
+  }
   if(name==='discoverArticles') return lab2Discover_(book,actor,d);
   if(name==='shareArticle') return lab2Share_(book,actor,d);
   if(name==='getTeachingOccurrence') return lab2OccurrenceView_(book,actor,d);

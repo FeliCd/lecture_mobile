@@ -5,6 +5,8 @@ import 'repository.dart';
 import 'widgets.dart';
 import 'news.dart' show openSource;
 import 'article_library.dart';
+import '../cloud/cloud_view_model.dart';
+import '../cloud/cloud_services.dart';
 
 class SubjectUpdatesPage extends ConsumerStatefulWidget {
   final UserProfile user;
@@ -72,7 +74,7 @@ class _SubjectUpdatesPageState extends ConsumerState<SubjectUpdatesPage> {
             'days': days,
             'query': query.text.trim(),
             'source': source,
-            'limit': 20,
+            'limit': ref.read(cloudSettingsProvider).value?.pageSize ?? 20,
             if (more && cursor != null) 'cursor': cursor,
           });
       if (!mounted || generation != current) return;
@@ -99,6 +101,15 @@ class _SubjectUpdatesPageState extends ConsumerState<SubjectUpdatesPage> {
 
   @override
   Widget build(BuildContext context) {
+    final settings =
+        ref.watch(cloudSettingsProvider).value ?? const CloudSettings();
+    if (!settings.updatesEnabled) {
+      return const Center(
+        child: Text(
+          'Cập nhật môn học đang tạm dừng. Bạn có thể kiểm tra lại trong Dịch vụ đám mây.',
+        ),
+      );
+    }
     final saved = ref.watch(savedArticlesProvider);
     final subjects = widget.user.subjectIds.toSet().toList();
     return Column(

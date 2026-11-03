@@ -1,4 +1,6 @@
 import 'motion.dart';
+import 'auth_view_model.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,6 +29,9 @@ import 'dart:convert';
 import 'timetable_domain.dart';
 import 'timetable_card.dart';
 import 'profile_academic_term.dart';
+import '../cloud/cloud_pages.dart';
+import '../cloud/cloud_services.dart';
+import '../cloud/push_notifications.dart';
 
 final themeProvider = NotifierProvider<ThemeSettings, ThemeMode>(
   ThemeSettings.new,
@@ -62,10 +67,26 @@ class CampusApp extends ConsumerStatefulWidget {
 
 class _CampusAppState extends ConsumerState<CampusApp> {
   final refresh = ValueNotifier<int>(0);
+  final messenger = GlobalKey<ScaffoldMessengerState>();
+  StreamSubscription<void>? pushChanges;
   late GoRouter router;
   @override
   void initState() {
     super.initState();
+    pushChanges = PushNotifications.instance.changes.stream.listen((_) {
+      if (!mounted || ref.read(profileProvider).value?.isLecturer != true) {
+        return;
+      }
+      messenger.currentState?.showSnackBar(
+        SnackBar(
+          content: const Text('Có thông báo mới trong trung tâm thông báo.'),
+          action: SnackBarAction(
+            label: 'Xem',
+            onPressed: () => router.push('/notifications'),
+          ),
+        ),
+      );
+    });
     router = GoRouter(
       refreshListenable: refresh,
       redirect: (context, state) {
@@ -121,6 +142,15 @@ class _CampusAppState extends ConsumerState<CampusApp> {
           ),
         ),
         GoRoute(path: '/settings', builder: (_, _) => const SettingsPage()),
+        GoRoute(
+          path: '/cloud-settings',
+          builder: (_, _) => const CloudSettingsPage(),
+        ),
+        GoRoute(
+          path: '/notifications',
+          builder: (_, _) =>
+              NotificationCenter(uid: PushNotifications.instance.uid ?? ''),
+        ),
         GoRoute(
           path: '/attendance-reminder',
           builder: (_, s) {
@@ -178,6 +208,7 @@ class _CampusAppState extends ConsumerState<CampusApp> {
   @override
   void dispose() {
     router.dispose();
+    pushChanges?.cancel();
     refresh.dispose();
     super.dispose();
   }
@@ -189,6 +220,18 @@ class _CampusAppState extends ConsumerState<CampusApp> {
       if (next.isLoading) return;
       final uid = next.value?.uid;
       if (uid != previous?.value?.uid) {
+        if (next.value?.isLecturer == true) {
+          PushNotifications.instance.onOpen = (route) => router.go(route);
+          final pending = PushNotifications.instance.pendingRoute;
+          PushNotifications.instance.pendingRoute = null;
+          if (pending != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) router.go(pending);
+            });
+          }
+        } else {
+          PushNotifications.instance.onOpen = null;
+        }
         LecturerReminders.instance.onOpen = (id) => id.startsWith('lesson:')
             ? router.go(
                 '/attendance-reminder?data=${Uri.encodeQueryComponent(id.substring(7))}',
@@ -202,6 +245,7 @@ class _CampusAppState extends ConsumerState<CampusApp> {
       }
     });
     return MaterialApp.router(
+      scaffoldMessengerKey: messenger,
       title: 'FAP Attendance',
       builder: (context, child) {
         final user = ref.watch(profileProvider).value;
@@ -225,32 +269,14 @@ class _CampusAppState extends ConsumerState<CampusApp> {
   }
 }
 
-class CampusLogin extends ConsumerStatefulWidget {
+class CampusLogin extends ConsumerWidget {
   const CampusLogin({super.key});
   @override
-  ConsumerState<CampusLogin> createState() => _CampusLoginState();
-}
-
-class _CampusLoginState extends ConsumerState<CampusLogin> {
-  bool busy = false;
-  Object? error;
-  Future<void> login() async {
-    if (busy) return;
-    setState(() => busy = true);
-    try {
-      await ref.read(repositoryProvider).loginWithGoogle();
-      if (mounted) ref.invalidate(profileProvider);
-    } catch (e) {
-      if (mounted) setState(() => error = e);
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final action = ref.watch(authActionsProvider);
+    final busy = action.busy;
     final profile = ref.watch(profileProvider);
-    final failure = error ?? profile.error;
+    final failure = action.error ?? profile.error;
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -383,19 +409,15 @@ class _CampusLoginState extends ConsumerState<CampusLogin> {
                         ? 'Đang kết nối Google…'
                         : 'Tiếp tục với Google',
                     busy: busy,
-                    onPressed: login,
+                    onPressed: () =>
+                        ref.read(authActionsProvider.notifier).login(),
                   ),
                   if (profile.hasError)
                     TextButton(
                       onPressed: busy
                           ? null
-                          : () async {
-                              await ref.read(repositoryProvider).logout();
-                              if (mounted) {
-                                ref.invalidate(profileProvider);
-                                setState(() => error = null);
-                              }
-                            },
+                          : () =>
+                                ref.read(authActionsProvider.notifier).logout(),
                       child: const Text('Dùng tài khoản Google khác'),
                     ),
                   const SizedBox(height: 16),
@@ -429,6 +451,12 @@ class CampusShell extends ConsumerStatefulWidget {
 
 class _CampusShellState extends ConsumerState<CampusShell> {
   int tab = 0;
+  @override
+  void initState() {
+    super.initState();
+    CloudTelemetry.event('view_teaching_day');
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(profileProvider).value;
@@ -722,6 +750,16 @@ class SettingsPage extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           if (u?.isLecturer == true) WorkspaceShortcut(user: u!),
+          ListTile(
+            leading: const Icon(Icons.notifications_outlined),
+            title: const Text('Thông báo'),
+            onTap: () => context.push('/notifications'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.cloud_outlined),
+            title: const Text('Dịch vụ đám mây'),
+            onTap: () => context.push('/cloud-settings'),
+          ),
           CampusOutlineAction(
             onPressed: () => openImport(context),
             icon: Icons.document_scanner_outlined,
@@ -753,8 +791,10 @@ class SettingsPage extends ConsumerWidget {
               )) {
                 return;
               }
-              await ref.read(repositoryProvider).logout();
-              ref.invalidate(profileProvider);
+              if (!await ref.read(authActionsProvider.notifier).logout()) {
+                throw ref.read(authActionsProvider).error ??
+                    StateError('Đang xử lý đăng nhập.');
+              }
             }),
           ),
         ],

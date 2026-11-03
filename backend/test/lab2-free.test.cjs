@@ -268,7 +268,7 @@ test('cache storage failure still returns fetched metadata without claiming shar
   assert.equal(feed.articles[0].canShare,false);
 });
 test('timetable uses only the assigned lecturer and links exact class/subject/semester',()=>{
-  const f=fixture();
+  const f=fixture('2026-10-30T06:00:00Z');
   f.add('Schedules',{scheduleId:'own',lecturerId:'l1',semester:'',subjectCode:'PRM393',subjectName:'Mobile',classCode:'SE1',dayOfWeek:'5',slot:'3',startTime:'12:50',endTime:'15:10',room:'A201'});
   f.add('Schedules',{scheduleId:'other',lecturerId:'l2',subjectCode:'PRN212',classCode:'SE2',dayOfWeek:'5',slot:'1',startTime:'07:30',endTime:'09:50'});
   f.add('Schedules',{scheduleId:'different-term',lecturerId:'l1',semester:'Spring 2027',subjectCode:'PRM393',classCode:'SE1',dayOfWeek:'1',slot:'2',startTime:'10:00',endTime:'12:00'});

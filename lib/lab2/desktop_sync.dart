@@ -144,6 +144,7 @@ class DesktopSync {
       'getAttendanceSessionLive',
       'getSubjectUpdates',
       'getSubjectTopics',
+      'groupCall',
     ].contains(name)) {
       refresh();
     }

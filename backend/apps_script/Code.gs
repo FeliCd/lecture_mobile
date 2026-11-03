@@ -490,6 +490,9 @@ function handle_(request) {
   const book = SpreadsheetApp.openById(cfg.id);
   const lecturer = authenticate_(request.idToken, cfg, book);
   if (request.action === 'profile') return lecturer;
+  if (request.action === 'desktopAttendanceCall') {
+    return lab2DesktopAttendance_(book,lecturer,request);
+  }
   if (['getRoster', 'importRoster'].includes(request.action)) {
     return handleRoster_(book, cfg, lecturer, request);
   }
@@ -605,10 +608,13 @@ function doPost(e) {
   let result;
   try {
     const text = e && e.postData && e.postData.contents;
-    if (!text || text.length > 200000) throw new Error('Yêu cầu trống hoặc quá lớn.');
+    if (!text || text.length > 2000000) throw new Error('Yêu cầu trống hoặc quá lớn.');
     const request = JSON.parse(text);
     if (!request || typeof request !== 'object' || Array.isArray(request)) throw new Error('Yêu cầu không hợp lệ.');
-    if (['lab2Health', 'lab2Snapshot', 'lab2Call'].includes(request.action)) {
+    if (request.action !== 'portalCall' && !(request.action === 'lab2Call' && request.name === 'groupCall') && text.length > 200000) throw new Error('Yêu cầu trống hoặc quá lớn.');
+    if (request.action === 'portalCall') {
+      result = {ok: true, data: portalHandle_(request)};
+    } else if (['lab2Health', 'lab2Snapshot', 'lab2Call'].includes(request.action)) {
       result = {ok: true, data: lab2Handle_(request)};
     } else if (request.action === 'studentCodeSessionInfo') {
       result = {ok: true, data: handleStudentCodeSession_(request)};

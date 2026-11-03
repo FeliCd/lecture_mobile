@@ -144,6 +144,36 @@ function lab2DesktopActor_(lecturer) {
   return {role:'lecturer',entity:lecturer,uid:'lecturer-'+lecturer.lecturerId,email:lecturer.email};
 }
 
+// Desktop OAuth transport, same occurrence/quick attendance logic as Mobile.
+function lab2DesktopAttendance_(book,lecturer,request) {
+  const actor=lab2DesktopActor_(lecturer),d=request.input,name=request.name;
+  if(!d||typeof d!=='object'||Array.isArray(d)) throw Error('INVALID_INPUT');
+  lab2Limit_(actor.uid,'desktop:'+String(name));
+  if(name==='getQuickAttendanceContext') return lab2QuickContext_(book,actor,d);
+  if(name==='submitQuickAttendance') return lab2Mutate_(book,actor,name,d);
+  if(name!=='getAttendanceDay') throw Error('FEATURE_DISABLED');
+  const date=String(d.sessionDate||'');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||new Date(lab2Millis_(date,'00:00')+7*3600000).toISOString().slice(0,10)!==date) throw Error('INVALID_SESSION_DATE');
+  const lock=LockService.getScriptLock();if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
+  try {
+    const tables={Classes:lab2Read_(book,'Classes'),Schedules:lab2Read_(book,'Schedules'),ScheduleExceptions:lab2Read_(book,'ScheduleExceptions')};
+    const now=Date.now(),today=Utilities.formatDate(new Date(now),'Asia/Ho_Chi_Minh','yyyy-MM-dd'),lessons=[];
+    for(const cls of tables.Classes.filter(c=>c.lecturerId===lecturer.lecturerId)) {
+      for(const o of lab2Occurrences_(book,actor,cls.classId,date,tables)) {
+        const current=lab2OccurrenceSession_(book,o),s=current.session;
+        const completion=s?lab2Read_(book,'Lab2AttendanceCompletion').find(r=>r.sessionId===s.sessionId):null;
+        const completed=!!s&&s.status==='CLOSED'&&(!completion||completion.status==='CONFIRMED');
+        lessons.push({...o,semester:cls.semester,completed,editable:date===today&&!current.resetOnly,
+          state:completed?'CLOSED':current.resetOnly?'RESET':date===today?'AVAILABLE':date>today?'NOT_YET':'DAY_EXPIRED',
+          qrState:lab2OccurrenceState_(o,current,now),sessionId:s?s.sessionId:null,status:s?s.status:null,
+          attendanceCompleted:completed});
+      }
+    }
+    lessons.sort((a,b)=>a.scheduledStartAt-b.scheduledStartAt||a.classId.localeCompare(b.classId));
+    return {sessionDate:date,serverTime:now,lessons};
+  } finally {lock.releaseLock();}
+}
+
 
 /* Quick attendance (F01): lecturer marks exceptions on a draft where everyone defaults to PRESENT.
  * Reading the context never creates a session or a record. Saving applies only to the roster the

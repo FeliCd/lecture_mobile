@@ -8,6 +8,7 @@ import 'timetable_domain.dart';
 import 'lecturer_workspace_store.dart';
 import 'lecturer_reminders.dart';
 import 'lecturer_weekly_report.dart';
+import 'notebook_view_model.dart';
 
 String workspaceDate(String? raw) {
   final date = DateTime.tryParse(raw ?? '');
@@ -596,9 +597,12 @@ class _NotebookState extends ConsumerState<LessonNotebookPage> {
   };
   final fields = <String, TextEditingController>{};
   Data metadata = {};
-  String status = 'Đang mở sổ tay…';
-  bool ready = false, failed = false;
-  int pending = 0;
+  NotebookKey get notebookKey => (uid: widget.uid, noteId: widget.noteId);
+  NotebookState get notebook => ref.read(notebookProvider(notebookKey));
+  String get status => notebook.status;
+  bool get ready => fields.isNotEmpty;
+  bool get failed => notebook.saveFailed;
+  int get pending => notebook.pending;
   int phase = 0;
   Set<String> get prepItems => fields['prep']!.text
       .split('\n')
@@ -705,33 +709,22 @@ class _NotebookState extends ConsumerState<LessonNotebookPage> {
   @override
   void initState() {
     super.initState();
-    load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) load();
+    });
   }
 
   Future<void> load() async {
-    try {
-      final data = await ref.read(workspaceStoreProvider(widget.uid)).read();
-      if (!mounted) return;
-      final note = data.notes[widget.noteId] ?? {};
-      metadata = {...note, ...widget.metadata};
-      for (final key in labels.keys) {
-        fields[key] = TextEditingController(text: '${note[key] ?? ''}')
-          ..addListener(save);
-      }
-      setState(() {
-        ready = true;
-        status = 'Lưu tự động trên máy • Chưa đồng bộ';
-      });
-      if (!data.notes.containsKey(widget.noteId)) {
-        await save();
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => status =
-              'Không mở được sổ tay. Quay lại và thử lại; dữ liệu cũ được giữ nguyên.',
-        );
-      }
+    final note = await ref.read(notebookProvider(notebookKey).notifier).load();
+    if (!mounted || note == null) return;
+    metadata = {...note, ...widget.metadata};
+    for (final key in labels.keys) {
+      fields[key] = TextEditingController(text: '${note[key] ?? ''}')
+        ..addListener(save);
+    }
+    setState(() {});
+    if (note.isEmpty) {
+      await save();
     }
   }
 
@@ -740,29 +733,7 @@ class _NotebookState extends ConsumerState<LessonNotebookPage> {
       ...metadata,
       for (final e in fields.entries) e.key: e.value.text,
     };
-    setState(() {
-      pending++;
-      status = 'Đang lưu trên máy…';
-    });
-    try {
-      await ref
-          .read(workspaceStoreProvider(widget.uid))
-          .saveNote(widget.noteId, note);
-      failed = false;
-    } catch (_) {
-      failed = true;
-    } finally {
-      if (mounted) {
-        setState(() {
-          pending--;
-          status = failed
-              ? 'Chưa lưu được. Giữ màn hình này và bấm thử lại.'
-              : pending > 0
-              ? 'Đang lưu trên máy…'
-              : 'Đã lưu trên máy • Chưa đồng bộ';
-        });
-      }
-    }
+    await ref.read(notebookProvider(notebookKey).notifier).save(note);
   }
 
   @override
@@ -774,235 +745,246 @@ class _NotebookState extends ConsumerState<LessonNotebookPage> {
   }
 
   @override
-  Widget build(BuildContext context) => CampusDraftGuard(
-    dirty: failed,
-    busy: pending > 0,
-    child: Scaffold(
-      appBar: AppBar(
-        title: const Text('Sổ tay'),
-        actions: const [
-          CampusHelpButton(
-            title: 'Lưu trên máy',
-            message:
-                'Sổ tay và việc cá nhân chỉ lưu cho tài khoản này trên thiết bị hiện tại. Chưa đồng bộ sang máy khác; gỡ ứng dụng có thể mất dữ liệu. Chỉ rời màn sau khi lưu thành công.',
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${widget.metadata['label'] ?? ''}',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              Semantics(
-                liveRegion: true,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      failed
-                          ? Icons.error_outline
-                          : pending > 0
-                          ? Icons.sync
-                          : Icons.save_outlined,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: CampusEntrance(
-                        trigger: status,
-                        child: Text(
-                          status,
-                          key: const ValueKey('notebook-save-status'),
+  Widget build(BuildContext context) {
+    final model = ref.watch(notebookProvider(notebookKey));
+    return CampusDraftGuard(
+      dirty: failed,
+      busy: pending > 0,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Sổ tay'),
+          actions: const [
+            CampusHelpButton(
+              title: 'Lưu trên máy',
+              message:
+                  'Sổ tay và việc cá nhân chỉ lưu cho tài khoản này trên thiết bị hiện tại. Chưa đồng bộ sang máy khác; gỡ ứng dụng có thể mất dữ liệu. Chỉ rời màn sau khi lưu thành công.',
+            ),
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${widget.metadata['label'] ?? ''}',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Semantics(
+                  liveRegion: true,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        failed
+                            ? Icons.error_outline
+                            : pending > 0
+                            ? Icons.sync
+                            : Icons.save_outlined,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: CampusEntrance(
+                          trigger: status,
+                          child: Text(
+                            status,
+                            key: const ValueKey('notebook-save-status'),
+                          ),
                         ),
                       ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (failed)
+              TextButton(onPressed: save, child: const Text('Thử lưu lại')),
+            if (model.loadFailed)
+              TextButton(
+                onPressed: load,
+                child: const Text('Thử mở lại sổ tay'),
+              ),
+            if (ready) ...[
+              const SizedBox(height: 20),
+              if (MediaQuery.textScalerOf(context).scale(14) > 19)
+                DropdownButtonFormField<int>(
+                  initialValue: phase,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Giai đoạn ghi chép',
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 0, child: Text('Trước buổi')),
+                    DropdownMenuItem(value: 1, child: Text('Sau buổi')),
+                  ],
+                  onChanged: (v) => setState(() => phase = v!),
+                )
+              else
+                SegmentedButton<int>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(
+                      value: 0,
+                      label: Text('Trước buổi'),
+                      icon: Icon(Icons.checklist),
+                    ),
+                    ButtonSegment(
+                      value: 1,
+                      label: Text('Sau buổi'),
+                      icon: Icon(Icons.edit_note),
+                    ),
+                  ],
+                  selected: {phase},
+                  onSelectionChanged: (v) => setState(() => phase = v.single),
+                ),
+              const SizedBox(height: 16),
+              if (phase == 0) ...[
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: const Text('Công cụ buổi dạy'),
+                  children: [
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.notifications_outlined),
+                      label: const Text('Tạo việc nhắc chuẩn bị buổi này'),
+                      onPressed: () async {
+                        final task = await showDialog<Data>(
+                          context: context,
+                          builder: (_) => TaskEditor(
+                            onSave: ref
+                                .read(workspaceStoreProvider(widget.uid))
+                                .saveTask,
+                            task: {
+                              'title': 'Chuẩn bị ${metadata['label']}',
+                              'due': metadata['startAt'],
+                              'label': metadata['label'],
+                              'occurrence': widget.noteId,
+                            },
+                          ),
+                        );
+                        if (task == null || !context.mounted) return;
+                        await runAction(context, () async {
+                          final store = ref.read(
+                            workspaceStoreProvider(widget.uid),
+                          );
+                          try {
+                            await LecturerReminders.instance.sync(
+                              widget.uid,
+                              await store.read(),
+                            );
+                          } catch (_) {}
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Đã lưu việc. Bật/kiểm tra thông báo trong Trợ lý giảng dạy.',
+                                ),
+                              ),
+                            );
+                          }
+                        });
+                      },
+                    ),
+                    OutlinedButton(
+                      onPressed: () async {
+                        final data = await ref
+                            .read(workspaceStoreProvider(widget.uid))
+                            .read();
+                        if (!context.mounted) return;
+                        final candidates = data.notes.entries
+                            .where(
+                              (e) =>
+                                  e.key != widget.noteId &&
+                                  e.value['subjectId'] == metadata['subjectId'],
+                            )
+                            .toList();
+                        final source = await showDialog<Data>(
+                          context: context,
+                          builder: (c) => SimpleDialog(
+                            title: const Text('Sao chép kế hoạch cùng môn'),
+                            children: [
+                              const Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Text(
+                                  'Thay mục tiêu, chuẩn bị và tài liệu bằng nội dung buổi đã chọn. Nội dung đã dạy và ghi chú lần sau được giữ.',
+                                ),
+                              ),
+                              if (candidates.isEmpty)
+                                const Padding(
+                                  padding: EdgeInsets.all(16),
+                                  child: Text(
+                                    'Chưa có sổ tay khác của môn này.',
+                                  ),
+                                ),
+                              for (final e in candidates)
+                                SimpleDialogOption(
+                                  onPressed: () => Navigator.pop(c, e.value),
+                                  child: Text('${e.value['label']}'),
+                                ),
+                            ],
+                          ),
+                        );
+                        if (source == null || !mounted) return;
+                        for (final k in ['goals', 'prep', 'resources']) {
+                          fields[k]!.text = '${source[k] ?? ''}';
+                        }
+                      },
+                      child: const Text('Dùng kế hoạch từ buổi khác'),
                     ),
                   ],
                 ),
-              ),
-            ],
-          ),
-          if (failed)
-            TextButton(onPressed: save, child: const Text('Thử lưu lại')),
-          if (ready) ...[
-            const SizedBox(height: 20),
-            if (MediaQuery.textScalerOf(context).scale(14) > 19)
-              DropdownButtonFormField<int>(
-                initialValue: phase,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Giai đoạn ghi chép',
-                ),
-                items: const [
-                  DropdownMenuItem(value: 0, child: Text('Trước buổi')),
-                  DropdownMenuItem(value: 1, child: Text('Sau buổi')),
-                ],
-                onChanged: (v) => setState(() => phase = v!),
-              )
-            else
-              SegmentedButton<int>(
-                showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(
-                    value: 0,
-                    label: Text('Trước buổi'),
-                    icon: Icon(Icons.checklist),
+                for (final key in ['goals', 'prep', 'resources'])
+                  noteField(key),
+                if (fields['prep']!.text.trim().isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Checklist chuẩn bị · $preparedCount/${prepItems.length}',
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  ButtonSegment(
-                    value: 1,
-                    label: Text('Sau buổi'),
-                    icon: Icon(Icons.edit_note),
-                  ),
-                ],
-                selected: {phase},
-                onSelectionChanged: (v) => setState(() => phase = v.single),
-              ),
-            const SizedBox(height: 16),
-            if (phase == 0) ...[
-              ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                title: const Text('Công cụ buổi dạy'),
-                children: [
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.notifications_outlined),
-                    label: const Text('Tạo việc nhắc chuẩn bị buổi này'),
-                    onPressed: () async {
-                      final task = await showDialog<Data>(
-                        context: context,
-                        builder: (_) => TaskEditor(
-                          onSave: ref
-                              .read(workspaceStoreProvider(widget.uid))
-                              .saveTask,
-                          task: {
-                            'title': 'Chuẩn bị ${metadata['label']}',
-                            'due': metadata['startAt'],
-                            'label': metadata['label'],
-                            'occurrence': widget.noteId,
-                          },
-                        ),
-                      );
-                      if (task == null || !context.mounted) return;
-                      await runAction(context, () async {
-                        final store = ref.read(
-                          workspaceStoreProvider(widget.uid),
-                        );
-                        try {
-                          await LecturerReminders.instance.sync(
-                            widget.uid,
-                            await store.read(),
-                          );
-                        } catch (_) {}
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Đã lưu việc. Bật/kiểm tra thông báo trong Trợ lý giảng dạy.',
-                              ),
-                            ),
-                          );
-                        }
-                      });
-                    },
-                  ),
-                  OutlinedButton(
-                    onPressed: () async {
-                      final data = await ref
-                          .read(workspaceStoreProvider(widget.uid))
-                          .read();
-                      if (!context.mounted) return;
-                      final candidates = data.notes.entries
-                          .where(
-                            (e) =>
-                                e.key != widget.noteId &&
-                                e.value['subjectId'] == metadata['subjectId'],
-                          )
-                          .toList();
-                      final source = await showDialog<Data>(
-                        context: context,
-                        builder: (c) => SimpleDialog(
-                          title: const Text('Sao chép kế hoạch cùng môn'),
-                          children: [
-                            const Padding(
-                              padding: EdgeInsets.all(16),
-                              child: Text(
-                                'Thay mục tiêu, chuẩn bị và tài liệu bằng nội dung buổi đã chọn. Nội dung đã dạy và ghi chú lần sau được giữ.',
-                              ),
-                            ),
-                            if (candidates.isEmpty)
-                              const Padding(
-                                padding: EdgeInsets.all(16),
-                                child: Text('Chưa có sổ tay khác của môn này.'),
-                              ),
-                            for (final e in candidates)
-                              SimpleDialogOption(
-                                onPressed: () => Navigator.pop(c, e.value),
-                                child: Text('${e.value['label']}'),
-                              ),
-                          ],
-                        ),
-                      );
-                      if (source == null || !mounted) return;
-                      for (final k in ['goals', 'prep', 'resources']) {
-                        fields[k]!.text = '${source[k] ?? ''}';
-                      }
-                    },
-                    child: const Text('Dùng kế hoạch từ buổi khác'),
-                  ),
-                ],
-              ),
-              for (final key in ['goals', 'prep', 'resources']) noteField(key),
-              if (fields['prep']!.text.trim().isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  'Checklist chuẩn bị · $preparedCount/${prepItems.length}',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: LinearProgressIndicator(
-                    value: preparedCount / prepItems.length,
-                    semanticsLabel: 'Tiến độ chuẩn bị',
-                  ),
-                ),
-                for (final line in prepItems)
-                  CheckboxListTile(
-                    title: Text(line),
-                    contentPadding: EdgeInsets.zero,
-                    value: (metadata['checkedPrep'] as List? ?? []).contains(
-                      line,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: LinearProgressIndicator(
+                      value: preparedCount / prepItems.length,
+                      semanticsLabel: 'Tiến độ chuẩn bị',
                     ),
-                    onChanged: (done) {
-                      final checked = Set<String>.from(
-                        metadata['checkedPrep'] as List? ?? [],
-                      );
-                      if (done == true) {
-                        checked.add(line);
-                      } else {
-                        checked.remove(line);
-                      }
-                      metadata['checkedPrep'] = checked.toList();
-                      save();
-                    },
                   ),
+                  for (final line in prepItems)
+                    CheckboxListTile(
+                      title: Text(line),
+                      contentPadding: EdgeInsets.zero,
+                      value: (metadata['checkedPrep'] as List? ?? []).contains(
+                        line,
+                      ),
+                      onChanged: (done) {
+                        final checked = Set<String>.from(
+                          metadata['checkedPrep'] as List? ?? [],
+                        );
+                        if (done == true) {
+                          checked.add(line);
+                        } else {
+                          checked.remove(line);
+                        }
+                        metadata['checkedPrep'] = checked.toList();
+                        save();
+                      },
+                    ),
+                ],
+              ] else ...[
+                noteField('taught'),
+                noteField('next'),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: pending > 0 ? null : carryForward,
+                  icon: const Icon(Icons.arrow_forward),
+                  label: const Text('Chuyển phần chưa dạy sang buổi sau'),
+                ),
               ],
-            ] else ...[
-              noteField('taught'),
-              noteField('next'),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: pending > 0 ? null : carryForward,
-                icon: const Icon(Icons.arrow_forward),
-                label: const Text('Chuyển phần chưa dạy sang buổi sau'),
-              ),
             ],
           ],
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }

@@ -1,10 +1,11 @@
 /* Schedule-driven attendance. No production columns are changed.
  * Every helper which reconciles/writes is called while holding the script lock. */
-function lab2Occurrences_(book,actor,classId,date) {
-  const cls=lab2Class_(book,actor,classId,true),weekday=lab2Day_(date);
-  const bases=lab2Read_(book,'Schedules').filter(s=>s.lecturerId===actor.entity.lecturerId&&s.semester===cls.semester&&s.subjectCode===cls.subjectCode&&s.classCode===cls.classCode);
+function lab2Occurrences_(book,actor,classId,date,tables) {
+  const cls=tables?tables.Classes.find(c=>c.classId===classId):lab2Class_(book,actor,classId,true),weekday=lab2Day_(date);
+  if(!cls||actor.role!=='lecturer'||cls.lecturerId!==actor.entity.lecturerId) throw Error('PERMISSION_DENIED');
+  const bases=(tables?tables.Schedules:lab2Read_(book,'Schedules')).filter(s=>s.lecturerId===actor.entity.lecturerId&&s.semester===cls.semester&&s.subjectCode===cls.subjectCode&&s.classCode===cls.classCode);
   if(new Set(bases.map(s=>s.scheduleId)).size!==bases.length) throw Error('OCCURRENCE_DUPLICATE');
-  const exceptions=lab2Read_(book,'ScheduleExceptions').filter(e=>e.classId===cls.classId);
+  const exceptions=(tables?tables.ScheduleExceptions:lab2Read_(book,'ScheduleExceptions')).filter(e=>e.classId===cls.classId);
   const result=[];
   for(const base of bases) {
     const overrides=exceptions.filter(e=>e.scheduleId===base.scheduleId&&e.date===date&&e.kind!=='MAKEUP');

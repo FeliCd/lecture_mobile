@@ -1,0 +1,1 @@
+{"conditions":[],"parameters":{"subject_updates_enabled":{"defaultValue":{"value":"true"},"valueType":"BOOLEAN","description":"Cho phép trang cập nhật môn học"},"subject_updates_page_size":{"defaultValue":{"value":"20"},"valueType":"NUMBER","description":"Số bài mỗi trang, app giới hạn 5-30"}}}

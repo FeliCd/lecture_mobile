@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'domain.dart';
 import 'repository.dart';
 import 'widgets.dart';
+import 'session_view_model.dart';
 
 Future<void> editAttendance(
   BuildContext context,
@@ -36,7 +37,7 @@ Future<void> editAttendance(
   ).showSnackBar(const SnackBar(content: Text('Đã cập nhật điểm danh.')));
 }
 
-class AttendanceEditDialog extends StatefulWidget {
+class AttendanceEditDialog extends StatelessWidget {
   final String status, notes;
   final String? studentName, studentCode, contextLabel;
   final Future<Data> Function(Data)? onSave;
@@ -50,18 +51,47 @@ class AttendanceEditDialog extends StatefulWidget {
     this.onSave,
   });
   @override
-  State<AttendanceEditDialog> createState() => _AttendanceEditDialogState();
+  Widget build(BuildContext context) => ProviderScope(
+    child: _AttendanceEditBody(
+      status: status,
+      notes: notes,
+      studentName: studentName,
+      studentCode: studentCode,
+      contextLabel: contextLabel,
+      onSave: onSave,
+    ),
+  );
 }
 
-class _AttendanceEditDialogState extends State<AttendanceEditDialog> {
+class _AttendanceEditBody extends ConsumerStatefulWidget {
+  final String status, notes;
+  final String? studentName, studentCode, contextLabel;
+  final Future<Data> Function(Data)? onSave;
+  const _AttendanceEditBody({
+    required this.status,
+    required this.notes,
+    this.studentName,
+    this.studentCode,
+    this.contextLabel,
+    this.onSave,
+  });
+  @override
+  ConsumerState<_AttendanceEditBody> createState() =>
+      _AttendanceEditDialogState();
+}
+
+class _AttendanceEditDialogState extends ConsumerState<_AttendanceEditBody> {
   final form = GlobalKey<FormState>();
   late String status = attendanceStatus(widget.status) == 'pending'
       ? 'present'
       : attendanceStatus(widget.status);
   late final initialStatus = status;
   late final notes = TextEditingController(text: widget.notes);
-  bool busy = false, saved = false;
-  Object? error;
+  final dialogId = Object();
+  bool saved = false;
+  AttendanceEditState get model => ref.read(attendanceEditProvider(dialogId));
+  bool get busy => model.busy;
+  Object? get error => model.error;
   bool get dirty => status != initialStatus || notes.text != widget.notes;
   Future<void> save() async {
     if (busy || !form.currentState!.validate()) return;
@@ -69,27 +99,14 @@ class _AttendanceEditDialogState extends State<AttendanceEditDialog> {
       'status': status,
       'notes': notes.text.trim(),
     };
-    setState(() {
-      busy = true;
-      error = null;
-    });
-    try {
-      await widget.onSave?.call(input);
-      if (!mounted) return;
-      setState(() {
-        saved = true;
-        busy = false;
-      });
+    final success = await ref
+        .read(attendanceEditProvider(dialogId).notifier)
+        .save(input, widget.onSave);
+    if (success && mounted) {
+      setState(() => saved = true);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) Navigator.pop(context, input);
       });
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          error = e;
-          busy = false;
-        });
-      }
     }
   }
 
@@ -100,108 +117,115 @@ class _AttendanceEditDialogState extends State<AttendanceEditDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => CampusDraftGuard(
-    dirty: !saved && dirty,
-    busy: busy,
-    child: AlertDialog(
-      title: const Text('Sửa điểm danh'),
-      content: Form(
-        key: form,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (widget.studentName != null || widget.studentCode != null) ...[
+  Widget build(BuildContext context) {
+    ref.watch(attendanceEditProvider(dialogId));
+    return CampusDraftGuard(
+      dirty: !saved && dirty,
+      busy: busy,
+      child: AlertDialog(
+        title: const Text('Sửa điểm danh'),
+        content: Form(
+          key: form,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.studentName != null ||
+                    widget.studentCode != null) ...[
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.studentName ?? 'Sinh viên',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        if (widget.studentCode != null)
+                          Text(widget.studentCode!),
+                        if (widget.contextLabel != null)
+                          Text(
+                            widget.contextLabel!,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                      ],
+                    ),
+                  ),
+                  const Divider(),
+                ],
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Text(
+                    'Trạng thái',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
-                      Text(
-                        widget.studentName ?? 'Sinh viên',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      if (widget.studentCode != null) Text(widget.studentCode!),
-                      if (widget.contextLabel != null)
-                        Text(
-                          widget.contextLabel!,
-                          style: Theme.of(context).textTheme.bodyMedium,
+                      for (final option in [
+                        'present',
+                        'late',
+                        'absent',
+                        'excused',
+                      ])
+                        ChoiceChip(
+                          label: Text(StatusBadge.label(option)),
+                          selected: status == option,
+                          onSelected: busy
+                              ? null
+                              : (_) => setState(() => status = option),
                         ),
                     ],
                   ),
                 ),
-                const Divider(),
-              ],
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Trạng thái',
-                  style: Theme.of(context).textTheme.labelLarge,
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: notes,
+                  enabled: !busy,
+                  onChanged: (_) => setState(() {}),
+                  maxLength: 500,
+                  minLines: 2,
+                  maxLines: 4,
+                  textCapitalization: TextCapitalization.sentences,
+                  scrollPadding: const EdgeInsets.all(24),
+                  decoration: const InputDecoration(
+                    labelText: 'Lý do / ghi chú',
+                  ),
+                  validator: (v) => v == null || v.trim().isEmpty
+                      ? 'Nhập lý do điều chỉnh.'
+                      : null,
                 ),
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final option in [
-                      'present',
-                      'late',
-                      'absent',
-                      'excused',
-                    ])
-                      ChoiceChip(
-                        label: Text(StatusBadge.label(option)),
-                        selected: status == option,
-                        onSelected: busy
-                            ? null
-                            : (_) => setState(() => status = option),
+                const Text('Lưu kèm lý do và người sửa.'),
+                if (error != null)
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      '${mutationErrorMessage(error!)}\nNội dung nhập vẫn được giữ.',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
                       ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: notes,
-                enabled: !busy,
-                onChanged: (_) => setState(() {}),
-                maxLength: 500,
-                minLines: 2,
-                maxLines: 4,
-                textCapitalization: TextCapitalization.sentences,
-                scrollPadding: const EdgeInsets.all(24),
-                decoration: const InputDecoration(labelText: 'Lý do / ghi chú'),
-                validator: (v) => v == null || v.trim().isEmpty
-                    ? 'Nhập lý do điều chỉnh.'
-                    : null,
-              ),
-              const Text('Lưu kèm lý do và người sửa.'),
-              if (error != null)
-                Semantics(
-                  liveRegion: true,
-                  child: Text(
-                    '${mutationErrorMessage(error!)}\nNội dung nhập vẫn được giữ.',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: busy ? null : () => Navigator.maybePop(context),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: busy ? null : save,
+            child: Text(busy ? 'Đang lưu…' : 'Lưu'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: busy ? null : () => Navigator.maybePop(context),
-          child: const Text('Hủy'),
-        ),
-        FilledButton(
-          onPressed: busy ? null : save,
-          child: Text(busy ? 'Đang lưu…' : 'Lưu'),
-        ),
-      ],
-    ),
-  );
+    );
+  }
 }

@@ -225,6 +225,9 @@ void main() {
       await tester.tap(find.text('Bắt đầu điểm danh'));
       await tester.pumpAndSettle();
       expect(find.text('Không thể kết nối. Vui lòng thử lại.'), findsOneWidget);
+      expect(find.text('Bắt đầu điểm danh'), findsNothing);
+      await tester.tap(find.text('Kiểm tra lại'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Bắt đầu điểm danh'));
       await tester.pumpAndSettle();
       final writes = repo.calls

@@ -17,6 +17,7 @@ import 'class_tools.dart';
 import 'timetable_card.dart' show roomLabel;
 import 'attendance_history.dart';
 import 'academic_term.dart';
+import '../groups/study_groups.dart';
 
 class ClassTile extends StatelessWidget {
   final Data data;
@@ -291,7 +292,31 @@ class ClassPage extends ConsumerWidget {
           }
           final cls = s.data!;
           return Scaffold(
-            appBar: AppBar(title: Text('${cls['classCode'] ?? 'Lớp học'}')),
+            appBar: AppBar(
+              title: Text('${cls['classCode'] ?? 'Lớp học'}'),
+              actions: [
+                IconButton(
+                  tooltip: 'Nhóm học tập',
+                  icon: const Icon(Icons.forum_outlined),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => Scaffold(
+                        appBar: AppBar(title: const Text('Nhóm học tập')),
+                        body: StudyGroups(
+                          classId: classId,
+                          call: (method, data) =>
+                              ref.read(repositoryProvider).call('groupCall', {
+                                'method': method,
+                                'data': data,
+                              }),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
             body: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

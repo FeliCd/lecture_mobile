@@ -69,3 +69,5 @@ ui-debug.log
 .firebase/
 config/lab2.free.json
 /web_checkin/public/config.js
+/android/app/google-services.json
+/tmp/

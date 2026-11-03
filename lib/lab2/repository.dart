@@ -8,6 +8,9 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'lecturer_reminders.dart';
 import 'package:http/http.dart' as http;
 import 'desktop_sync.dart';
+import '../cloud/cloud_services.dart';
+import '../cloud/push_notifications.dart';
+import 'auth_session_service.dart';
 
 final sharedDesktop = DesktopSync(
   endpoint: const String.fromEnvironment('APPS_SCRIPT_URL'),
@@ -45,7 +48,7 @@ final memberNamesProvider = StreamProvider.autoDispose
       return repo.memberStream(classId);
     });
 
-class CampusRepository {
+class CampusRepository implements AuthSessionService {
   final FirebaseFirestore db;
   final FirebaseFunctions functions;
   CampusRepository({FirebaseFirestore? firestore, FirebaseFunctions? callable})
@@ -121,7 +124,18 @@ class CampusRepository {
   Future<Data> call(String name, Data input) async {
     if (useSharedDesktop) {
       try {
-        return await sharedDesktop.call(name, input);
+        final result = await sharedDesktop.call(name, input);
+        const events = {
+          'createClassSession': 'attendance_session_opened',
+          'closeAttendanceSession': 'attendance_session_closed',
+          'updateAttendanceRecord': 'attendance_record_updated',
+          'submitQuickAttendance': 'quick_attendance_completed',
+        };
+        if (events[name] != null) await CloudTelemetry.event(events[name]!);
+        if (name == 'groupCall' && input['method'] == 'saveGroupPlan') {
+          await CloudTelemetry.event('group_plan_saved');
+        }
+        return result;
       } catch (e) {
         if (e.toString().contains('FEATURE_DISABLED') &&
             [
@@ -245,14 +259,20 @@ class CampusRepository {
     }
   }
 
+  @override
   Future<void> logout() async {
+    final firebaseUid = FirebaseAuth.instance.currentUser?.uid;
     await LecturerReminders.instance.activate(null);
     sharedDesktop.reset();
     await FirebaseAuth.instance.signOut();
     if (googleInitialized) await GoogleSignIn.instance.signOut();
+    await PushNotifications.instance.logout(firebaseUid);
+    await CloudTelemetry.event('logout');
+    await CloudTelemetry.identity(null);
   }
 
   static bool googleInitialized = false;
+  @override
   Future<void> loginWithGoogle() async {
     if (!googleInitialized) {
       await GoogleSignIn.instance.initialize(
@@ -266,6 +286,8 @@ class CampusRepository {
     await FirebaseAuth.instance.signInWithCredential(
       GoogleAuthProvider.credential(idToken: token),
     );
+    await CloudTelemetry.identity(FirebaseAuth.instance.currentUser?.uid);
+    await CloudTelemetry.event('login', {'method': 'google'});
   }
 }
 

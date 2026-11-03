@@ -8,6 +8,8 @@ import 'repository.dart';
 import 'timetable_domain.dart';
 import 'widgets.dart';
 import 'lecturer_workspace_store.dart';
+import '../cloud/cloud_services.dart';
+import '../cloud/cloud_view_model.dart';
 
 bool inReportWeek(DateTime date, DateTime start) {
   final day = campusDay(date);
@@ -257,11 +259,57 @@ class _WeeklyReportState extends ConsumerState<LecturerWeeklyReportPage> {
                           ],
                         ),
                       );
+                      await CloudTelemetry.event('weekly_report_exported');
                     });
                     if (mounted) setState(() => exporting = false);
                   },
           ),
           TextButton(onPressed: load, child: const Text('Đọc lại snapshot')),
+          Consumer(
+            builder: (context, ref, _) {
+              final upload = ref.watch(reportUploadProvider);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.cloud_upload_outlined),
+                    label: const Text('Lưu báo cáo lên Firebase'),
+                    onPressed: upload.busy
+                        ? null
+                        : () => ref
+                              .read(reportUploadProvider.notifier)
+                              .upload(
+                                weeklyWorkbook(
+                                  user: widget.user,
+                                  start: start,
+                                  capturedAt: capturedAt!,
+                                  sessions: sessions!,
+                                  local: local!,
+                                ),
+                                'lecturer-week-${start.toIso8601String().substring(0, 10)}.xlsx',
+                              ),
+                  ),
+                  if (upload.busy) ...[
+                    LinearProgressIndicator(value: upload.progress),
+                    Text('Đang tải ${(upload.progress * 100).round()}%'),
+                  ],
+                  if (upload.error != null)
+                    Text(
+                      upload.error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  if (upload.receipt != null) ...[
+                    const Text(
+                      'Đã tải lên. URL là liên kết chia sẻ có token; chỉ gửi cho người bạn cho phép.',
+                    ),
+                    SelectableText(upload.receipt!.url),
+                  ],
+                ],
+              );
+            },
+          ),
         ],
       ],
     ),

@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'lab2/app.dart';
 import 'lab2/theme.dart';
 import 'lab2/desktop_sync.dart';
+import 'cloud/cloud_services.dart';
+import 'cloud/push_notifications.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -46,6 +48,7 @@ Future<void> main() async {
         appId: emulator ? '1:123456789:android:emulator' : app,
         messagingSenderId: emulator ? '123456789' : sender,
         projectId: project,
+        storageBucket: const String.fromEnvironment('FIREBASE_STORAGE_BUCKET'),
       ),
     );
     if (emulator) {
@@ -58,6 +61,16 @@ Future<void> main() async {
       FirebaseFunctions.instanceFor(
         region: 'asia-southeast1',
       ).useFunctionsEmulator(host, 5001);
+    }
+    try {
+      await CloudTelemetry.initialize();
+    } catch (e) {
+      await CloudTelemetry.handled('cloud_bootstrap', e);
+    }
+    try {
+      await PushNotifications.instance.initialize();
+    } catch (e) {
+      await CloudTelemetry.handled('push_bootstrap', e);
     }
     runApp(const ProviderScope(child: CampusApp()));
   } catch (error) {

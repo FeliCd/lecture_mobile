@@ -1,10 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'domain.dart';
 import 'quick_attendance.dart';
-import 'repository.dart';
+import 'session_view_model.dart';
 import 'timetable_domain.dart';
 import 'timetable_card.dart' show roomLabel;
 import 'widgets.dart';
@@ -49,9 +50,12 @@ class DesktopSessionDialog extends ConsumerStatefulWidget {
 
 class _DesktopSessionDialogState extends ConsumerState<DesktopSessionDialog>
     with WidgetsBindingObserver {
-  Data? occurrence;
-  Object? error;
-  bool loading = false, submitting = false;
+  late final selectorKey = jsonEncode(widget.period.selector);
+  SessionState get model => ref.read(sessionOpeningProvider(selectorKey));
+  Data? get occurrence => model.occurrence;
+  Object? get error => model.error;
+  bool get loading => model.loading;
+  bool get submitting => model.submitting;
   int duration = 10;
   Timer? timer;
   bool foreground = true;
@@ -59,7 +63,9 @@ class _DesktopSessionDialogState extends ConsumerState<DesktopSessionDialog>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) load();
+    });
     timer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (occurrence?['state'] == 'NOT_YET' ||
           occurrence?['state'] == 'AVAILABLE') {
@@ -82,52 +88,20 @@ class _DesktopSessionDialogState extends ConsumerState<DesktopSessionDialog>
   }
 
   Future<void> load() async {
-    if (loading || submitting || !foreground) return;
-    setState(() {
-      loading = true;
-      error = null;
-    });
-    try {
-      final value = await ref
-          .read(repositoryProvider)
-          .call('getTeachingOccurrence', widget.period.selector);
-      if (mounted) setState(() => occurrence = value);
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          error = e;
-          occurrence = null;
-        });
-      }
-    } finally {
-      if (mounted) setState(() => loading = false);
-    }
+    if (!foreground) return;
+    await ref.read(sessionOpeningProvider(selectorKey).notifier).load();
   }
 
   Future<void> submit() async {
-    if (submitting || loading || occurrence?['state'] != 'AVAILABLE') return;
-    setState(() {
-      submitting = true;
-      error = null;
-    });
-    try {
-      final result = await ref
-          .read(repositoryProvider)
-          .call('createClassSession', {
-            ...widget.period.selector,
-            'occurrenceId': occurrence!['occurrenceId'],
-            'durationMinutes': duration,
-          });
-      if (mounted) Navigator.pop(context, result);
-    } catch (e) {
-      if (mounted) setState(() => error = e);
-    } finally {
-      if (mounted) setState(() => submitting = false);
-    }
+    final result = await ref
+        .read(sessionOpeningProvider(selectorKey).notifier)
+        .open(duration);
+    if (mounted && result != null) Navigator.pop(context, result);
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(sessionOpeningProvider(selectorKey));
     final p = widget.period, state = occurrence?['state'];
     final displayedDay =
         DateTime.tryParse('${occurrence?['sessionDate'] ?? ''}') ?? p.day;
