@@ -99,7 +99,7 @@ class PushNotifications implements PushPermissionService {
   void Function(String)? onOpen;
   String? pendingRoute;
   bool initialized = false;
-  bool get supported => CloudTelemetry.enabled;
+  bool get supported => androidCloudSupported && Firebase.apps.isNotEmpty;
   Future<void> initialize() async {
     if (initialized || !supported) return;
     FirebaseMessaging.onBackgroundMessage(firebasePushBackground);
@@ -188,7 +188,16 @@ class PushNotifications implements PushPermissionService {
     return result;
   }
 
-  Future<String?> testToken() => FirebaseMessaging.instance.getToken();
+  Future<String?> testToken() async {
+    if (!supported) throw const CloudServiceFailure('unsupported');
+    final permission = await permissionStatus();
+    if (permission != PushPermission.authorized &&
+        permission != PushPermission.provisional) {
+      throw const CloudServiceFailure('notification-permission');
+    }
+    return FirebaseMessaging.instance.getToken();
+  }
+
   Future<void> logout(String? uid) async {
     pendingRoute = null;
     if (uid != null) await history.clear(uid);

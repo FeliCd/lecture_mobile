@@ -117,18 +117,14 @@ void main() {
       await tester.tap(find.byTooltip('Cập nhật phiên'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.byTooltip('Sửa điểm danh'),
+        find.byKey(const ValueKey('attendance-switch/u')),
         100,
         scrollable: find.byType(Scrollable).first,
       );
       expect(
         tester
-            .widget<IconButton>(
-              find.byWidgetPredicate(
-                (w) => w is IconButton && w.tooltip == 'Sửa điểm danh',
-              ),
-            )
-            .onPressed,
+            .widget<Switch>(find.byKey(const ValueKey('attendance-switch/u')))
+            .onChanged,
         isNull,
       );
       await tester.tap(find.text('Mã QR'));

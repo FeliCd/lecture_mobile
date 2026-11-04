@@ -7,6 +7,7 @@ import 'cloud_view_model.dart';
 import 'push_notifications.dart';
 import 'push_permission_service.dart';
 import 'push_view_model.dart';
+import 'cloud_diagnostics.dart';
 
 final pushServiceProvider = Provider((ref) => PushNotifications.instance);
 final pushHistoryProvider = FutureProvider.autoDispose
@@ -124,17 +125,23 @@ class CloudSettingsPage extends ConsumerStatefulWidget {
 
 class _CloudSettingsPageState extends ConsumerState<CloudSettingsPage> {
   String? status, token;
+  StorageProbe? storageProbe;
   bool busy = false;
   Future<void> run(Future<void> Function() fn) async {
     if (busy) return;
-    setState(() => busy = true);
+    setState(() {
+      busy = true;
+      status = null;
+    });
     try {
       await fn();
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(
           () => status =
-              'Thao tác chưa hoàn tất. Kiểm tra cấu hình Firebase và mạng.',
+              e is CloudServiceFailure && e.code == 'notification-permission'
+              ? 'Cho phép nhận thông báo trong mục Quản lý thông báo rồi thử lại.'
+              : 'Thao tác chưa hoàn tất. Kiểm tra cấu hình Firebase và mạng.',
         );
       }
     } finally {
@@ -145,11 +152,139 @@ class _CloudSettingsPageState extends ConsumerState<CloudSettingsPage> {
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(cloudSettingsProvider);
+    final diagnostics = ref.watch(cloudDiagnosticsProvider);
+    final permission = ref.watch(pushPermissionProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Dịch vụ đám mây')),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          const Text(
+            'Trạng thái trên thiết bị',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const Text(
+            'Các trạng thái dưới đây không thay thế kiểm tra gửi và nhận dữ liệu thực tế.',
+          ),
+          diagnostics.when(
+            loading: () => const LinearProgressIndicator(),
+            error: (_, _) => const Text(
+              'Chưa đọc được trạng thái. Bấm Kiểm tra lại dịch vụ.',
+            ),
+            data: (d) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _CloudServiceCard(
+                  icon: Icons.cloud_outlined,
+                  title: 'Firebase',
+                  status: d.firebaseReady ? 'Đã khởi tạo' : 'Chưa khởi tạo',
+                  detail: d.firebaseReady
+                      ? 'Cấu hình ứng dụng đã được nạp.'
+                      : 'Cần cấu hình Firebase trước khi sử dụng.',
+                ),
+                _CloudServiceCard(
+                  icon: Icons.cloud_upload_outlined,
+                  title: 'Lưu báo cáo',
+                  status: !d.storageConfigured
+                      ? 'Thiếu cấu hình'
+                      : !d.signedIn
+                      ? 'Cần đăng nhập'
+                      : 'Đã cấu hình',
+                  detail: !d.storageConfigured
+                      ? 'Chưa cấu hình nơi lưu báo cáo. Liên hệ quản trị viên.'
+                      : 'Báo cáo Excel tối đa 10 MB. Quyền upload cần được kiểm tra bằng một lần lưu báo cáo.',
+                ),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.network_check),
+                  onPressed: busy || !d.storageConfigured || !d.signedIn
+                      ? null
+                      : () => run(() async {
+                          final probe = await ref
+                              .read(cloudDiagnosticsServiceProvider)
+                              .checkStorage();
+                          if (mounted) setState(() => storageProbe = probe);
+                        }),
+                  label: const Text('Kiểm tra lưu báo cáo'),
+                ),
+                if (storageProbe != null)
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(storageProbe!.message),
+                  ),
+                _CloudServiceCard(
+                  icon: Icons.insights_outlined,
+                  title: 'Phân tích sử dụng',
+                  status: d.analyticsEnabled
+                      ? 'Đã bật trên thiết bị'
+                      : 'Chưa bật',
+                  detail: d.analyticsEnabled
+                      ? 'Để xác nhận dữ liệu đã tới máy chủ, quản trị viên kiểm tra Analytics.'
+                      : d.androidCloud
+                      ? 'SDK chưa khởi tạo thành công.'
+                      : 'Bản chạy hiện tại không bật thu thập cloud Android.',
+                ),
+                _CloudServiceCard(
+                  icon: Icons.bug_report_outlined,
+                  title: 'Báo lỗi ứng dụng',
+                  status: d.crashlyticsEnabled
+                      ? 'Đã bật trên thiết bị'
+                      : 'Chưa bật',
+                  detail: d.crashlyticsEnabled
+                      ? 'Để xác nhận báo lỗi đã tới máy chủ, quản trị viên kiểm tra Crashlytics.'
+                      : d.androidCloud
+                      ? 'SDK chưa khởi tạo thành công.'
+                      : 'Bản chạy hiện tại không bật thu thập cloud Android.',
+                ),
+                ExpansionTile(
+                  title: const Text('Chi tiết cấu hình'),
+                  children: [
+                    ListTile(
+                      title: const Text('Project'),
+                      subtitle: Text(
+                        d.projectId.isEmpty ? 'Chưa có' : d.projectId,
+                      ),
+                    ),
+                    ListTile(
+                      title: const Text('Nơi lưu báo cáo'),
+                      subtitle: Text(d.bucket.isEmpty ? 'Chưa có' : d.bucket),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          permission.when(
+            data: (p) => _CloudServiceCard(
+              icon: Icons.notifications_outlined,
+              title: 'Thông báo',
+              status:
+                  p == PushPermission.authorized ||
+                      p == PushPermission.provisional
+                  ? 'Đã cấp quyền'
+                  : 'Chưa sẵn sàng',
+              detail: pushPermissionLabel(p),
+            ),
+            loading: () => const LinearProgressIndicator(),
+            error: (_, _) => const Text('Chưa kiểm tra được quyền thông báo.'),
+          ),
+          OutlinedButton(
+            onPressed: () => context.push('/notifications'),
+            child: const Text('Quản lý thông báo'),
+          ),
+          TextButton(
+            onPressed: busy || diagnostics.isLoading
+                ? null
+                : () => run(() async {
+                    setState(() => storageProbe = null);
+                    ref.invalidate(cloudDiagnosticsProvider);
+                    await Future.wait([
+                      ref.read(cloudDiagnosticsProvider.future),
+                      ref.read(pushPermissionProvider.notifier).refresh(),
+                    ]);
+                  }),
+            child: const Text('Kiểm tra lại dịch vụ'),
+          ),
+          const Divider(),
           const Text(
             'Cấu hình cập nhật môn học',
             style: TextStyle(fontWeight: FontWeight.bold),
@@ -185,7 +320,7 @@ class _CloudSettingsPageState extends ConsumerState<CloudSettingsPage> {
             'Tải tối đa mỗi 15 phút; nếu mất mạng sẽ dùng bản đã kích hoạt hoặc mặc định. Thay đổi thể hiện ở trang Cập nhật.',
           ),
           OutlinedButton(
-            onPressed: busy
+            onPressed: busy || settings.isLoading
                 ? null
                 : () => run(
                     () => ref.read(cloudSettingsProvider.notifier).refresh(),
@@ -197,14 +332,18 @@ class _CloudSettingsPageState extends ConsumerState<CloudSettingsPage> {
             const Divider(),
             const Text('Khu vực trình diễn Lab 3'),
             OutlinedButton(
-              onPressed: busy
+              onPressed:
+                  busy ||
+                      !diagnostics.hasValue ||
+                      !ref.read(pushServiceProvider).supported
                   ? null
                   : () => run(() async {
                       token = await ref.read(pushServiceProvider).testToken();
                       if (mounted) {
                         setState(
-                          () => status =
-                              'Dùng token này gửi thông báo test từ Console. Không đưa token vào tài liệu công khai.',
+                          () => status = token == null
+                              ? 'Chưa lấy được token. Kiểm tra quyền thông báo và kết nối.'
+                              : 'Dùng token này gửi thông báo test từ Console. Không đưa token vào tài liệu công khai.',
                         );
                       }
                     }),
@@ -212,7 +351,7 @@ class _CloudSettingsPageState extends ConsumerState<CloudSettingsPage> {
             ),
             if (token != null) SelectableText(token!),
             OutlinedButton(
-              onPressed: busy
+              onPressed: busy || diagnostics.value?.crashlyticsEnabled != true
                   ? null
                   : () => run(() async {
                       await CloudTelemetry.handled('lab3_demo_nonfatal');
@@ -226,7 +365,7 @@ class _CloudSettingsPageState extends ConsumerState<CloudSettingsPage> {
               child: const Text('Gửi lỗi non-fatal thử'),
             ),
             OutlinedButton(
-              onPressed: busy
+              onPressed: busy || diagnostics.value?.crashlyticsEnabled != true
                   ? null
                   : () async {
                       final yes = await showDialog<bool>(
@@ -248,7 +387,7 @@ class _CloudSettingsPageState extends ConsumerState<CloudSettingsPage> {
                           ],
                         ),
                       );
-                      if (yes == true && CloudTelemetry.enabled) {
+                      if (yes == true && CloudTelemetry.crashlyticsEnabled) {
                         CloudTelemetry.demoCrash();
                       }
                     },
@@ -259,6 +398,44 @@ class _CloudSettingsPageState extends ConsumerState<CloudSettingsPage> {
       ),
     );
   }
+}
+
+class _CloudServiceCard extends StatelessWidget {
+  final IconData icon;
+  final String title, status, detail;
+  const _CloudServiceCard({
+    required this.icon,
+    required this.title,
+    required this.status,
+    required this.detail,
+  });
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(status, style: const TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(detail),
+        ],
+      ),
+    ),
+  );
 }
 
 String _configTime(DateTime value) {

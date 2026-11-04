@@ -4,16 +4,11 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-
-typedef GroupCall =
-    Future<dynamic> Function(String method, Map<String, dynamic> data);
-String groupRequestKey() {
-  final r = Random.secure();
-  return List.generate(
-    24,
-    (_) => r.nextInt(256).toRadixString(16).padLeft(2, '0'),
-  ).join();
-}
+import 'group_tasks.dart';
+import 'group_api.dart';
+import 'group_attachment.dart';
+import 'group_signup_panel.dart';
+export 'group_api.dart';
 
 class StudyGroups extends StatefulWidget {
   final GroupCall call;
@@ -34,6 +29,7 @@ class _StudyGroupsState extends State<StudyGroups> {
   Timer? timer;
   int generation = 0;
   bool firstMessages = true;
+  bool signupLocked = false;
   @override
   void initState() {
     super.initState();
@@ -60,7 +56,13 @@ class _StudyGroupsState extends State<StudyGroups> {
     try {
       await fn();
     } catch (e) {
-      if (mounted) setState(() => error = 'Chưa hoàn tất: $e');
+      if (mounted) {
+        setState(
+          () => error = e is FormatException
+              ? e.message.toString()
+              : 'Chưa hoàn tất: $e',
+        );
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -176,17 +178,57 @@ class _StudyGroupsState extends State<StudyGroups> {
   }
 
   Future<void> send() async {
+    if (selected == null ||
+        (pending == null && text.text.trim().isEmpty && attachment == null)) {
+      return;
+    }
     pending ??= {
       'classId': widget.classId,
       'groupId': selected,
-      'text': text.text,
-      if (attachment != null) 'file': attachment,
+      'text': text.text.trim(),
+      if (attachment != null)
+        'file': {'name': attachment!['name'], 'base64': attachment!['base64']},
       'requestKey': groupRequestKey(),
     };
     await widget.call('sendGroupMessage', pending!);
+    if (!mounted) return;
     pending = null;
     text.clear();
     attachment = null;
+    await readMessages();
+  }
+
+  Future<void> chooseAttachment() async {
+    final result = await FilePicker.pickFiles(
+      dialogTitle: 'Chọn tệp gửi cho nhóm',
+      withReadStream: true,
+      type: FileType.custom,
+      allowedExtensions: groupAttachmentExtensions,
+    );
+    if (result == null || !mounted) return;
+    final value = await readGroupAttachment(result.files.single);
+    if (mounted) setState(() => attachment = value);
+  }
+
+  Future<void> changeGroup(String? id) async {
+    if (id == null || id == selected || busy || pending != null) return;
+    if ((text.text.isNotEmpty || attachment != null) &&
+        !await confirm(
+          context,
+          'Bỏ tin nhắn và tệp chưa gửi để chuyển nhóm?',
+        )) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      selected = id;
+      text.clear();
+      attachment = null;
+      messages = [];
+      older = null;
+      firstMessages = true;
+      generation++;
+    });
     await readMessages();
   }
 
@@ -196,6 +238,31 @@ class _StudyGroupsState extends State<StudyGroups> {
     children: [
       Text('Nhóm học tập', style: Theme.of(context).textTheme.headlineSmall),
       const Text('Chia nhóm, trao đổi và chia sẻ tài liệu trong lớp.'),
+      if (plan != null)
+        GroupSignupPanel(
+          key: ValueKey('signup/${widget.classId}'),
+          call: widget.call,
+          classId: widget.classId,
+          version: plan!['version'] as int,
+          groupCount: count,
+          existingGroupCount: groups.length,
+          disabled:
+              busy ||
+              dirty ||
+              pending != null ||
+              text.text.isNotEmpty ||
+              attachment != null,
+          hasUnsavedChanges: () =>
+              busy ||
+              dirty ||
+              pending != null ||
+              text.text.isNotEmpty ||
+              attachment != null,
+          onChanged: load,
+          onLockChanged: (value) {
+            if (mounted) setState(() => signupLocked = value);
+          },
+        ),
       if (error != null)
         Padding(
           padding: const EdgeInsets.all(12),
@@ -218,15 +285,33 @@ class _StudyGroupsState extends State<StudyGroups> {
                 50,
                 (i) => DropdownMenuItem(value: i + 1, child: Text('${i + 1}')),
               ),
-              onChanged: busy ? null : (v) => setState(() => count = v!),
+              onChanged: busy || signupLocked
+                  ? null
+                  : (v) => setState(() => count = v!),
             ),
           ),
           OutlinedButton(
-            onPressed: busy || plan == null || pending != null ? null : divide,
+            onPressed: busy || signupLocked || plan == null || pending != null
+                ? null
+                : () async {
+                    if ((text.text.isNotEmpty || attachment != null) &&
+                        !await confirm(
+                          context,
+                          'Bỏ tin nhắn và tệp chưa gửi để chia lại nhóm?',
+                        )) {
+                      return;
+                    }
+                    if (!mounted) return;
+                    text.clear();
+                    attachment = null;
+                    divide();
+                  },
             child: const Text('Chia ngẫu nhiên'),
           ),
           FilledButton(
-            onPressed: busy || !dirty ? null : () => action(save),
+            onPressed: busy || signupLocked || !dirty
+                ? null
+                : () => action(save),
             child: const Text('Lưu cách chia nhóm'),
           ),
           TextButton(
@@ -270,7 +355,7 @@ class _StudyGroupsState extends State<StudyGroups> {
                   initialValue: g['name'],
                   maxLength: 80,
                   decoration: const InputDecoration(labelText: 'Tên nhóm'),
-                  enabled: !busy && pending == null,
+                  enabled: !busy && !signupLocked && pending == null,
                   onChanged: (v) => setState(() {
                     g['name'] = v;
                     dirty = true;
@@ -293,7 +378,7 @@ class _StudyGroupsState extends State<StudyGroups> {
                           ),
                         )
                         .toList(),
-                    onChanged: busy || pending != null
+                    onChanged: busy || signupLocked || pending != null
                         ? null
                         : (id) => setState(() {
                             for (final x in groups) {
@@ -340,7 +425,7 @@ class _StudyGroupsState extends State<StudyGroups> {
                     ),
                   )
                   .toList(),
-              onChanged: busy
+              onChanged: busy || signupLocked
                   ? null
                   : (id) => setState(() {
                       (groups.firstWhere((g) => g['id'] == id)['memberIds']
@@ -352,6 +437,27 @@ class _StudyGroupsState extends State<StudyGroups> {
           ),
       ],
       if (groups.isNotEmpty) ...[
+        FilledButton.icon(
+          icon: const Icon(Icons.assignment_outlined),
+          label: const Text('Giao việc cho nhóm'),
+          onPressed: busy || dirty || pending != null || selected == null
+              ? null
+              : () {
+                  final group = groups.firstWhere((g) => g['id'] == selected);
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => GroupTasksPage(
+                        call: widget.call,
+                        classId: widget.classId,
+                        groupId: group['id'],
+                        groupName: group['name'],
+                        memberCount: (group['memberIds'] as List).length,
+                        version: plan!['version'] as int,
+                      ),
+                    ),
+                  );
+                },
+        ),
         DropdownButtonFormField<String>(
           key: ValueKey(selected),
           initialValue: selected,
@@ -364,18 +470,7 @@ class _StudyGroupsState extends State<StudyGroups> {
                 ),
               )
               .toList(),
-          onChanged: busy || pending != null
-              ? null
-              : (v) {
-                  setState(() {
-                    selected = v;
-                    messages = [];
-                    older = null;
-                    firstMessages = true;
-                    generation++;
-                  });
-                  readMessages();
-                },
+          onChanged: busy || pending != null ? null : changeGroup,
         ),
         if (older != null)
           TextButton(
@@ -408,7 +503,18 @@ class _StudyGroupsState extends State<StudyGroups> {
                                 ),
                               );
                             }),
-                      child: Text('Tải ${m['fileName']}'),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.download_outlined),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              'Tải ${m['fileName']}${(m['size'] as num? ?? 0) > 0 ? ' · ${(m['size'] / 1024).ceil()} KB' : ''}',
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                 ],
               ),
@@ -416,13 +522,30 @@ class _StudyGroupsState extends State<StudyGroups> {
           ),
         TextField(
           controller: text,
+          onChanged: (_) => setState(() {}),
           enabled: !busy && pending == null,
           maxLength: 2000,
           minLines: 1,
           maxLines: 4,
           decoration: const InputDecoration(labelText: 'Tin nhắn cho nhóm'),
         ),
-        if (attachment != null) Text('Đính kèm: ${attachment!['name']}'),
+        if (attachment != null)
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.insert_drive_file_outlined),
+              title: Text('${attachment!['name']}'),
+              subtitle: Text(
+                '${(attachment!['size'] / 1024).ceil()} KB · Sẵn sàng gửi',
+              ),
+              trailing: IconButton(
+                tooltip: 'Bỏ tệp đính kèm',
+                onPressed: busy || pending != null
+                    ? null
+                    : () => setState(() => attachment = null),
+                icon: const Icon(Icons.close),
+              ),
+            ),
+          ),
         if (pending != null && !busy)
           TextButton(
             onPressed: () async {
@@ -445,43 +568,36 @@ class _StudyGroupsState extends State<StudyGroups> {
         Wrap(
           spacing: 12,
           children: [
-            OutlinedButton(
+            OutlinedButton.icon(
               onPressed: busy || dirty || pending != null
                   ? null
-                  : () => action(() async {
-                      final p = await FilePicker.pickFiles(
-                        withData: true,
-                        type: FileType.custom,
-                        allowedExtensions: [
-                          'pdf',
-                          'txt',
-                          'png',
-                          'jpg',
-                          'jpeg',
-                          'xlsx',
-                          'docx',
-                          'csv',
-                        ],
-                      );
-                      if (p == null) return;
-                      if (p.files.single.size > 512000 ||
-                          p.files.single.bytes == null) {
-                        throw StateError('Tệp tối đa 500 KB.');
-                      }
-                      attachment = {
-                        'name': p.files.single.name,
-                        'base64': base64Encode(p.files.single.bytes!),
-                      };
-                    }),
-              child: const Text('Đính kèm (tối đa 500 KB)'),
+                  : () => action(chooseAttachment),
+              icon: const Icon(Icons.attach_file),
+              label: Text(attachment == null ? 'Gửi file' : 'Đổi file'),
             ),
             FilledButton(
-              onPressed: busy || dirty ? null : () => action(send),
+              onPressed:
+                  busy ||
+                      dirty ||
+                      (pending == null &&
+                          text.text.trim().isEmpty &&
+                          attachment == null)
+                  ? null
+                  : () => action(send),
               child: Text(
-                pending == null ? 'Gửi tin nhắn' : 'Thử gửi lại cùng tin',
+                busy
+                    ? 'Đang xử lý…'
+                    : pending != null
+                    ? 'Thử gửi lại cùng tin'
+                    : attachment != null
+                    ? 'Gửi kèm file'
+                    : 'Gửi tin nhắn',
               ),
             ),
           ],
+        ),
+        const Text(
+          'PDF, ảnh, Word, Excel, TXT, CSV · 1 tệp/tin · Tối đa 500 KB',
         ),
       ],
     ],

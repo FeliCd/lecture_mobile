@@ -31,6 +31,8 @@ import 'timetable_card.dart';
 import 'profile_academic_term.dart';
 import '../cloud/cloud_pages.dart';
 import '../cloud/cloud_services.dart';
+import '../cloud/cloud_view_model.dart';
+import '../cloud/cloud_diagnostics.dart';
 import '../cloud/push_notifications.dart';
 
 final themeProvider = NotifierProvider<ThemeSettings, ThemeMode>(
@@ -220,6 +222,8 @@ class _CampusAppState extends ConsumerState<CampusApp> {
       if (next.isLoading) return;
       final uid = next.value?.uid;
       if (uid != previous?.value?.uid) {
+        ref.invalidate(reportUploadProvider);
+        ref.invalidate(cloudDiagnosticsProvider);
         if (next.value?.isLecturer == true) {
           PushNotifications.instance.onOpen = (route) => router.go(route);
           final pending = PushNotifications.instance.pendingRoute;

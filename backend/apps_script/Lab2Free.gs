@@ -3,6 +3,9 @@
  * Add this file to the existing Desktop Apps Script project and call setupLab2Free.
  */
 const LAB2_TABLES = Object.freeze({
+  PortalGroupSignupSheets: ['classId','spreadsheetId','sheetId','state','planVersion','groups','roster','prepared','createdBy','lecturerId','lecturerEmail','createdAt','lastSyncedAt','lastError','requestKey'],
+  PortalGroupTasks: ['id','classId','groupId','groupName','title','description','dueAt','createdAt','createdBy','requestKey','fingerprint'],
+  PortalTaskNotifications: ['id','taskId','classId','groupId','studentId','email','createdAt','readAt','emailStatus','emailSentAt'],
   PortalGroupPlans: ['classId','groups','version','updatedAt','updatedBy','requestKey'],
   PortalGroupReceipts: ['id','classId','groupId','actor','receipts'],
   PortalGroupMessages: ['id','classId','groupId','sender','senderName','text','fileId','fileName','mimeType','size','createdAt','requestKey'],

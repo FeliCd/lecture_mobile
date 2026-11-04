@@ -21,6 +21,8 @@ function groupAccess_(book,actor,d) {
 }
 function groupCall_(book,actor,method,d) {
   if(!d||typeof d!=='object'||Array.isArray(d)) throw Error('INVALID_INPUT');
+  if(['getGroupSignupSheet','createGroupSignupSheet','resumeGroupSignupSheet','syncGroupSignupSheet','closeGroupSignupSheet'].includes(method)) return groupSignupCall_(book,actor,method,d);
+  if(['createGroupTask','listGroupTasks','listMyTaskNotifications','readTaskNotification'].includes(method)) return groupTaskCall_(book,actor,method,d);
   lab2Class_(book,actor,String(d.classId||''),false);
   const plan=groupPlan_(book,d.classId),roster=portalRoster_(book,d.classId);
   if(method==='getGroupPlan') {
@@ -31,6 +33,7 @@ function groupCall_(book,actor,method,d) {
   if(method==='saveGroupPlan') {
     portalTeacher_(actor);const key=portalKey_(d.requestKey);
     if(plan.requestKey===key) return {saved:true,version:plan.version};
+    if(typeof groupSignupRecord_==='function'&&['PREPARING','OPEN','CONFLICT'].includes(groupSignupRecord_(book,d.classId)?.state)) throw Error('GROUP_SIGNUP_OPEN');
     portalVersion_(plan,d.version);
     if(!Array.isArray(d.groups)||d.groups.length>50) throw Error('INVALID_GROUPS');
     const used=new Set(),ids=new Set(),names=new Set(),oldIds=new Set(plan.groups.map(g=>g.id));

@@ -25,6 +25,7 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
   Data? live, qr;
   Object? failure;
   bool loading = false, writing = false, foreground = true;
+  String? writingStudent;
   int errors = 0, offset = 0;
   bool accessDenied = false;
   final searchController = TextEditingController();
@@ -73,8 +74,10 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
     if (foreground) refresh();
   }
 
-  Future<void> refresh() async {
-    if (loading || !mounted || !foreground) return;
+  Future<void> refresh({bool afterMutation = false}) async {
+    if (loading || !mounted || !foreground || (writing && !afterMutation)) {
+      return;
+    }
     poll?.cancel();
     setState(() => loading = true);
     try {
@@ -141,7 +144,7 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
         ...values,
       });
       qr = null;
-      await refresh();
+      await refresh(afterMutation: true);
     }, mutation: true);
     if (mounted) setState(() => writing = false);
   }
@@ -222,6 +225,51 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
       notes: row['notes'] ?? '',
     );
     await refresh();
+  }
+
+  Future<void> toggleStudent(Data row, bool present) async {
+    if (writing || loading || failure != null || live?['status'] == 'RESET') {
+      return;
+    }
+    final status = present ? 'present' : 'absent';
+    if (row['status'] == status) return;
+    setState(() {
+      writing = true;
+      writingStudent = row['studentUid'];
+    });
+    poll?.cancel();
+    try {
+      final notes = '${row['notes'] ?? ''}'.trim();
+      await ref.read(repositoryProvider).call('updateAttendanceRecord', {
+        'attendanceSessionId': widget.sessionId,
+        'studentUid': row['studentUid'],
+        'status': status,
+        // Keep existing lecturer notes; identify an explicit manual action when
+        // there is no note. The existing API still checks ownership and audits it.
+        'notes': notes.isNotEmpty
+            ? notes
+            : 'Giảng viên xác nhận ${StatusBadge.label(status).toLowerCase()} bằng công tắc.',
+      });
+      // Use the authoritative roster/counts, not an optimistic switch value.
+      if (mounted) await refresh(afterMutation: true);
+    } catch (error) {
+      if (mounted) {
+        // A timed-out write may have committed: reconcile before another tap.
+        await refresh(afterMutation: true);
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(mutationErrorMessage(error))));
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          writing = false;
+          writingStudent = null;
+        });
+      }
+    }
   }
 
   void showFullScreenQr() {
@@ -433,11 +481,12 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                 'Nếu bật mã xác nhận, cung cấp thêm mã đang hiển thị. Đổi QR không kéo dài phiên. '
                 'Khi mất kết nối, QR được ẩn và số liệu có thể đã cũ. '
                 'Kết thúc phiên sẽ chốt vắng những sinh viên còn chờ. '
-                'Mọi điều chỉnh sau đó cần lý do.',
+                'Bật/tắt công tắc để chuyển Có mặt/Vắng. '
+                'Bấm tên sinh viên để sửa chi tiết hoặc ghi lý do.',
           ),
           IconButton(
             tooltip: 'Cập nhật phiên',
-            onPressed: loading ? null : refresh,
+            onPressed: loading || writing ? null : refresh,
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -707,6 +756,13 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                             child: CampusStudentRow(
                               name: '${r['displayName']}',
                               code: '${r['studentCode']}',
+                              onTap:
+                                  writing ||
+                                      loading ||
+                                      failure != null ||
+                                      live?['status'] == 'RESET'
+                                  ? null
+                                  : () => correctStudent(r),
                               detail: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -715,28 +771,89 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                                     Text('${r['notes']}'),
                                 ],
                               ),
-                              action: IconButton(
-                                icon: const Icon(Icons.edit_outlined),
-                                tooltip: 'Sửa điểm danh',
-                                onPressed: writing || loading || failure != null
-                                    ? null
-                                    : () async {
-                                        await editAttendance(
-                                          context,
-                                          ref,
-                                          sessionId: widget.sessionId,
-                                          studentUid: r['studentUid'],
-                                          studentName:
-                                              r['displayName'] as String?,
-                                          studentCode:
-                                              r['studentCode'] as String?,
-                                          contextLabel:
-                                              '${live!['classCode']} · Slot ${live!['slot']}',
-                                          status: r['status'],
-                                          notes: r['notes'] ?? '',
-                                        );
-                                        await refresh();
-                                      },
+                              action: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (writingStudent == r['studentUid'])
+                                    const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        semanticsLabel: 'Đang lưu điểm danh',
+                                      ),
+                                    ),
+                                  Tooltip(
+                                    message:
+                                        r['status'] == 'present' ||
+                                            r['status'] == 'late'
+                                        ? 'Chuyển sang Vắng'
+                                        : 'Chuyển sang Có mặt',
+                                    child: Semantics(
+                                      label:
+                                          'Điểm danh ${r['displayName']} · ${r['studentCode']}',
+                                      child: Switch(
+                                        key: ValueKey(
+                                          'attendance-switch/${r['studentUid']}',
+                                        ),
+                                        value:
+                                            r['status'] == 'present' ||
+                                            r['status'] == 'late',
+                                        thumbColor:
+                                            WidgetStateProperty.resolveWith(
+                                              (states) =>
+                                                  states.contains(
+                                                    WidgetState.disabled,
+                                                  )
+                                                  ? scheme.onSurface.withValues(
+                                                      alpha: .3,
+                                                    )
+                                                  : states.contains(
+                                                      WidgetState.selected,
+                                                    )
+                                                  ? scheme.onPrimary
+                                                  : scheme.onSurfaceVariant,
+                                            ),
+                                        trackColor:
+                                            WidgetStateProperty.resolveWith(
+                                              (states) =>
+                                                  states.contains(
+                                                    WidgetState.disabled,
+                                                  )
+                                                  ? scheme.onSurface.withValues(
+                                                      alpha: .06,
+                                                    )
+                                                  : states.contains(
+                                                      WidgetState.selected,
+                                                    )
+                                                  ? scheme.primary
+                                                  : scheme.surface,
+                                            ),
+                                        trackOutlineColor:
+                                            WidgetStateProperty.resolveWith(
+                                              (states) =>
+                                                  states.contains(
+                                                    WidgetState.disabled,
+                                                  )
+                                                  ? scheme.outlineVariant
+                                                  : states.contains(
+                                                      WidgetState.selected,
+                                                    )
+                                                  ? scheme.primary
+                                                  : scheme.outline,
+                                            ),
+                                        onChanged:
+                                            writing ||
+                                                loading ||
+                                                failure != null ||
+                                                live?['status'] == 'RESET'
+                                            ? null
+                                            : (value) =>
+                                                  toggleStudent(r, value),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),

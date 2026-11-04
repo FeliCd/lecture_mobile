@@ -109,7 +109,8 @@ function portalGrades_(grades,components) {
 }
 function portalCall_(book,actor,method,d) {
   if(!d||typeof d!=='object'||Array.isArray(d)) throw Error('INVALID_INPUT');
-  if(['getGroupPlan','saveGroupPlan','getGroupMessages','sendGroupMessage','downloadGroupFile','ackGroupMessages'].includes(method)) return groupCall_(book,actor,method,d);
+  if(['getGroupSignupSheet','createGroupSignupSheet','resumeGroupSignupSheet','syncGroupSignupSheet','closeGroupSignupSheet'].includes(method)) return groupCall_(book,actor,method,d);
+  if(['getGroupPlan','saveGroupPlan','getGroupMessages','sendGroupMessage','downloadGroupFile','ackGroupMessages','createGroupTask','listGroupTasks','listMyTaskNotifications','readTaskNotification'].includes(method)) return groupCall_(book,actor,method,d);
   if(method==='listClasses') {
     const enroll=actor.role==='student'?new Set(lab2Read_(book,'Enrollments').filter(e=>e.studentId===actor.entity.studentId).map(e=>e.classId)):null;
     return lab2Read_(book,'Classes').filter(c=>enroll?enroll.has(c.classId):c.lecturerId===actor.entity.lecturerId);

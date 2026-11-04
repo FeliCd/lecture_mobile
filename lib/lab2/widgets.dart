@@ -694,15 +694,18 @@ class CampusStudentRow extends StatelessWidget {
     this.onTap,
   });
   @override
-  Widget build(BuildContext context) => ListTile(
-    contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
-    onTap: onTap,
-    title: Text(name, style: Theme.of(context).textTheme.titleSmall),
-    subtitle: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [Text(code), ?detail],
+  Widget build(BuildContext context) => Material(
+    type: MaterialType.transparency,
+    child: ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+      onTap: onTap,
+      title: Text(name, style: Theme.of(context).textTheme.titleSmall),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [Text(code), ?detail],
+      ),
+      trailing: action,
     ),
-    trailing: action,
   );
 }
 

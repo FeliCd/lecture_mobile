@@ -97,3 +97,11 @@ test('older deployments without receipt table still display saved messages hones
  const view=f.call(f.student,'getGroupMessages',{groupId:g1});assert.equal(view.receiptTracking,false);assert.equal(view.messages[0].delivery.readCount,0);
  assert.throws(()=>f.call(f.student,'ackGroupMessages',{groupId:g1,deliveredIds:[]}),/GROUP_RECEIPTS_SETUP_REQUIRED/);
 });
+test('attachment validation rejects empty, oversized, unsafe names and malformed base64 before Drive access',()=>{
+ const f=setup();f.save();f.c.Utilities.base64Decode=s=>Buffer.from(s,'base64');
+ const send=file=>f.call(f.student,'sendGroupMessage',{groupId:g1,text:'',file,requestKey:'file-validation-1234'});
+ for(const file of [{name:'../a.pdf',base64:'YWJj'},{name:'a.exe',base64:'YWJj'},{name:'a'.repeat(121)+'.txt',base64:'YWJj'},{name:'a.txt',base64:'%%%'}])assert.throws(()=>send(file),/INVALID_FILE/);
+ assert.throws(()=>send({name:'empty.txt',base64:''}),/FILE_TOO_LARGE/);
+ assert.throws(()=>send({name:'big.pdf',base64:Buffer.alloc(512001).toString('base64')}),/FILE_TOO_LARGE/);
+ assert.equal(f.call(f.teacher,'getGroupMessages',{groupId:g1}).messages.length,0);
+});

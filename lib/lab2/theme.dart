@@ -78,8 +78,11 @@ ThemeData campusTheme(Brightness brightness) {
       },
     ),
     dialogTheme: DialogThemeData(
+      backgroundColor: s.surface,
+      surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(CampusRadius.sheet),
+        side: BorderSide(color: s.outlineVariant),
       ),
     ),
     bottomSheetTheme: BottomSheetThemeData(

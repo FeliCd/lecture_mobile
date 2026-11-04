@@ -18,6 +18,8 @@ function fixture(now) {
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../apps_script/ScheduleAttendance.gs'),'utf8'),c);
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../apps_script/StudentPortal.gs'),'utf8'),c);
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../apps_script/StudyGroups.gs'),'utf8'),c);
+  vm.runInContext(fs.readFileSync(path.join(__dirname,'../apps_script/GroupTasks.gs'),'utf8'),c);
+  vm.runInContext(fs.readFileSync(path.join(__dirname,'../apps_script/GroupSignupSheets.gs'),'utf8'),c);
   const schemas = vm.runInContext('({...SCHEMA,...LAB2_TABLES})',c);
   const store = Object.fromEntries(Object.entries(schemas).map(([k,v])=>[k,[Array.from(v)]]));
   const add = (table,row) => store[table].push(Array.from(schemas[table],k=>String(row[k]??'')));

@@ -159,13 +159,9 @@ void main() {
         of: find.text('Sinh viên 59'),
         matching: find.byType(ListTile),
       );
-      final edit = find.descendant(
-        of: row,
-        matching: find.byTooltip('Sửa điểm danh'),
-      );
-      await tester.ensureVisible(edit);
+      await tester.ensureVisible(row);
       await tester.pumpAndSettle();
-      await tester.tap(edit);
+      await tester.tap(find.text('Sinh viên 59'));
       await tester.pumpAndSettle();
       expect(
         find.descendant(

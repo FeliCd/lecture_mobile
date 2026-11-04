@@ -59,7 +59,10 @@ void main() {
       );
       service.fail = true;
       await container.read(cloudSettingsProvider.notifier).refresh();
-      expect(container.read(cloudSettingsProvider).hasError, true);
+      final cached = container.read(cloudSettingsProvider).value!;
+      expect(cached.fetchFailed, true);
+      expect(cached.updatesEnabled, false);
+      expect(cached.pageSize, 7);
     },
   );
   test(

@@ -7,14 +7,50 @@ import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 
+bool get androidCloudSupported =>
+    !kIsWeb &&
+    defaultTargetPlatform == TargetPlatform.android &&
+    !const bool.fromEnvironment('USE_EMULATORS');
+
+class CloudServiceFailure implements Exception {
+  final String code;
+  const CloudServiceFailure(this.code);
+}
+
+String reportUploadError(Object error) {
+  final code = error is CloudServiceFailure
+      ? error.code
+      : error is FirebaseException
+      ? error.code
+      : '';
+  return switch (code) {
+    'no-bucket' || 'bucket-not-found' =>
+      'Chưa cấu hình đúng nơi lưu báo cáo. Liên hệ quản trị viên.',
+    'unauthenticated' =>
+      'Phiên đăng nhập hết hạn. Đăng nhập lại rồi thử lưu báo cáo.',
+    'unauthorized' =>
+      'Tài khoản chưa có quyền lưu báo cáo. Nhờ quản trị viên kiểm tra quyền Storage.',
+    'quota-exceeded' => 'Storage đã hết hạn mức. Liên hệ quản trị viên.',
+    'retry-limit-exceeded' =>
+      'Kết nối quá thời gian chờ. Kiểm tra mạng rồi thử lại.',
+    'canceled' || 'account-changed' =>
+      'Đã dừng lưu báo cáo vì tài khoản hoặc thao tác đã thay đổi.',
+    'invalid-report' =>
+      'Chọn báo cáo Excel hợp lệ, có nội dung và tối đa 10 MB.',
+    _ =>
+      'Không tải được báo cáo. Kiểm tra mạng rồi thử lại; nếu còn lỗi, liên hệ quản trị viên.',
+  };
+}
+
 /// Best effort, bounded telemetry: never sends raw exception text or user content.
 class CloudTelemetry {
   static bool enabled = false;
+  static bool analyticsEnabled = false, crashlyticsEnabled = false;
   static Future<void> event(
     String name, [
     Map<String, Object>? parameters,
   ]) async {
-    if (!enabled) return;
+    if (!analyticsEnabled) return;
     try {
       await FirebaseAnalytics.instance.logEvent(
         name: name,
@@ -26,15 +62,20 @@ class CloudTelemetry {
   }
 
   static Future<void> identity(String? uid) async {
-    if (!enabled) return;
-    try {
-      await FirebaseAnalytics.instance.setUserId(id: uid);
-      await FirebaseCrashlytics.instance.setUserIdentifier(uid ?? '');
-    } catch (_) {}
+    if (analyticsEnabled) {
+      try {
+        await FirebaseAnalytics.instance.setUserId(id: uid);
+      } catch (_) {}
+    }
+    if (crashlyticsEnabled) {
+      try {
+        await FirebaseCrashlytics.instance.setUserIdentifier(uid ?? '');
+      } catch (_) {}
+    }
   }
 
   static Future<void> handled(String operation, [Object? error]) async {
-    if (!enabled) return;
+    if (!crashlyticsEnabled) return;
     final code = error is FirebaseException ? error.code : 'operation_failed';
     try {
       await FirebaseCrashlytics.instance.setCustomKey('operation', operation);
@@ -48,17 +89,27 @@ class CloudTelemetry {
   }
 
   static Future<void> initialize() async {
-    enabled =
-        !kIsWeb &&
-        defaultTargetPlatform == TargetPlatform.android &&
-        !const bool.fromEnvironment('USE_EMULATORS');
-    if (!enabled) return;
-    await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(true);
-    await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
-    await FirebaseCrashlytics.instance.setCustomKey(
-      'app_mode',
-      'shared_lecturer',
-    );
+    enabled = false;
+    analyticsEnabled = false;
+    crashlyticsEnabled = false;
+    if (!androidCloudSupported || Firebase.apps.isEmpty) return;
+    try {
+      await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(true);
+      analyticsEnabled = true;
+    } catch (_) {}
+    try {
+      await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
+      crashlyticsEnabled = true;
+    } catch (_) {}
+    enabled = analyticsEnabled || crashlyticsEnabled;
+    await identity(FirebaseAuth.instance.currentUser?.uid);
+    if (!crashlyticsEnabled) return;
+    try {
+      await FirebaseCrashlytics.instance.setCustomKey(
+        'app_mode',
+        'shared_lecturer',
+      );
+    } catch (_) {}
     FlutterError.onError = (details) {
       FlutterError.presentError(details);
       // Redact message/stack content from user-facing errors.
@@ -80,11 +131,10 @@ class CloudTelemetry {
       );
       return true;
     };
-    await identity(FirebaseAuth.instance.currentUser?.uid);
   }
 
   static void demoCrash() {
-    if (enabled) FirebaseCrashlytics.instance.crash();
+    if (crashlyticsEnabled) FirebaseCrashlytics.instance.crash();
   }
 }
 
@@ -102,6 +152,13 @@ class CloudSettings {
   });
   static CloudSettings fromValues(bool enabled, int size) =>
       CloudSettings(updatesEnabled: enabled, pageSize: size.clamp(5, 30));
+  CloudSettings withFetchFailure() => CloudSettings(
+    updatesEnabled: updatesEnabled,
+    pageSize: pageSize,
+    usingActivatedValues: usingActivatedValues,
+    fetchFailed: true,
+    lastFetchAt: lastFetchAt,
+  );
 }
 
 abstract class RemoteSettingsService {
@@ -115,20 +172,20 @@ class FirebaseRemoteSettings implements RemoteSettingsService {
       return const CloudSettings();
     }
     final remote = FirebaseRemoteConfig.instance;
-    await remote.setDefaults({
-      'subject_updates_enabled': true,
-      'subject_updates_page_size': 20,
-    });
-    await remote.setConfigSettings(
-      RemoteConfigSettings(
-        fetchTimeout: const Duration(seconds: 12),
-        minimumFetchInterval: const bool.fromEnvironment('ENABLE_LAB3_DEMO')
-            ? Duration.zero
-            : const Duration(minutes: 15),
-      ),
-    );
     var fetchFailed = false;
     try {
+      await remote.setDefaults({
+        'subject_updates_enabled': true,
+        'subject_updates_page_size': 20,
+      });
+      await remote.setConfigSettings(
+        RemoteConfigSettings(
+          fetchTimeout: const Duration(seconds: 12),
+          minimumFetchInterval: const bool.fromEnvironment('ENABLE_LAB3_DEMO')
+              ? Duration.zero
+              : const Duration(minutes: 15),
+        ),
+      );
       await remote.fetchAndActivate();
     } catch (e) {
       fetchFailed = true;
@@ -171,11 +228,14 @@ class FirebaseReportStorage implements ReportStorageService {
     void Function(double) progress,
   ) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) throw StateError('Cần đăng nhập trước khi tải báo cáo.');
+    if (uid == null) throw const CloudServiceFailure('unauthenticated');
+    if (Firebase.app().options.storageBucket?.trim().isNotEmpty != true) {
+      throw const CloudServiceFailure('no-bucket');
+    }
     if (bytes.isEmpty ||
         bytes.length > 10 * 1024 * 1024 ||
         !RegExp(r'^[A-Za-z0-9_-]+\.xlsx$').hasMatch(name)) {
-      throw StateError('Báo cáo Excel tối đa 10 MB.');
+      throw const CloudServiceFailure('invalid-report');
     }
     final path = 'reports/$uid/${DateTime.now().microsecondsSinceEpoch}-$name';
     final task = FirebaseStorage.instance
@@ -198,12 +258,18 @@ class FirebaseReportStorage implements ReportStorageService {
     try {
       final snapshot = await task;
       if (FirebaseAuth.instance.currentUser?.uid != uid) {
-        throw StateError('Tài khoản đã thay đổi.');
+        throw const CloudServiceFailure('account-changed');
       }
       final url = await snapshot.ref.getDownloadURL();
+      if (FirebaseAuth.instance.currentUser?.uid != uid) {
+        throw const CloudServiceFailure('account-changed');
+      }
       await CloudTelemetry.event('report_upload_completed', {
         'bytes': bytes.length,
       });
+      if (FirebaseAuth.instance.currentUser?.uid != uid) {
+        throw const CloudServiceFailure('account-changed');
+      }
       return ReportReceipt(path, url);
     } catch (e) {
       await CloudTelemetry.handled('report_upload', e);
