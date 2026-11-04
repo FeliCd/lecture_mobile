@@ -1,0 +1,15 @@
+---
+description: Vai trò và liên kết dữ liệu giữa mobile, desktop và Student Web
+alwaysApply: true
+---
+
+# Quy ước ba nền tảng
+
+- Mobile và Desktop là ứng dụng dành cho giảng viên.
+- Student Web là ứng dụng dành cho sinh viên.
+- Ba nền tảng thuộc cùng một hệ thống, dùng backend/API và dữ liệu nghiệp vụ chung.
+- Giảng viên quản lý lớp, điểm danh, chia nhóm, giao việc và theo dõi kết quả trên mobile/desktop.
+- Sinh viên nhận việc/thông báo, tham gia nhóm và thực hiện thao tác dành cho sinh viên trên web.
+- Khi thêm hoặc sửa chức năng, kiểm tra cả phía giảng viên và sinh viên, quyền backend, đồng bộ trạng thái và tương thích API.
+- Ví dụ: sinh viên chọn nhóm trên Google Sheets thì backend cập nhật group plan chung; mobile/desktop giảng viên và web sinh viên đọc cùng kết quả.
+- Không lấy một thay đổi UI cục bộ làm bằng chứng rằng ba nền tảng đã đồng bộ; báo rõ phần chưa triển khai hoặc chưa kiểm thử thật.
