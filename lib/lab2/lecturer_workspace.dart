@@ -9,6 +9,7 @@ import 'lecturer_workspace_store.dart';
 import 'lecturer_reminders.dart';
 import 'lecturer_weekly_report.dart';
 import 'notebook_view_model.dart';
+import '../grade_forecast/grade_forecast_page.dart';
 
 String workspaceDate(String? raw) {
   final date = DateTime.tryParse(raw ?? '');
@@ -108,7 +109,20 @@ class _WorkspacePageState extends ConsumerState<LecturerWorkspacePage> {
     final value = ref.watch(workspaceProvider(widget.user.uid));
     final store = ref.read(workspaceStoreProvider(widget.user.uid));
     return Scaffold(
-      appBar: AppBar(title: const Text('Trợ lý giảng dạy')),
+      appBar: AppBar(
+        title: const Text('Trợ lý giảng dạy'),
+        actions: [
+          IconButton(
+            tooltip: 'Tính điểm FE/PE',
+            icon: const Icon(Icons.calculate_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const GradeForecastPage(),
+              ),
+            ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => edit(),
         icon: const Icon(Icons.add),

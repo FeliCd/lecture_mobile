@@ -18,6 +18,29 @@ import 'package:lecturer_companion/lab2/timetable_domain.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
+  testWidgets(
+    'lecturer opens forecast from assistant without changing saved tasks',
+    (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: LecturerWorkspacePage(
+              user: UserProfile('u', 'Phúc', 'lecturer', []),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Tính điểm FE/PE'));
+      await tester.pumpAndSettle();
+      expect(find.text('Tư vấn điểm cần đạt'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('Trợ lý giảng dạy'), findsOneWidget);
+      expect((await WorkspaceStore('u').read()).tasks, isEmpty);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('create and complete task through the assistant page', (
     tester,
   ) async {

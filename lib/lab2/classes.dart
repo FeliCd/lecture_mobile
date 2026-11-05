@@ -1,4 +1,5 @@
 import 'motion.dart';
+import '../grade_forecast/grade_forecast_page.dart';
 import 'theme.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -295,6 +296,18 @@ class ClassPage extends ConsumerWidget {
             appBar: AppBar(
               title: Text('${cls['classCode'] ?? 'Lớp học'}'),
               actions: [
+                IconButton(
+                  tooltip: 'Tính điểm FE/PE',
+                  icon: const Icon(Icons.calculate_outlined),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => GradeForecastPage(
+                        contextLabel:
+                            '${cls['subjectCode'] ?? cls['subjectId'] ?? ''} · ${cls['classCode'] ?? ''}',
+                      ),
+                    ),
+                  ),
+                ),
                 IconButton(
                   tooltip: 'Nhóm học tập',
                   icon: const Icon(Icons.forum_outlined),
