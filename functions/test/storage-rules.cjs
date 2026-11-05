@@ -11,6 +11,13 @@ test('report Storage enforces owner, verified email, MIME, size and immutable up
   const other=env.authenticatedContext('other',{email_verified:true}).storage();
   const unverified=env.authenticatedContext('owner',{email_verified:false}).storage();
   const anonymous=env.unauthenticatedContext().storage();
+  const image='images/owner/123.png', png={contentType:'image/png'};
+  await assertSucceeds(uploadBytes(ref(owner,image),new Uint8Array([137,80,78,71]),png));
+  await assertFails(getBytes(ref(other,image)));
+  await assertFails(getBytes(ref(anonymous,image)));
+  await assertFails(uploadBytes(ref(unverified,'images/owner/124.png'),new Uint8Array([1]),png));
+  await assertFails(uploadBytes(ref(owner,'images/owner/125.png'),new Uint8Array(5*1024*1024+1),png));
+  await assertFails(uploadBytes(ref(owner,'images/owner/126.png'),new Uint8Array([1]),{contentType:'text/html'}));
   const p='reports/owner/test.xlsx',meta={contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
   await assertSucceeds(uploadBytes(ref(owner,p),new Uint8Array([1,2,3]),meta));
   await assertSucceeds(getBytes(ref(owner,p)));

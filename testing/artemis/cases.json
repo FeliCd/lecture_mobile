@@ -1,0 +1,52 @@
+[
+  {
+    "id": "T01",
+    "goal": "Inspect notification center",
+    "expected": "Visible title, permission status, count and latest timestamp"
+  },
+  {
+    "id": "T02",
+    "goal": "Open Cloud services from Settings",
+    "expected": "Firebase configured and service statuses visible"
+  },
+  {
+    "id": "T03",
+    "goal": "Inspect Remote Config section",
+    "expected": "Source Firebase and values enabled/20 visible"
+  },
+  {
+    "id": "T04",
+    "goal": "Open Today and inspect slots, do not start attendance",
+    "expected": "Class, date, slot visible; no server writes"
+  },
+  {
+    "id": "T05",
+    "goal": "Open timetable and return to Today",
+    "expected": "Navigation preserves account, selected semester"
+  },
+  {
+    "id": "T06",
+    "goal": "Open a test class roster; do not change attendance",
+    "expected": "Student list or explicit empty/error; no endless loading"
+  },
+  {
+    "id": "T07",
+    "goal": "Inspect notebook for a test session; do not type/save",
+    "expected": "Notebook or explicit missing session message; no edits"
+  },
+  {
+    "id": "T08",
+    "goal": "Open image file picker then cancel",
+    "expected": "App returns, no upload, button enabled"
+  },
+  {
+    "id": "T09",
+    "goal": "Inspect image upload panel and its size/type hint",
+    "expected": "PNG/JPEG and 5 MB constraint visible"
+  },
+  {
+    "id": "T10",
+    "goal": "Inspect demo crash controls without confirming crash",
+    "expected": "Nonfatal and crash controls visible, no crash triggered"
+  }
+]

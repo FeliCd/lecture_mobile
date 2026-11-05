@@ -12,6 +12,7 @@ import { z } from "zod";
 import { signQr, verifyQr } from "./domain";
 import { AsyncLocalStorage } from "node:async_hooks";
 initializeApp();
+export {sendLab3DemoPush} from './demo-push';
 const db = getFirestore();
 const qrSecret = defineSecret("QR_SIGNING_SECRET");
 const emulator = process.env.FUNCTIONS_EMULATOR === "true";

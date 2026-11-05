@@ -54,6 +54,8 @@ final reportUploadProvider =
     );
 
 class ReportUploadController extends Notifier<ReportUploadState> {
+  ReportStorageService get storage => ref.read(reportStorageServiceProvider);
+  String uploadError(Object error) => reportUploadError(error);
   int _generation = 0;
   @override
   ReportUploadState build() {
@@ -67,22 +69,31 @@ class ReportUploadController extends Notifier<ReportUploadState> {
     final generation = _generation;
     state = const ReportUploadState(busy: true);
     try {
-      final receipt = await ref.read(reportStorageServiceProvider).upload(
-        bytes,
-        name,
-        (value) {
-          if (ref.mounted && generation == _generation) {
-            state = ReportUploadState(busy: true, progress: value);
-          }
-        },
-      );
+      final receipt = await storage.upload(bytes, name, (value) {
+        if (ref.mounted && generation == _generation) {
+          state = ReportUploadState(busy: true, progress: value);
+        }
+      });
       if (ref.mounted && generation == _generation) {
         state = ReportUploadState(progress: 1, receipt: receipt);
       }
     } catch (e) {
       if (ref.mounted && generation == _generation) {
-        state = ReportUploadState(error: reportUploadError(e));
+        state = ReportUploadState(error: uploadError(e));
       }
     }
   }
+}
+
+final imageUploadProvider =
+    NotifierProvider.autoDispose<ImageUploadController, ReportUploadState>(
+      ImageUploadController.new,
+    );
+
+class ImageUploadController extends ReportUploadController {
+  @override
+  String uploadError(Object error) =>
+      reportUploadError(error).replaceAll("báo cáo", "ảnh");
+  @override
+  ReportStorageService get storage => FirebaseReportStorage(image: true);
 }

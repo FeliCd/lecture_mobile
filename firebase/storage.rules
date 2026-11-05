@@ -9,6 +9,14 @@ service firebase.storage {
         && file.matches('[A-Za-z0-9_-]+[.]xlsx');
       allow update: if false;
     }
+    match /images/{uid}/{file} {
+      function owner() { return request.auth != null && request.auth.uid == uid && request.auth.token.email_verified == true; }
+      allow read, delete: if owner();
+      allow create: if owner() && resource == null && request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024
+        && ((request.resource.contentType == 'image/png' && file.matches('[0-9]+[.]png'))
+          || (request.resource.contentType == 'image/jpeg' && file.matches('[0-9]+[.]jpg')));
+      allow update: if false;
+    }
     match /{path=**} { allow read, write: if false; }
   }
 }

@@ -35,6 +35,7 @@ String reportUploadError(Object error) {
       'Kết nối quá thời gian chờ. Kiểm tra mạng rồi thử lại.',
     'canceled' || 'account-changed' =>
       'Đã dừng lưu báo cáo vì tài khoản hoặc thao tác đã thay đổi.',
+    'invalid-image' => 'Chọn ảnh PNG/JPEG hợp lệ, tối đa 5 MB.',
     'invalid-report' =>
       'Chọn báo cáo Excel hợp lệ, có nội dung và tối đa 10 MB.',
     _ =>
@@ -221,6 +222,8 @@ abstract class ReportStorageService {
 }
 
 class FirebaseReportStorage implements ReportStorageService {
+  final bool image;
+  FirebaseReportStorage({this.image = false});
   @override
   Future<ReportReceipt> upload(
     Uint8List bytes,
@@ -232,19 +235,34 @@ class FirebaseReportStorage implements ReportStorageService {
     if (Firebase.app().options.storageBucket?.trim().isNotEmpty != true) {
       throw const CloudServiceFailure('no-bucket');
     }
-    if (bytes.isEmpty ||
-        bytes.length > 10 * 1024 * 1024 ||
-        !RegExp(r'^[A-Za-z0-9_-]+\.xlsx$').hasMatch(name)) {
+    final png =
+        bytes.length >= 8 &&
+        listEquals(bytes.sublist(0, 8), [137, 80, 78, 71, 13, 10, 26, 10]);
+    final jpg =
+        bytes.length >= 3 &&
+        bytes[0] == 255 &&
+        bytes[1] == 216 &&
+        bytes[2] == 255;
+    if (image && (bytes.length > 5 * 1024 * 1024 || !(png || jpg))) {
+      throw const CloudServiceFailure('invalid-image');
+    }
+    if (!image &&
+        (bytes.isEmpty ||
+            bytes.length > 10 * 1024 * 1024 ||
+            !RegExp(r'^[A-Za-z0-9_-]+\.xlsx$').hasMatch(name))) {
       throw const CloudServiceFailure('invalid-report');
     }
-    final path = 'reports/$uid/${DateTime.now().microsecondsSinceEpoch}-$name';
+    final path = image
+        ? 'images/$uid/${DateTime.now().microsecondsSinceEpoch}.${png ? 'png' : 'jpg'}'
+        : 'reports/$uid/${DateTime.now().microsecondsSinceEpoch}-$name';
     final task = FirebaseStorage.instance
         .ref(path)
         .putData(
           bytes,
           SettableMetadata(
-            contentType:
-                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            contentType: image
+                ? (png ? 'image/png' : 'image/jpeg')
+                : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           ),
         );
     final subscription = task.snapshotEvents.listen((s) {

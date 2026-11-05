@@ -1,93 +1,87 @@
-# Lời thuyết trình - bản 03/11/2026
+# Lời thuyết trình Lab 3
 
-Phần nói khoảng 7 phút 30 giây; thêm demo 1–2 phút để tổng thời gian khoảng 9 phút. Lời dẫn cũng đã có trong Speaker Notes của PowerPoint.
+Khoảng 8–10 phút; xem kịch bản demo riêng để chuẩn bị thao tác.
 
-## Slide 1: Mở đầu (25 giây)
+## Slide 1 — PRM393  /  LAB 3
 
-Em xin trình bày FAP Attendance, hệ thống hỗ trợ giảng viên và sinh viên. Phần Lab 3 tập trung vào sáu dịch vụ Firebase, kiến trúc quản lý trạng thái và kiểm thử. Bản cập nhật ngày 3 tháng 11 cải thiện ba luồng chính và khả năng phục hồi khi lỗi.
+Em xin trình bày FAP Attendance, hệ thống ba client. Nội dung tập trung vào công nghệ: nó là gì, nguyên lý hoạt động, chỗ triển khai và demo. Mobile và Desktop dành cho giảng viên, Student Web dành cho sinh viên. Những kiểm tra còn thiếu được nêu đúng phạm vi.
 
-## Slide 2: Bài toán và phạm vi (30 giây)
+Nguồn: docs/LAB3_COMPLETION_SETUP.md; testing/artemis/README.md; logs local 05/11/2026; ảnh yêu cầu và PDF Lab3 v5.
 
-Giảng viên dùng mobile hoặc desktop để xem lịch, điểm danh và quản lý lớp. Sinh viên dùng web để xem điểm đã công bố, xin nghỉ và cộng tác nhóm. Các client sử dụng chung backend kiểm quyền, vì vậy dữ liệu điểm danh được giữ nhất quán. Firebase bổ sung xác thực và các dịch vụ cloud cần cho Lab 3.
+## Slide 2 — Hệ thống và các công nghệ sử dụng
 
-## Slide 3: Ba luồng chính (40 giây)
+Flutter dùng widget để dựng giao diện, Riverpod cung cấp state và dependency cho MVVM. React dùng component trên web; Vite build bundle, Firebase Hosting phục vụ bundle qua HTTPS. Apps Script xác thực yêu cầu rồi thao tác Sheets. Triển khai: Mobile lib/lab2, Desktop lib/features, Web src/pages và src/lib/api.js, backend/apps_script. Website demo: https://fap-sinhvien.web.app/; cần xác minh bản deploy trước buổi trình bày.
 
-Luồng một là chọn đúng buổi và mở hoặc tiếp tục phiên. Nếu mất phản hồi khi mở, app yêu cầu kiểm tra lại server. Luồng hai là sửa điểm danh với lý do: giữ input khi lỗi và không cho lưu trùng. Luồng ba là sổ tay theo buổi, có tự lưu và thử lại. Sổ tay hiện lưu trên thiết bị theo tài khoản, chưa đồng bộ đa thiết bị.
+Nguồn: ảnh yêu cầu demo và lời giải thích của thầy do người dùng cung cấp; PDF Lab3 v5; docs/LAB3_TEACHER_DEMO_ADDENDUM.md; code đã rà soát 05/11/2026.
 
-## Slide 4: Kiến trúc MVVM (40 giây)
+## Slide 3 — Tám nội dung demo thầy yêu cầu
 
-Widget giữ phần nhập liệu và điều hướng. Riverpod ViewModel giữ trạng thái đang xử lý, lỗi và tác vụ. Repository và service thực hiện I/O. Ba controller tương ứng là SessionOpeningController, AttendanceEditController và NotebookController. Auth và quyền push cũng có controller riêng. Việc tách này cho phép dùng service giả để kiểm tra lỗi mà không ghi dữ liệu lớp thật.
+Theo ảnh yêu cầu thầy, em chuẩn bị Mobile trên điện thoại, web deploy, kiến trúc MVVM, upload ảnh, push, crash, Google Auth và công cụ testing Google. Lần phát triển đã kiểm trên emulator; điện thoại thật cần kiểm trước buổi trình bày. Không dùng thao tác demo để khẳng định mọi tiêu chí đã nghiệm thu.
 
-## Slide 5: Authentication (30 giây)
+Nguồn: docs/LAB3_COMPLETION_SETUP.md; testing/artemis/README.md; logs local 05/11/2026; ảnh yêu cầu và PDF Lab3 v5.
 
-Google cung cấp credential để Firebase xác minh danh tính. Backend tiếp tục kiểm quyền giảng viên và lớp; đăng nhập thành công chưa đồng nghĩa có mọi quyền. AuthActionsController chặn thao tác trùng và cho thử lại sau hủy hoặc lỗi. authStateChanges phối hợp với router guard. Khi nghiệm thu cần quay login, hủy và logout, cùng ảnh Console Users.
+## Slide 4 — MVVM + Riverpod: phân tách trách nhiệm
 
-## Slide 6: Cloud Storage (30 giây)
+Mô hình MVVM tách giao diện, trạng thái và xử lý dữ liệu. View theo dõi provider, gọi controller khi người dùng thao tác. Controller gọi repository/service rồi phát state để UI dựng lại. Mở lib/lab2/session_view_model.dart, và notebook_view_model.dart; AttendanceEditController cũng nằm trong session_view_model.dart.
 
-Báo cáo Excel được upload vào đường dẫn theo Firebase UID. UI hiển thị tiến độ, kết quả hoặc lỗi. Rules giới hạn chủ sở hữu, loại tệp và kích thước; đã kiểm bằng emulator. Upload trên bucket thật còn cần xác minh cấu hình và bằng chứng Console. Tệp nhóm trên Drive là chức năng riêng, không được tính thay Cloud Storage.
+Nguồn: ảnh yêu cầu demo và lời giải thích của thầy do người dùng cung cấp; PDF Lab3 v5; docs/LAB3_TEACHER_DEMO_ADDENDUM.md; code đã rà soát 05/11/2026.
 
-## Slide 7: Cloud Messaging (40 giây)
+## Slide 5 — Authentication: xác thực tài khoản Google
 
-FCM có ba nhánh: foreground, background và khi ứng dụng đã đóng. Trung tâm thông báo giữ lịch sử theo UID. Cập nhật mới hiển thị quyền hiện tại, chặn mở prompt trùng và kiểm lại khi quay về từ cài đặt Android. Chạm push chỉ điều hướng tới route cho phép. Cần thử gửi Console ở cả ba trạng thái; nhắc lịch local không thay bằng chứng FCM.
+Firebase Auth xác minh Google credential và cấp UID/phiên đăng nhập. Backend vẫn kiểm role và quyền lớp từ token. Triển khai tại repository.dart và AuthActionsController. Cần Google chooser, hủy, logout, guard và Console Users; lỗi cleanup logout đã được nêu trong báo cáo rà soát.
 
-## Slide 8: Analytics (30 giây)
+Nguồn: ảnh yêu cầu demo và lời giải thích của thầy do người dùng cung cấp; PDF Lab3 v5; docs/LAB3_TEACHER_DEMO_ADDENDUM.md; code đã rà soát 05/11/2026.
 
-Kế hoạch event được viết trước khi tích hợp. Bảng có bảy event vì login và logout là hai sự kiện. Mục tiêu là quan sát bước người dùng hoàn thành, không thu nội dung cá nhân. Event ghi dữ liệu chỉ gửi sau phản hồi server thành công. Cần mở DebugView để kiểm từng event và tham số.
+## Slide 6 — Cloud Storage: lưu tệp trong Firebase bucket
 
-## Slide 9: Crashlytics (30 giây)
+Firebase Storage lưu đối tượng trong bucket. View chọn ảnh bằng FilePicker, imageUploadProvider quản lý busy/progress/error, FirebaseReportStorage(image:true) tải bytes theo Firebase UID và lấy URL. Service kiểm header PNG/JPEG, rules kiểm UID/email verified, MIME/kích thước và chống overwrite. Đã upload ảnh cam mẫu không có dữ liệu cá nhân, app báo thành công và Storage API xác nhận một object image/png. Khi demo chọn ảnh đó, chỉ đường dẫn images/{uid}, mở Console để đối chiếu. Không đưa bearer download token vào slide hoặc video công khai.
 
-Crashlytics ghi lỗi đã xử lý và lỗi toàn cục, kèm Firebase UID cùng operation và app_mode. Nội dung nhạy cảm không được đưa vào raw exception gửi đi. Bản demo có nút non-fatal và crash cần xác nhận. Chỉ thử khi đã lưu dữ liệu, sau đó mở lại app và đối chiếu Console. Hiện chưa có đủ ảnh Console để đánh dấu hoàn tất.
+Nguồn: docs/LAB3_COMPLETION_SETUP.md; testing/artemis/README.md; logs local 05/11/2026; ảnh yêu cầu và PDF Lab3 v5.
 
-## Slide 10: Remote Config (40 giây)
+## Slide 7 — FCM: nút gửi thử và luồng nhận thông báo
 
-Hai tham số điều khiển bật trang Cập nhật và số bài mỗi lần tải. Chúng đã được publish và native smoke đã nhận giá trị remote. UI mới cho biết nguồn cấu hình, thời điểm tải thành công theo GMT+7 và lỗi fetch. Khi offline, app dùng cache hoặc default. Demo cần thay giá trị trên Console, tải lại và quan sát UI mà không rebuild.
+Nút gửi gọi service, callable kiểm Auth/email verified/UID allowlist và rate limit rồi Firebase Admin gửi FCM. Nút trễ 15 giây cho phép về Home hoặc vuốt khỏi Recent trước khi server gửi; backend đã deploy. Đã quan sát banner mới trong app. Background và cold start phải thử thực tế trước buổi demo. Force stop khác vuốt Recent và có thể ngăn nhận. Chạm notification phải mở đúng màn. Không gọi accepted là receipt; không giả lập local notification thay FCM. Cho thầy xem demo_push.dart, demo-push.ts và push_notifications.dart.
 
-## Slide 11: Nhóm học tập (30 giây)
+Nguồn: docs/LAB3_COMPLETION_SETUP.md; testing/artemis/README.md; logs local 05/11/2026; ảnh yêu cầu và PDF Lab3 v5.
+
+## Slide 8 — Analytics: ghi nhận sự kiện sử dụng
+
+Analytics ghi sự kiện để đo thao tác người dùng. CloudTelemetry.event gọi SDK; xem tên sự kiện và tham số ở DebugView. Bảng có bảy sự kiện vì login/logout là hai sự kiện. Không đưa tên/email/MSSV hay nội dung chat vào event.
+
+Nguồn: ảnh yêu cầu demo và lời giải thích của thầy do người dùng cung cấp; PDF Lab3 v5; docs/LAB3_TEACHER_DEMO_ADDENDUM.md; code đã rà soát 05/11/2026.
+
+## Slide 9 — Crashlytics: thu thập và chẩn đoán lỗi
+
+Crashlytics gom lỗi và stack trace để chẩn đoán. Nút fatal đã có trong cloud_pages.dart, gọi CloudTelemetry.demoCrash; chỉ hiện khi ENABLE_LAB3_DEMO bật. Xác nhận crash sau khi lưu dữ liệu rồi mở lại app để gửi báo cáo. Cần kiểm Console đã nhận, không chỉ quay cảnh ứng dụng đóng.
+
+Nguồn: ảnh yêu cầu demo và lời giải thích của thầy do người dùng cung cấp; PDF Lab3 v5; docs/LAB3_TEACHER_DEMO_ADDENDUM.md; code đã rà soát 05/11/2026.
+
+## Slide 10 — Remote Config: đổi hành vi mà không rebuild
+
+Native smoke chạy lại trong lần này đã pass: SDK Firebase khởi tạo và hai tham số trả nguồn valueRemote, values true và 20. Điều này chứng minh fetch native, chưa thay video publish thay đổi giá trị rồi thấy UI cập nhật mà không rebuild hoặc kiểm cache khi offline.
+
+Nguồn: docs/LAB3_BLAZE_RECHECK.md; logs tmp/blaze-*.log; ảnh thầy và PDF Lab3 v5.
+
+## Slide 11 — Cộng tác nhóm: gửi, nhận và xem có xác nhận
 
 Giảng viên chia nhóm; sinh viên chỉ xem nhóm được phân công. Chat có bubble, thời gian gửi từ server và trạng thái nhận, xem dựa trên xác nhận thiết bị. Tệp giới hạn 500 KB và kiểm quyền theo nhóm. Ảnh trên slide dùng dữ liệu mẫu để minh họa bố cục. Chat cập nhật mỗi 10 giây; receipt hiện được phát từ web mới.
 
-## Slide 12: Skeleton và phục hồi (25 giây)
+Nguồn: ảnh yêu cầu demo và lời giải thích của thầy do người dùng cung cấp; PDF Lab3 v5; docs/LAB3_TEACHER_DEMO_ADDENDUM.md; code đã rà soát 05/11/2026.
 
-Skeleton được hiển thị theo trạng thái request ở các màn lớp, điểm, xin nghỉ và chat. Khi lỗi, giao diện thoát loading và cho thử lại. Web hỗ trợ reduced motion; phần chat giữ bản gửi khi kết quả chưa xác định. Ảnh này là fixture để minh họa trạng thái chờ, không phải ảnh lỗi hệ thống thật.
+## Slide 12 — ARTEMIS: kiểm thử Android từ yêu cầu mô tả
 
-## Slide 13: Kết quả kiểm thử (35 giây)
+ARTEMIS là công cụ tự động hóa Android của Google, dùng mô hình để đọc ảnh/UI và thực hiện mục tiêu mô tả. Workflow là goal, quan sát, thao tác, kiểm actual, lưu trace/replay. Đã cài tại C:/PRM/tools/artemis; project có 10 ca và runner chạy mỗi ca ba lần. Cần bổ sung nhánh lỗi, Android native và khám phá 15–30 phút để phủ rubric. Key mới được API models chấp nhận, chưa chứng minh đủ các lượt đã pass. Lượt trước gặp quá tải/quota. Hình bên trái là fixture skeleton của web dùng minh họa kiểm trạng thái loading, không là screenshot ARTEMIS.
 
-Ngày 3 tháng 11, toàn bộ 251 kiểm thử Flutter pass, analyzer sạch và build APK debug thành công. Các số backend, web, Storage rules và native smoke là kết quả đã chạy ngày 2 tháng 11. Mỗi bộ có phạm vi khác nhau; không cộng chúng thành tỷ lệ đạt Lab. Unit test và native smoke chưa thay thế 30 lượt ARTEMIS hoặc bằng chứng Firebase Console.
+Nguồn: docs/LAB3_COMPLETION_SETUP.md; testing/artemis/README.md; logs local 05/11/2026; ảnh yêu cầu và PDF Lab3 v5.
 
-## Slide 14: Kết luận (25 giây)
+## Slide 13 — Kết quả kiểm chứng và phạm vi còn lại
 
-Kết quả chính là tích hợp sáu SDK Firebase, tách tác vụ của ba luồng qua ViewModel và cải thiện phục hồi lỗi. Để chốt nghiệm thu Lab 3, nhóm còn cần Console evidence, ARTEMIS và PR review có commit cùng các link hồ sơ. Sau đây em có thể demo luồng điểm danh, sổ tay và cấu hình cloud. Em xin nhận câu hỏi của thầy và các bạn.
+Kết quả mới: upload ảnh thật thành công, Functions ACTIVE, banner push foreground đã quan sát. Native Firebase/Remote Config một test pass. Ba test controller Flutter, bảy test Functions, rules emulator, analyzer và APK build pass. ARTEMIS đã tích hợp nhưng chưa đủ 30 lượt/logs và phiên khám phá. Giữ nguyên trạng thái chưa đủ bằng chứng thay vì tự báo đạt 100%.
 
-## Demo ngắn 1–2 phút
+Nguồn: docs/LAB3_COMPLETION_SETUP.md; testing/artemis/README.md; logs local 05/11/2026; ảnh yêu cầu và PDF Lab3 v5.
 
-Chuẩn bị trước: tài khoản và lớp test, một buổi hợp lệ, bản Android mới, mạng ổn định. Không dùng lớp đang vận hành để sửa điểm danh thử. Kiểm tra backend và web đã deploy bản chat mới nếu định demo receipt.
+## Slide 14 — Demo công nghệ và điều kiện nghiệm thu
 
-1. Mở buổi test từ Hôm nay: chỉ rõ lớp/slot và mở hoặc tiếp tục phiên (20 giây).
-2. Sửa một sinh viên test, nhập lý do, chờ xác nhận rồi đối chiếu trạng thái (25 giây).
-3. Nhập sổ tay, đợi “Đã lưu”, quay lại mở đúng buổi (20 giây).
-4. Tài khoản → Thông báo: chỉ ra quyền hiện tại; Tài khoản → Dịch vụ đám mây: chỉ nguồn cấu hình và thời gian tải (25 giây).
-5. Nếu còn thời gian, mở web nhóm để minh họa chat (20 giây).
+Sau phần công nghệ, em demo theo thứ tự: Google login và MVVM, upload ảnh/Console, push, Remote Config/Analytics, crash cuối, ARTEMIS và logs. Crash chỉ thực hiện khi đã lưu dữ liệu, mở lại app để gửi report. Chỉ nói hoàn tất các phần thực sự đã chứng minh; điện thoại thật, background/closed, Console evidence và ARTEMIS đủ lượt vẫn phải chốt trước khi nộp. Em xin nhận câu hỏi của thầy.
 
-FCM/Crashlytics/Storage Console nên chuẩn bị clip riêng sau khi đã kiểm chứng thật. Không gây crash trong demo ngắn. Nếu mạng lỗi, chỉ ra trạng thái lỗi/phục hồi và chuyển sang slide; không tuyên bố thao tác cloud thành công.
-
-## Câu hỏi thường gặp
-
-**Vì sao dùng Firebase nhưng dữ liệu vẫn ở Sheets?** Firebase đảm nhiệm sáu dịch vụ của Lab; Apps Script/Sheets tiếp tục là nguồn nghiệp vụ chung để mobile, desktop và web đồng bộ.
-
-**Riverpod có phải MVVM không?** Riverpod là công cụ quản lý trạng thái/DI. MVVM thể hiện ở việc View chuyển lệnh cho controller, controller quản lý trạng thái và gọi repository/service. Ba luồng đã được tách tác vụ; không khẳng định mọi màn legacy đã refactor.
-
-**251 test pass có nghĩa đạt Lab 3 chưa?** Chưa. Đây là unit/widget tests; còn Console evidence, ARTEMIS, PR review và hồ sơ bắt buộc.
-
-**Đã xem trong chat có chính xác tuyệt đối không?** Hệ thống xác nhận tin đã hiển thị trong viewport của trang đang focus. Không thể chứng minh người dùng đã đọc hiểu. Mobile/desktop cũ chưa phát read receipt.
-
-**Sổ tay có đồng bộ không?** Hiện lưu local theo tài khoản; app ghi rõ giới hạn này.
-
-**Khi mở phiên bị timeout thì sao?** App buộc đọc lại trạng thái server trước lần gửi tiếp. Nếu phiên đã tồn tại, người dùng tiếp tục phiên đó.
-
-## Trước buổi trình bày
-
-- Mở PPTX bằng PowerPoint và thử Presenter View; PDF là bản trình chiếu dự phòng.
-- Kiểm tra tên/MSSV trên bìa. Nếu trình bày theo nhóm, thay bằng danh sách nhóm đã xác nhận.
-- Bổ sung link Figma và video thật; repo hiện tại: https://github.com/FeliCd/lecture_mobile.
-- Các mục Console/ARTEMIS/PR còn thiếu được ghi trung thực. Chỉ cập nhật thành đã hoàn tất sau khi có bằng chứng.
-- Báo cáo PDF 02/11 chưa được chỉnh trong lần cập nhật slide này.
+Nguồn: docs/LAB3_COMPLETION_SETUP.md; testing/artemis/README.md; logs local 05/11/2026; ảnh yêu cầu và PDF Lab3 v5.

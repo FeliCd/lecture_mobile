@@ -8,6 +8,8 @@ import 'push_notifications.dart';
 import 'push_permission_service.dart';
 import 'push_view_model.dart';
 import 'cloud_diagnostics.dart';
+import 'demo_push.dart';
+import 'image_upload_panel.dart';
 
 final pushServiceProvider = Provider((ref) => PushNotifications.instance);
 final pushHistoryProvider = FutureProvider.autoDispose
@@ -331,6 +333,51 @@ class _CloudSettingsPageState extends ConsumerState<CloudSettingsPage> {
           if (const bool.fromEnvironment('ENABLE_LAB3_DEMO')) ...[
             const Divider(),
             const Text('Khu vực trình diễn Lab 3'),
+            const ImageUploadPanel(),
+            Consumer(
+              builder: (context, ref, _) {
+                final demo = ref.watch(demoPushProvider);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: busy || demo.isLoading
+                          ? null
+                          : () => ref.read(demoPushProvider.notifier).send(),
+                      icon: demo.isLoading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.notifications_active_outlined),
+                      label: Text(
+                        demo.isLoading ? 'Đang gửi…' : 'Gửi thông báo thử',
+                      ),
+                    ),
+                    OutlinedButton(
+                      onPressed: busy || demo.isLoading
+                          ? null
+                          : () => ref
+                                .read(demoPushProvider.notifier)
+                                .send(delayed: true),
+                      child: const Text('Gửi sau 15 giây · thử nền/đóng'),
+                    ),
+                    const Text(
+                      'Bấm rồi về Home hoặc vuốt app khỏi Recent. Không Force stop. Chạm thông báo để mở lại.',
+                    ),
+                    if (demo.hasError)
+                      Text(
+                        '${demo.error}',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    if (demo.value != null) Text(demo.value!),
+                  ],
+                );
+              },
+            ),
             OutlinedButton(
               onPressed:
                   busy ||
