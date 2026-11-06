@@ -1,0 +1,66 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:lecturer_companion/grades/gradebook_page.dart';
+import 'gradebook_controller_test.dart' as fixture;
+
+void main() {
+  testWidgets(
+    'phone grade editing saves drafts separately from confirmed publication',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final calls = <Map<String, dynamic>>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LecturerGradebookPage(
+            classId: 'c1',
+            classLabel: 'PRM393 · SE1',
+            call: (method, data) async {
+              calls.add({'method': method, ...data});
+              if (method == 'getGradebook') return fixture.book();
+              if (method == 'saveGradebook') {
+                return {'version': 1, 'saved': true};
+              }
+              if (method == 'publishGrades') return {'publicationId': 'p1'};
+              return {'saved': true};
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Student'));
+      await tester.pumpAndSettle();
+      final grade = find.byKey(const ValueKey('grade/s1/quiz/1'));
+      await tester.ensureVisible(grade);
+      await tester.enterText(grade, '0');
+      await tester.pump();
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Xem trước / Công bố'),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.ensureVisible(find.text('Lưu bản nháp'));
+      await tester.tap(find.text('Lưu bản nháp'));
+      await tester.pumpAndSettle();
+      expect(calls.last['students'][0]['grades']['quiz'], 0);
+      expect(calls.where((c) => c['method'] == 'publishGrades'), isEmpty);
+      await tester.tap(find.text('Xem trước / Công bố'));
+      await tester.pumpAndSettle();
+      expect(find.text('Xem trước công bố điểm'), findsOneWidget);
+      expect(calls.where((c) => c['method'] == 'publishGrades'), isEmpty);
+      await tester.tap(find.widgetWithText(FilledButton, 'Công bố điểm'));
+      await tester.pumpAndSettle();
+      expect(calls.last['method'], 'publishGrades');
+      expect(find.textContaining('Có bản đang công bố'), findsOneWidget);
+      await tester.tap(find.text('Thu hồi'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Thu hồi'));
+      await tester.pumpAndSettle();
+      expect(calls.last['method'], 'revokeGrades');
+      expect(tester.takeException(), isNull);
+    },
+  );
+}

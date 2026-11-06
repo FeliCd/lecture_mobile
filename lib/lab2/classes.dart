@@ -19,6 +19,7 @@ import 'timetable_card.dart' show roomLabel;
 import 'attendance_history.dart';
 import 'academic_term.dart';
 import '../groups/study_groups.dart';
+import '../grades/gradebook_page.dart';
 
 class ClassTile extends StatelessWidget {
   final Data data;
@@ -296,6 +297,25 @@ class ClassPage extends ConsumerWidget {
             appBar: AppBar(
               title: Text('${cls['classCode'] ?? 'Lớp học'}'),
               actions: [
+                if (useSharedDesktop)
+                  IconButton(
+                    tooltip: 'Bảng điểm',
+                    icon: const Icon(Icons.grading_outlined),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => LecturerGradebookPage(
+                          classId: classId,
+                          classLabel:
+                              '${cls['subjectCode'] ?? cls['subjectId'] ?? ''} · ${cls['classCode'] ?? ''}',
+                          call: (method, data) =>
+                              ref.read(repositoryProvider).call('portalCall', {
+                                'method': method,
+                                'data': data,
+                              }),
+                        ),
+                      ),
+                    ),
+                  ),
                 IconButton(
                   tooltip: 'Tính điểm FE/PE',
                   icon: const Icon(Icons.calculate_outlined),

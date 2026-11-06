@@ -611,7 +611,7 @@ function doPost(e) {
     if (!text || text.length > 2000000) throw new Error('Yêu cầu trống hoặc quá lớn.');
     const request = JSON.parse(text);
     if (!request || typeof request !== 'object' || Array.isArray(request)) throw new Error('Yêu cầu không hợp lệ.');
-    if (request.action !== 'portalCall' && !(request.action === 'lab2Call' && request.name === 'groupCall') && text.length > 200000) throw new Error('Yêu cầu trống hoặc quá lớn.');
+    if (request.action !== 'portalCall' && !(request.action === 'lab2Call' && ['groupCall','portalCall'].includes(request.name)) && text.length > 200000) throw new Error('Yêu cầu trống hoặc quá lớn.');
     if (request.action === 'portalCall') {
       result = {ok: true, data: portalHandle_(request)};
     } else if (['lab2Health', 'lab2Snapshot', 'lab2Call'].includes(request.action)) {

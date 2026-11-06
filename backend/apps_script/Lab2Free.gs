@@ -582,6 +582,15 @@ function lab2Handle_(request) {
   }
   const d=request.input;
   if(!d||typeof d!=='object'||Array.isArray(d)) throw Error('INVALID_INPUT');
+  if(name==='portalCall') {
+    if(identity.signInProvider!=='google.com') throw Error('GOOGLE_ONLY');
+    if(actor.role!=='lecturer') throw Error('PERMISSION_DENIED');
+    if(!['getGradebook','saveGradebook','publishGrades','revokeGrades'].includes(d.method)) throw Error('UNKNOWN_PORTAL_METHOD');
+    const lock=LockService.getScriptLock();
+    if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
+    try { return portalCall_(book,actor,d.method,d.data||{}); }
+    finally { lock.releaseLock(); }
+  }
   if(name==='groupCall') {
     const lock=LockService.getScriptLock();
     if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');

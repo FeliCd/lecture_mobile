@@ -145,6 +145,7 @@ class DesktopSync {
       'getSubjectUpdates',
       'getSubjectTopics',
       'groupCall',
+      'portalCall',
     ].contains(name)) {
       refresh();
     }
