@@ -6,6 +6,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'cloud_services.dart';
 import 'push_permission_service.dart';
+import '../lab2/logout_cleanup.dart';
 
 String pushDestination(Map<String, dynamic> data) {
   final screen = data['screen'];
@@ -200,19 +201,19 @@ class PushNotifications implements PushPermissionService {
 
   Future<void> logout(String? uid) async {
     pendingRoute = null;
-    if (uid != null) await history.clear(uid);
-    if (supported) {
-      try {
-        await FirebaseMessaging.instance.setAutoInitEnabled(false);
-      } catch (e) {
-        await CloudTelemetry.handled('push_disable_auto_init', e);
-      }
-      try {
-        await FirebaseMessaging.instance.deleteToken();
-      } catch (e) {
-        await CloudTelemetry.handled('push_delete_token', e);
-      }
-    }
-    changes.add(null);
+    await runLogoutCleanup({
+      'push_history': () async {
+        if (uid != null) await history.clear(uid);
+      },
+      'push_auto_init': () async {
+        if (supported) {
+          await FirebaseMessaging.instance.setAutoInitEnabled(false);
+        }
+      },
+      'push_token': () async {
+        if (supported) await FirebaseMessaging.instance.deleteToken();
+      },
+      'push_listeners': () async => changes.add(null),
+    });
   }
 }

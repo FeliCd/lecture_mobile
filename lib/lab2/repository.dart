@@ -11,6 +11,7 @@ import 'desktop_sync.dart';
 import '../cloud/cloud_services.dart';
 import '../cloud/push_notifications.dart';
 import 'auth_session_service.dart';
+import 'logout_cleanup.dart';
 
 final sharedDesktop = DesktopSync(
   endpoint: const String.fromEnvironment('APPS_SCRIPT_URL'),
@@ -262,13 +263,17 @@ class CampusRepository implements AuthSessionService {
   @override
   Future<void> logout() async {
     final firebaseUid = FirebaseAuth.instance.currentUser?.uid;
-    await LecturerReminders.instance.activate(null);
-    sharedDesktop.reset();
-    await FirebaseAuth.instance.signOut();
-    if (googleInitialized) await GoogleSignIn.instance.signOut();
-    await PushNotifications.instance.logout(firebaseUid);
-    await CloudTelemetry.event('logout');
-    await CloudTelemetry.identity(null);
+    await runLogoutCleanup({
+      'reminders': () => LecturerReminders.instance.activate(null),
+      'shared_cache': () async => sharedDesktop.reset(),
+      'firebase': () => FirebaseAuth.instance.signOut(),
+      'google': () async {
+        if (googleInitialized) await GoogleSignIn.instance.signOut();
+      },
+      'push': () => PushNotifications.instance.logout(firebaseUid),
+      'logout_event': () => CloudTelemetry.event('logout'),
+      'telemetry_identity': () => CloudTelemetry.identity(null),
+    });
   }
 
   static bool googleInitialized = false;
