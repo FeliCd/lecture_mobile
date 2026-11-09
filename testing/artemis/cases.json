@@ -2,51 +2,61 @@
   {
     "id": "T01",
     "goal": "Inspect notification center",
-    "expected": "Visible title, permission status, count and latest timestamp"
+    "expected": "Notification title and permission status visible; latest message/timestamp or explicit empty state",
+    "steps": ["Open account settings then Notifications.", "Read permission status and latest test message if any.", "Do not grant permissions or send notifications."]
   },
   {
     "id": "T02",
     "goal": "Open Cloud services from Settings",
-    "expected": "Firebase configured and service statuses visible"
+    "expected": "Firebase and cloud service status cards visible; configured status is not treated as cloud delivery proof",
+    "steps": ["Open account settings then Cloud services.", "Inspect Firebase, storage, analytics and crash-reporting status cards."]
   },
   {
     "id": "T03",
     "goal": "Inspect Remote Config section",
-    "expected": "Source Firebase and values enabled/20 visible"
+    "expected": "Remote Config source, enabled state and page size visible; page size within 5 to 30",
+    "steps": ["Scroll Cloud services to Remote Config.", "Report exact displayed values and source without changing Console parameters."]
   },
   {
     "id": "T04",
     "goal": "Open Today and inspect slots, do not start attendance",
-    "expected": "Class, date, slot visible; no server writes"
+    "expected": "Date and class/slot or explicit empty state visible; no session started",
+    "steps": ["Return to Today.", "Read date and one test session if present.", "Do not tap Start attendance or modify records."]
   },
   {
     "id": "T05",
     "goal": "Open timetable and return to Today",
-    "expected": "Navigation preserves account, selected semester"
+    "expected": "Timetable opens and return to Today preserves account and selected semester",
+    "steps": ["Record selected semester before navigation.", "Open timetable then return to Today.", "Compare semester and account without changing either."]
   },
   {
     "id": "T06",
     "goal": "Open a test class roster; do not change attendance",
-    "expected": "Student list or explicit empty/error; no endless loading"
+    "expected": "Test roster or explicit empty/error state appears; no records modified",
+    "steps": ["Use an explicitly identified test class only; otherwise report BLOCKED.", "Open its roster without selecting attendance statuses.", "Report loaded, empty or error state without recording real student names."]
   },
   {
     "id": "T07",
-    "goal": "Inspect notebook for a test session; do not type/save",
-    "expected": "Notebook or explicit missing session message; no edits"
+    "goal": "Open the lesson notebook with exact Vietnamese title Sổ tay for {test_class}; do not type or save",
+    "expected": "App bar title is exactly Sổ tay and lesson metadata identifies {test_class}; Nhóm học tập (Study groups) is the wrong screen and must not be reported as success; no edits",
+    "steps": ["From the app use bottom navigation tab Lịch dạy (not Android HOME). Locate a lesson for {test_class}.", "Tap the exact Sổ tay button beside that lesson. Never open Nhóm học tập, Chia nhóm or Giao việc for this case.", "Inspect the Sổ tay app bar title and the lesson metadata identifying {test_class} without exposing private note content.", "Do not type, save, select a student or edit anything. If no matching lesson or Sổ tay button exists, report BLOCKED. A Study groups screen is not a notebook."]
   },
   {
     "id": "T08",
-    "goal": "Open image file picker then cancel",
-    "expected": "App returns, no upload, button enabled"
+    "goal": "Open the Firebase Storage image picker from Cloud services and cancel it",
+    "expected": "Screen title is Dich vu dam may (Dịch vụ đám mây), Firebase Storage panel and Chon va upload anh (Chọn và upload ảnh) visible; picker opens and Cancel returns with that exact button enabled and no upload",
+    "steps": ["From account settings choose Dịch vụ đám mây (Cloud services). Never open Nhập lịch từ ảnh, OCR or Chọn ảnh và đọc OCR.", "Scroll to Khu vực trình diễn Lab 3 and locate exact label Ảnh Firebase Storage and button Chọn và upload ảnh.", "Tap only Chọn và upload ảnh, then press Android Back to cancel the native picker without selecting any file.", "Verify the title remains Dịch vụ đám mây and exact button Chọn và upload ảnh is enabled. Wrong OCR screen means failure, not success."]
   },
   {
     "id": "T09",
     "goal": "Inspect image upload panel and its size/type hint",
-    "expected": "PNG/JPEG and 5 MB constraint visible"
+    "expected": "Dịch vụ đám mây screen contains exact hint Ảnh Firebase Storage · PNG/JPEG tối đa 5 MB",
+    "steps": ["Open Dịch vụ đám mây from account settings, never Nhập lịch từ ảnh or OCR.", "Scroll to the Lab 3 Firebase Storage image upload panel.", "Read accepted formats and 5 MB size limit; report exact screen title and hint.", "Do not upload a file."]
   },
   {
     "id": "T10",
     "goal": "Inspect demo crash controls without confirming crash",
-    "expected": "Nonfatal and crash controls visible, no crash triggered"
+    "expected": "Nonfatal/crash controls and confirmation visible; Cancel returns with app still running",
+    "steps": ["Locate Lab 3 nonfatal and crash controls.", "Open crash confirmation dialog only, then choose Cancel.", "Never confirm a crash or trigger nonfatal reporting in this case."]
   }
 ]
