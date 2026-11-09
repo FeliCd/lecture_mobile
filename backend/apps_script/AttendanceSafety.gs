@@ -133,7 +133,7 @@ function lab2Live_(book,actor,d) {
     students.forEach(s=>{if(s.status in counts) counts[s.status]++;});
     const updated=Math.max(meta.opensAt,...records.map(r=>Date.parse(r.updatedAt)||0));
     return {sessionId:session.sessionId,classId:session.classId,classCode:cls.classCode,subjectId:cls.subjectCode,
-      subjectName:cls.subjectName,room:lab2EffectiveRoom_({Schedules:lab2Read_(book,'Schedules'),ScheduleExceptions:lab2Read_(book,'ScheduleExceptions')},session,cls),slot:Number(session.slot),status:session.status,serverTime:new Date().toISOString(),
+      subjectName:cls.subjectName,room:lab2EffectiveRoom_({Schedules:lab2Read_(book,'Schedules'),ScheduleExceptions:lab2Read_(book,'ScheduleExceptions')},session,cls),sessionDate:session.date,slot:Number(session.slot),status:session.status,serverTime:new Date().toISOString(),
       opensAt:meta.opensAt,closesAt:meta.closesAt,effectiveDurationMinutes:(meta.closesAt-meta.opensAt)/60000,expiresAt:new Date(meta.closesAt).toISOString(),lastUpdatedAt:new Date(updated).toISOString(),
       revision:lab2Hash_(JSON.stringify([session.status,records])),counts,students};
   } finally {lock.releaseLock();}

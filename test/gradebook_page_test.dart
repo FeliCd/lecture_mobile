@@ -4,6 +4,44 @@ import 'package:lecturer_companion/grades/gradebook_page.dart';
 import 'gradebook_controller_test.dart' as fixture;
 
 void main() {
+  testWidgets('adding a column saves the shared draft without publishing', (
+    tester,
+  ) async {
+    final calls = <Map<String, dynamic>>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LecturerGradebookPage(
+          classId: 'c1',
+          classLabel: 'PRM393 · SE1',
+          call: (method, data) async {
+            calls.add({'method': method, ...data});
+            if (method == 'getGradebook') return fixture.book();
+            return {'saved': true, 'version': 1};
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Thêm cột điểm'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Tên cột'),
+      'Lab',
+    );
+    await tester.tap(find.text('Thêm và lưu nháp'));
+    await tester.pumpAndSettle();
+
+    expect(calls.map((c) => c['method']), ['getGradebook', 'saveGradebook']);
+    final save = calls.last;
+    final column = (save['components'] as List).last as Map;
+    expect(save['classId'], 'c1');
+    expect(save['version'], 0);
+    expect(column['name'], 'Lab');
+    expect(save['students'].single['grades'], {'quiz': 5, column['id']: ''});
+    expect(find.textContaining('Phiên bản 1'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
   testWidgets(
     'phone grade editing saves drafts separately from confirmed publication',
     (tester) async {

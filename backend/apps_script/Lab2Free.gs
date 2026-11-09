@@ -585,10 +585,14 @@ function lab2Handle_(request) {
   if(name==='portalCall') {
     if(identity.signInProvider!=='google.com') throw Error('GOOGLE_ONLY');
     if(actor.role!=='lecturer') throw Error('PERMISSION_DENIED');
-    if(!['getGradebook','saveGradebook','publishGrades','revokeGrades'].includes(d.method)) throw Error('UNKNOWN_PORTAL_METHOD');
+    if(!['getGradebook','saveGradebook','publishGrades','revokeGrades','listClassLeaveRequests','reviewLeaveRequest','applyApprovedLeave'].includes(d.method)) throw Error('UNKNOWN_PORTAL_METHOD');
     const lock=LockService.getScriptLock();
     if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
-    try { return portalCall_(book,actor,d.method,d.data||{}); }
+    try {
+      const result=portalCall_(book,actor,d.method,d.data||{});
+      // The mobile lab2 transport expects an object. Keep the Portal list API unchanged.
+      return d.method==='listClassLeaveRequests'?{requests:result}:result;
+    }
     finally { lock.releaseLock(); }
   }
   if(name==='groupCall') {

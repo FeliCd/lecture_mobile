@@ -136,17 +136,18 @@ class DesktopSync {
 
   Future<Data> call(String name, Data input) async {
     final result = await request('lab2Call', {'name': name, 'input': input});
-    if (![
-      'getTeachingOccurrence',
-      'getQuickAttendanceContext',
-      'getQrToken',
-      'discoverArticles',
-      'getAttendanceSessionLive',
-      'getSubjectUpdates',
-      'getSubjectTopics',
-      'groupCall',
-      'portalCall',
-    ].contains(name)) {
+    if ((name == 'portalCall' && input['method'] == 'applyApprovedLeave') ||
+        ![
+          'getTeachingOccurrence',
+          'getQuickAttendanceContext',
+          'getQrToken',
+          'discoverArticles',
+          'getAttendanceSessionLive',
+          'getSubjectUpdates',
+          'getSubjectTopics',
+          'groupCall',
+          'portalCall',
+        ].contains(name)) {
       refresh();
     }
     return result;

@@ -122,6 +122,10 @@ class CampusRepository implements AuthSessionService {
   Stream<Map<String, Data>> memberStream(String classId) => watch(
     'classes/$classId/members',
   ).map((rows) => {for (final row in rows) row['id'] as String: row});
+
+  Future<Data> portalCall(String method, Data data) =>
+      call('portalCall', {'method': method, 'data': data});
+
   Future<Data> call(String name, Data input) async {
     if (useSharedDesktop) {
       try {

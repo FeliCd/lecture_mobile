@@ -11,6 +11,7 @@ import 'widgets.dart';
 import 'timetable_card.dart' show roomLabel;
 import 'theme.dart';
 import 'bulk_attendance.dart';
+import 'leave_requests.dart';
 
 class LiveAttendancePage extends ConsumerStatefulWidget {
   final String sessionId;
@@ -277,6 +278,27 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
     setState(() => fullScreenQr = true);
   }
 
+  Future<void> _openLeaveRequests(Data session) async {
+    final repo = ref.read(repositoryProvider);
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: const Text('Đơn xin nghỉ của buổi')),
+          body: LeaveRequestsPanel(
+            classId: session['classId'] as String,
+            sessionDate: session['sessionDate'] as String,
+            slot: session['slot'] as int,
+            closedSessionId: session['status'] == 'CLOSED'
+                ? widget.sessionId
+                : null,
+            call: repo.portalCall,
+          ),
+        ),
+      ),
+    );
+    if (mounted) await refresh();
+  }
+
   @override
   Widget build(BuildContext context) {
     final rows = (live?['students'] as List? ?? [])
@@ -468,6 +490,14 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
               : '${live!['classCode']} · Slot ${live!['slot']}',
         ),
         actions: [
+          if (live?['sessionDate'] is String)
+            IconButton(
+              tooltip: 'Đơn xin nghỉ của buổi',
+              icon: const Icon(Icons.event_busy_outlined),
+              onPressed: loading || writing || failure != null
+                  ? null
+                  : () => _openLeaveRequests(live!),
+            ),
           if (!studentsMode && canCheckIn && qrCurrent)
             IconButton(
               tooltip: 'QR toàn màn hình',
@@ -480,7 +510,7 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                 'Sinh viên quét QR và đăng nhập Google trên trang điểm danh. '
                 'Nếu bật mã xác nhận, cung cấp thêm mã đang hiển thị. Đổi QR không kéo dài phiên. '
                 'Khi mất kết nối, QR được ẩn và số liệu có thể đã cũ. '
-                'Kết thúc phiên sẽ chốt vắng những sinh viên còn chờ. '
+                'Kết thúc phiên sẽ chốt vắng hoặc nghỉ có phép theo đơn đã duyệt. '
                 'Bật/tắt công tắc để chuyển Có mặt/Vắng. '
                 'Bấm tên sinh viên để sửa chi tiết hoặc ghi lý do.',
           ),
@@ -506,7 +536,7 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
                             context,
                             title: 'Kết thúc điểm danh?',
                             message:
-                                'Đã điểm danh: ${(counts['present'] as num? ?? 0) + (counts['late'] as num? ?? 0)} • Còn chờ: ${counts['pending'] ?? 0}. Sinh viên còn chờ sẽ được chốt vắng.',
+                                'Đã điểm danh: ${(counts['present'] as num? ?? 0) + (counts['late'] as num? ?? 0)} • Còn chờ: ${counts['pending'] ?? 0}. Sinh viên còn chờ sẽ được chốt vắng hoặc nghỉ có phép theo đơn đã duyệt.',
                             confirm: 'Kết thúc',
                             destructive: true,
                           );

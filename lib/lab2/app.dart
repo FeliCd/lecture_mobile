@@ -488,6 +488,11 @@ class _CampusShellState extends ConsumerState<CampusShell> {
                 icon: const Icon(Icons.sync),
               ),
             IconButton(
+              tooltip: 'Thông báo',
+              onPressed: () => context.push('/notifications'),
+              icon: const Icon(Icons.notifications_outlined),
+            ),
+            IconButton(
               tooltip: 'Tài khoản và giao diện',
               onPressed: () => context.push('/settings'),
               icon: CircleAvatar(

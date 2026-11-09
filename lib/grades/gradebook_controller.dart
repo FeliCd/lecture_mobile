@@ -51,6 +51,7 @@ class GradebookController extends ChangeNotifier {
           'VERSION_CONFLICT':
               'Bảng điểm đã thay đổi trên thiết bị khác. Bản sửa vẫn giữ; kiểm tra và tải lại trước khi lưu.',
           'ROSTER_CHANGED': 'Danh sách lớp đã thay đổi. Tải lại bảng điểm.',
+          'INVALID_COMPONENTS': 'Kiểm tra tên và thang điểm của các cột.',
           'PERMISSION_DENIED': 'Bạn không có quyền quản lý điểm lớp này.',
           'FEATURE_DISABLED':
               'Cần cập nhật backend chung để mở bảng điểm trên mobile.',
@@ -97,6 +98,11 @@ class GradebookController extends ChangeNotifier {
     changed();
   }
 
+  bool componentNameTaken(String name, [GradeRow? existing]) => components.any(
+    (column) =>
+        column['id'] != existing?['id'] && column['name'] == name.trim(),
+  );
+
   void upsertComponent(String name, num maxScore, [GradeRow? existing]) {
     if (!editable) return;
     if (name.trim().isEmpty ||
@@ -104,11 +110,7 @@ class GradebookController extends ChangeNotifier {
         !maxScore.isFinite ||
         maxScore <= 0 ||
         maxScore > 1000 ||
-        components.any(
-          (c) =>
-              c['id'] != existing?['id'] &&
-              '${c['name']}'.trim().toLowerCase() == name.trim().toLowerCase(),
-        ) ||
+        componentNameTaken(name, existing) ||
         (existing == null && components.length >= 30)) {
       throw const FormatException(
         'Tên cột hoặc thang điểm không hợp lệ/trùng.',

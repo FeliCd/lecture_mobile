@@ -76,6 +76,12 @@ class _LecturerGradebookPageState extends State<LecturerGradebookPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (old == null) ...[
+                  const Text(
+                    'Cột mới và các thay đổi hiện tại sẽ được lưu vào bản nháp chung với Desktop.',
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 TextFormField(
                   controller: name,
                   maxLength: 100,
@@ -83,12 +89,7 @@ class _LecturerGradebookPageState extends State<LecturerGradebookPage> {
                   validator: (v) =>
                       v == null ||
                           v.trim().isEmpty ||
-                          model.components.any(
-                            (p) =>
-                                p['id'] != old?['id'] &&
-                                '${p['name']}'.toLowerCase() ==
-                                    v.trim().toLowerCase(),
-                          )
+                          model.componentNameTaken(v, old)
                       ? 'Tên trống hoặc trùng'
                       : null,
                 ),
@@ -118,7 +119,7 @@ class _LecturerGradebookPageState extends State<LecturerGradebookPage> {
             onPressed: () {
               if (form.currentState!.validate()) Navigator.pop(c, true);
             },
-            child: const Text('Áp dụng'),
+            child: Text(old == null ? 'Thêm và lưu nháp' : 'Áp dụng'),
           ),
         ],
       ),
@@ -135,6 +136,11 @@ class _LecturerGradebookPageState extends State<LecturerGradebookPage> {
       name.dispose();
       max.dispose();
     });
+    if (ok == true && old == null && mounted && await model.save() && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã lưu cột điểm vào bản nháp chung.')),
+      );
+    }
   }
 
   Future<void> publish() async {

@@ -17,6 +17,7 @@ import 'class_timetable.dart';
 import 'class_tools.dart';
 import 'timetable_card.dart' show roomLabel;
 import 'attendance_history.dart';
+import 'leave_requests.dart';
 import 'academic_term.dart';
 import '../groups/study_groups.dart';
 import '../grades/gradebook_page.dart';
@@ -264,8 +265,8 @@ class ClassPage extends ConsumerWidget {
     final repo = ref.read(repositoryProvider);
     return DefaultTabController(
       key: ValueKey('${user.uid}:$classId'),
-      length: 4,
-      initialIndex: initialTab.clamp(0, 3),
+      length: useSharedDesktop ? 5 : 4,
+      initialIndex: initialTab.clamp(0, useSharedDesktop ? 4 : 3),
       child: StreamBuilder<Data?>(
         key: ValueKey('${user.uid}:$classId'),
         stream: repo.document('classes/$classId'),
@@ -307,11 +308,7 @@ class ClassPage extends ConsumerWidget {
                           classId: classId,
                           classLabel:
                               '${cls['subjectCode'] ?? cls['subjectId'] ?? ''} · ${cls['classCode'] ?? ''}',
-                          call: (method, data) =>
-                              ref.read(repositoryProvider).call('portalCall', {
-                                'method': method,
-                                'data': data,
-                              }),
+                          call: repo.portalCall,
                         ),
                       ),
                     ),
@@ -380,6 +377,11 @@ class ClassPage extends ConsumerWidget {
                       icon: Icon(Icons.query_stats, size: 18),
                       text: 'Thống kê',
                     ),
+                    if (useSharedDesktop)
+                      Tab(
+                        icon: Icon(Icons.event_busy_outlined, size: 18),
+                        text: 'Đơn xin nghỉ',
+                      ),
                   ],
                 ),
                 Expanded(
@@ -402,6 +404,11 @@ class ClassPage extends ConsumerWidget {
                       SessionsPanel(cls: cls, user: user),
                       ClassTimetable(cls: cls, user: user),
                       AnalyticsPanel(cls: cls, user: user),
+                      if (useSharedDesktop)
+                        LeaveRequestsPanel(
+                          classId: classId,
+                          call: repo.portalCall,
+                        ),
                     ],
                   ),
                 ),
