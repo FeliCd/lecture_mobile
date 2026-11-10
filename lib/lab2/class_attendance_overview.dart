@@ -113,6 +113,7 @@ class _ClassAttendanceOverviewState
       ref,
       groups.values.expand((rows) => rows).map((r) => '${r['status']}'),
     );
+    final attendanceRate = summary.rate;
     final totalSlots = courseSlotTotal(widget.cls['totalSlots']);
     final studentSummaries = {
       for (final entry in groups.entries)
@@ -130,6 +131,15 @@ class _ClassAttendanceOverviewState
     final near = currentSummaries.where((s) => s.nearAbsenceLimit).length;
     final exceeded = currentSummaries
         .where((s) => s.exceedsAbsenceLimit)
+        .length;
+    final unclassified = currentSummaries
+        .where(
+          (s) =>
+              !s.hasSlotTotal ||
+              s.pending > 0 ||
+              s.present + s.late + s.missedSlots == 0,
+        )
+        .where((s) => !s.nearAbsenceLimit && !s.exceedsAbsenceLimit)
         .length;
     final runs = {
       for (final uid in members.value!.keys)
@@ -217,23 +227,46 @@ class _ClassAttendanceOverviewState
             ],
           ),
           const Divider(),
-          Text(
-            'TỶ LỆ CHUYÊN CẦN',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontSize: 13,
-              letterSpacing: 1.2,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            summary.rate == null
-                ? 'Chưa đủ dữ liệu'
-                : '${summary.rate!.toStringAsFixed(1)}%',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              fontSize: summary.rate == null ? 18 : 28,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'TỶ LỆ CHUYÊN CẦN',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      attendanceRate == null
+                          ? 'Chưa đủ dữ liệu'
+                          : '${attendanceRate.toStringAsFixed(1)}%',
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(
+                            fontSize: attendanceRate == null ? 18 : 28,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              if (attendanceRate != null) ...[
+                const SizedBox(width: 12),
+                ExcludeSemantics(
+                  child: SizedBox.square(
+                    dimension: 52,
+                    child: CircularProgressIndicator(
+                      value: (attendanceRate / 100).clamp(0.0, 1.0),
+                      strokeWidth: 5,
+                      strokeCap: StrokeCap.round,
+                      backgroundColor: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHigh,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
           const SizedBox(height: 14),
           AttendanceBar(counts: summary),
@@ -323,18 +356,23 @@ class _ClassAttendanceOverviewState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (widget.showStudents)
-          ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            title: const Text('Chuyên cần'),
-            subtitle: Text(
-              totalSlots == null
-                  ? 'Chưa có tổng slot môn học'
-                  : 'Sắp vượt: $near · Vượt ngưỡng: $exceeded',
+        if (widget.showStudents) ...[
+          _RosterOverview(
+            rate: attendanceRate,
+            slots: finalizedSlotCount,
+            safe: members.value!.length - near - exceeded - unclassified,
+            near: near,
+            exceeded: exceeded,
+            unclassified: unclassified,
+            hasSlotTotal: totalSlots != null,
+            details: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              dense: true,
+              title: const Text('Chuyên cần'),
+              children: [overview],
             ),
-            children: [overview],
-          )
-        else
+          ),
+        ] else
           overview,
         if (widget.showStudents) ...[
           const SizedBox(height: 12),
@@ -345,24 +383,26 @@ class _ClassAttendanceOverviewState
                 setState(() => search = attendanceSearchText(value)),
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              for (final option in {
-                'all': 'Tất cả',
-                'followUp': 'Cần theo dõi',
-                'frequent': 'Nghỉ từ 3 slot',
-                'consecutive': 'Nghỉ liên tục',
-                'near': 'Sắp vượt $limit%',
-                'exceeded': 'Vượt $limit%',
-              }.entries)
-                ChoiceChip(
-                  label: Text(option.value),
-                  selected: filter == option.key,
-                  onSelected: (_) => setState(() => filter = option.key),
-                ),
-            ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              spacing: 8,
+              children: [
+                for (final option in {
+                  'all': 'Tất cả (${members.value!.length})',
+                  'followUp': 'Cần theo dõi',
+                  'frequent': 'Nghỉ từ 3 slot',
+                  'consecutive': 'Nghỉ liên tục',
+                  'near': 'Sắp vượt $limit%',
+                  'exceeded': 'Vượt $limit%',
+                }.entries)
+                  ChoiceChip(
+                    label: Text(option.value),
+                    selected: filter == option.key,
+                    onSelected: (_) => setState(() => filter = option.key),
+                  ),
+              ],
+            ),
           ),
           if (filter == 'followUp')
             const Padding(
@@ -406,13 +446,11 @@ class _ClassAttendanceOverviewState
             ),
           if (students.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(
-                '${students.length} sinh viên · Vắng nhiều trước${useSharedDesktop ? ' · Đồng bộ từ Sheet' : ''}',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+              padding: const EdgeInsets.only(top: 4),
+              child: CampusSectionHeader(
+                title: 'Danh sách sinh viên',
+                description:
+                    '${students.length} sinh viên · Vắng nhiều trước${useSharedDesktop ? ' · Đồng bộ từ Sheet' : ''}',
               ),
             ),
           ...students.map((entry) {
@@ -423,7 +461,6 @@ class _ClassAttendanceOverviewState
               code: '${entry.value['studentCode'] ?? 'Chưa có MSSV'}',
               summary: s,
               attention: [
-                if (s.missedSlots >= 3) 'Đã nghỉ ${s.missedSlots} slot',
                 if (runs[entry.key]!.length >= 2)
                   'Vắng ${runs[entry.key]!.length} buổi liên tiếp',
                 if (noteFor(entry.key)['followUp'] == true)
@@ -544,6 +581,142 @@ String attendanceWarningLabel(AttendanceSummary summary) {
   return summary.absenceWarning;
 }
 
+class _RosterOverview extends StatelessWidget {
+  final double? rate;
+  final int slots, safe, near, exceeded, unclassified;
+  final bool hasSlotTotal;
+  final Widget details;
+
+  const _RosterOverview({
+    required this.rate,
+    required this.slots,
+    required this.safe,
+    required this.near,
+    required this.exceeded,
+    required this.unclassified,
+    required this.hasSlotTotal,
+    required this.details,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
+    final metrics = [
+      (
+        'An toàn',
+        safe,
+        Icons.check_circle_outline,
+        CampusColors.status('present', dark),
+      ),
+      (
+        'Chú ý',
+        near,
+        Icons.warning_amber_rounded,
+        CampusColors.status('late', dark),
+      ),
+      ('Nguy cơ', exceeded, Icons.error_outline, colors.error),
+    ];
+    return CampusCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'TỔNG QUAN CHUYÊN CẦN',
+                      style: theme.textTheme.labelMedium,
+                    ),
+                    Text(
+                      rate == null
+                          ? 'Chưa đủ dữ liệu'
+                          : '${rate!.toStringAsFixed(1)}%',
+                      style: theme.textTheme.headlineMedium,
+                    ),
+                    Text(
+                      '$slots slot đã chốt',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              if (rate != null)
+                ExcludeSemantics(
+                  child: SizedBox.square(
+                    dimension: 46,
+                    child: CircularProgressIndicator(
+                      value: (rate! / 100).clamp(0.0, 1.0),
+                      strokeWidth: 5,
+                      strokeCap: StrokeCap.round,
+                      backgroundColor: colors.surfaceContainerHigh,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (hasSlotTotal) ...[
+            const SizedBox(height: 12),
+            LayoutBuilder(
+              builder: (context, box) {
+                final tiles = [
+                  for (final (label, count, icon, color) in metrics)
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: .10),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(icon, size: 15, color: color),
+                          Text(
+                            label,
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: color,
+                            ),
+                          ),
+                          Text('$count', style: theme.textTheme.titleMedium),
+                        ],
+                      ),
+                    ),
+                ];
+                return box.maxWidth < 230
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        spacing: 6,
+                        children: tiles,
+                      )
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        spacing: 6,
+                        children: [
+                          for (final tile in tiles) Expanded(child: tile),
+                        ],
+                      );
+              },
+            ),
+            if (unclassified > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '$unclassified sinh viên cần thêm dữ liệu',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+          ],
+          details,
+        ],
+      ),
+    );
+  }
+}
+
 /// Compact summary; the existing history action exposes counts and records.
 class StudentAttendanceRow extends StatelessWidget {
   final String name, code;
@@ -564,99 +737,142 @@ class StudentAttendanceRow extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final unknown = !summary.hasSlotTotal;
-    final color = unknown
+    final limit = summary.maxAbsences;
+    final atLimit = limit == summary.missedSlots && summary.missedSlots > 0;
+    final needsCaution = atLimit || summary.nearAbsenceLimit;
+    final pendingOnly =
+        !unknown &&
+        !summary.exceedsAbsenceLimit &&
+        !needsCaution &&
+        summary.pending > 0;
+    final color = unknown || pendingOnly
         ? scheme.onSurfaceVariant
         : summary.exceedsAbsenceLimit
         ? scheme.error
         : CampusColors.status(
-            summary.nearAbsenceLimit ? 'late' : 'present',
+            needsCaution ? 'late' : 'present',
             theme.brightness == Brightness.dark,
           );
-    return Material(
-      color: scheme.surface,
+    final statusIcon = unknown || pendingOnly
+        ? Icons.info_outline
+        : summary.exceedsAbsenceLimit
+        ? Icons.error_outline
+        : needsCaution
+        ? Icons.warning_amber_rounded
+        : Icons.check_circle_outline;
+    final words = name.trim().split(RegExp(r'\s+'));
+    final initial = words.last.isEmpty ? '?' : words.last.characters.first;
+    final remaining = summary.remainingAbsences;
+    return Card(
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-          child: Row(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(name, style: theme.textTheme.titleMedium),
-                    const SizedBox(height: 4),
-                    Text(
-                      code,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
+              Row(
+                spacing: 10,
+                children: [
+                  ExcludeSemantics(
+                    child: CircleAvatar(
+                      radius: 21,
+                      backgroundColor: color.withValues(alpha: .12),
+                      foregroundColor: color,
+                      child: Text(initial.toUpperCase()),
                     ),
-                    const SizedBox(height: 8),
-                    if (attention.isNotEmpty) ...[
-                      Text(
-                        attention,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                    ],
-                    Text(
-                      summary.hasSlotTotal
-                          ? 'Đã nghỉ ${summary.missedSlots}/${summary.totalSlots} slot · Tối đa ${summary.maxAbsences} · Còn ${summary.remainingAbsences}'
-                          : 'Đã nghỉ ${summary.missedSlots} slot · Chưa có tổng slot môn học',
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      summary.absenceRate == null
-                          ? 'Tỷ lệ vắng: Chưa đủ dữ liệu'
-                          : 'Tỷ lệ vắng: ${summary.absenceRate!.toStringAsFixed(1)}%',
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                    if (summary.pending > 0)
-                      Text(
-                        '${summary.pending} slot chưa rõ kết quả · Cần đối chiếu',
-                      ),
-                    const SizedBox(height: 4),
-                    Row(
+                  ),
+                  Expanded(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Icon(
-                            unknown
-                                ? Icons.info_outline
-                                : summary.exceedsAbsenceLimit
-                                ? Icons.error_outline
-                                : summary.nearAbsenceLimit
-                                ? Icons.warning_amber_rounded
-                                : Icons.check_circle_outline,
-                            size: 18,
-                            color: color,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            attendanceWarningLabel(summary),
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: color,
-                            ),
+                        Text(name, style: theme.textTheme.titleMedium),
+                        const SizedBox(height: 2),
+                        Text(
+                          code,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
                           ),
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                  Icon(
+                    Icons.chevron_right,
+                    size: 20,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              const Icon(Icons.chevron_right, size: 20),
+              const SizedBox(height: 8),
+              CampusStatusChip(
+                attendanceWarningLabel(summary),
+                icon: statusIcon,
+                color: color,
+              ),
+              if (attention.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(attention, style: theme.textTheme.labelMedium),
+                ),
+              if (summary.pending > 0 && !pendingOnly)
+                Text('${summary.pending} slot chưa rõ kết quả · Cần đối chiếu'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 2,
+                children: [
+                  Text(
+                    limit == null
+                        ? 'Đã nghỉ ${summary.missedSlots} slot'
+                        : 'Mức độ vắng · ${summary.missedSlots} / $limit slot',
+                    style: theme.textTheme.labelMedium,
+                  ),
+                  if (remaining != null)
+                    Text(
+                      'Còn $remaining slot',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: color,
+                      ),
+                    ),
+                ],
+              ),
+              if (summary.absenceRate case final rate?)
+                Text(
+                  'Tỷ lệ vắng: ${rate.toStringAsFixed(1)}%',
+                  style: theme.textTheme.bodySmall,
+                ),
+              if (limit != null && limit > 0) ...[
+                const SizedBox(height: 6),
+                ExcludeSemantics(
+                  child: limit <= 8
+                      ? Row(
+                          spacing: 4,
+                          children: [
+                            for (var i = 0; i < limit; i++)
+                              Expanded(
+                                child: Container(
+                                  height: 5,
+                                  decoration: BoxDecoration(
+                                    color: i < summary.missedSlots
+                                        ? color
+                                        : scheme.surfaceContainerHigh,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        )
+                      : LinearProgressIndicator(
+                          value: (summary.missedSlots / limit).clamp(0.0, 1.0),
+                          minHeight: 5,
+                          borderRadius: BorderRadius.circular(4),
+                          color: color,
+                          backgroundColor: scheme.surfaceContainerHigh,
+                        ),
+                ),
+              ],
             ],
           ),
         ),

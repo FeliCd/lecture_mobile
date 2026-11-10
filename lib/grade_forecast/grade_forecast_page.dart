@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../lab2/widgets.dart';
+import '../lab2/theme.dart';
 import 'grade_forecast.dart';
 
 class _Entry {
@@ -97,11 +99,11 @@ class _GradeForecastPageState extends State<GradeForecastPage> {
           (sum, entry) => sum + (forecastHundredths(entry.weight.text) ?? 0),
         ) /
         100;
-    return Scaffold(
+    return CampusScaffold(
       appBar: AppBar(title: const Text('Tính điểm FE/PE')),
       body: SingleChildScrollView(
         controller: scroll,
-        padding: const EdgeInsets.all(16),
+        padding: CampusSpace.pageInsets,
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1000),

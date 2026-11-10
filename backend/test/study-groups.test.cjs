@@ -38,6 +38,61 @@ test('messages enforce membership, derive sender, limit payload and deduplicate 
  assert.throws(()=>f.call(f.student,'sendGroupMessage',{...data,text:'a'.repeat(2001),requestKey:'long-message-12345'}),/INVALID_MESSAGE/);
  assert.throws(()=>f.call(f.student,'sendGroupMessage',{...data,text:'',requestKey:'other-message-key1'}),/INVALID_MESSAGE/);
 });
+test('FCM announces a committed Desktop message only to the other current group member',()=>{
+ const f=setup();f.save();
+ f.props.GROUP_FCM_PROJECT_ID='fap-test-project';
+ f.props.GROUP_FCM_WEB_URL='https://student.example.com';
+ const register=(actor,token,platform)=>f.call(actor,'registerGroupPushDevice',{token,platform});
+ const other={...f.student,uid:'student-s2',firebaseUid:'firebase-other'};
+ register(f.student,'student-one-token-123456','web');
+ register(other,'student-two-token-123456','web');
+ register(f.teacher,'teacher-android-token-123456','android');
+ f.c.authenticate_=()=>f.teacher.entity;
+ f.c.ScriptApp={getOAuthToken:()=> 'server-only-token'};
+ let locked=false;
+ f.c.LockService={getScriptLock:()=>({
+  tryLock:()=>{assert.equal(locked,false);locked=true;return true;},
+  releaseLock:()=>{locked=false;},
+ })};
+ const requests=[];
+ f.c.UrlFetchApp={fetchAll:batch=>{
+  assert.equal(locked,false);
+  assert.equal(f.store.PortalGroupMessages.length,2);
+  requests.push(...batch);
+  throw Error('FCM offline');
+ }};
+ const input={action:'portalCall',idToken:'desktop-oauth',method:'sendGroupMessage',
+  data:{classId:'c1',groupId:g1,text:'Private chat text',requestKey:'fcm-desktop-send-1234'}};
+ const result=f.c.portalHandle_(input);
+ assert.equal(result.saved,true);
+ assert.equal(result._groupPush,undefined);
+ assert.equal(f.c.portalHandle_(input).id,result.id);
+ assert.equal(requests.length,1);
+ assert.equal(requests[0].url,'https://fcm.googleapis.com/v1/projects/fap-test-project/messages:send');
+ assert.equal(requests[0].headers.Authorization,'Bearer server-only-token');
+ const {message}=JSON.parse(requests[0].payload);
+ assert.equal(message.token,'student-one-token-123456');
+ assert.equal(message.data.recipientUid,'firebase-student');
+ assert.equal(message.data.groupId,g1);
+ assert.equal(message.data.messageId,result.id);
+ assert.equal(message.webpush.fcm_options.link,'https://student.example.com/?chatClass=c1');
+ assert.doesNotMatch(requests[0].payload,/Private chat text/);
+ assert.equal(f.call(f.student,'getGroupMessages',{groupId:g1}).messages[0].text,'Private chat text');
+});
+test('registration requires Firebase identity and binds a reused token to its latest account',()=>{
+ const f=setup();f.props.GROUP_FCM_PROJECT_ID='fap-test-project';
+ const payload={platform:'web',token:'shared-browser-token-123456'};
+ const other={...f.student,uid:'student-s2',firebaseUid:'firebase-other'};
+ assert.throws(()=>f.call(f.c.lab2DesktopActor_(f.teacher.entity),'registerGroupPushDevice',payload),/PERMISSION_DENIED/);
+ assert.equal(f.call(f.student,'registerGroupPushDevice',payload).enabled,true);
+ assert.equal(f.call(other,'registerGroupPushDevice',payload).enabled,true);
+ f.call(f.student,'unregisterGroupPushDevice',payload);
+ const current=f.c.lab2Read_(f.book,'PortalGroupPushDevices').filter(row=>row.token);
+ assert.equal(current.length,1);
+ assert.equal(current[0].firebaseUid,'firebase-other');
+ f.call(other,'unregisterGroupPushDevice',payload);
+ assert.equal(f.c.lab2Read_(f.book,'PortalGroupPushDevices').filter(row=>row.token).length,0);
+});
 test('moving member revokes old chat and attachment access on next server request',()=>{
  const f=setup();f.save();f.call(f.student,'sendGroupMessage',{groupId:g1,text:'before move',requestKey:'before-move-123456'});
  f.save({version:1,requestKey:'move-plan-12345678',groups:[{...f.groups[0],memberIds:[]},{...f.groups[1],memberIds:['s1','s2']}]});

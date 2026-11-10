@@ -3,6 +3,7 @@ import '../grade_forecast/grade_forecast_page.dart';
 import 'theme.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../cloud/push_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
@@ -48,15 +49,9 @@ class ClassTile extends StatelessWidget {
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: accent.withValues(alpha: .12),
-                      borderRadius: BorderRadius.circular(10),
+                      shape: BoxShape.circle,
                     ),
-                    child: Text(
-                      code.length > 3 ? code.substring(0, 3) : code,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: accent,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                    child: Icon(Icons.school_outlined, color: accent),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -92,7 +87,7 @@ class ClassTile extends StatelessWidget {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(24),
                 ),
                 child: Wrap(
                   spacing: 16,
@@ -115,8 +110,8 @@ class ClassTile extends StatelessWidget {
               LayoutBuilder(
                 builder: (context, constraints) {
                   final actions = [
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
+                    FilledButton.tonalIcon(
+                      style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 10),
                         textStyle: theme.textTheme.labelMedium?.copyWith(
                           fontWeight: FontWeight.w600,
@@ -125,7 +120,7 @@ class ClassTile extends StatelessWidget {
                       onPressed: () =>
                           context.push('/class/${data['id']}?tab=2'),
                       icon: const Icon(Icons.how_to_reg_outlined, size: 18),
-                      label: const Text('Chọn buổi điểm danh'),
+                      label: const Text('Điểm danh'),
                     ),
                     FilledButton.icon(
                       style: FilledButton.styleFrom(
@@ -136,10 +131,10 @@ class ClassTile extends StatelessWidget {
                       ),
                       onPressed: () => context.push('/class/${data['id']}'),
                       icon: const Icon(Icons.arrow_forward, size: 16),
-                      label: const Text('Chi tiết lớp'),
+                      label: const Text('Chi tiết'),
                     ),
                   ];
-                  return constraints.maxWidth < 360 ||
+                  return constraints.maxWidth < 270 ||
                           MediaQuery.textScalerOf(context).scale(1) > 1.3
                       ? Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -186,7 +181,7 @@ class _ClassListState extends ConsumerState<ClassList> {
   Widget build(BuildContext context) {
     final selection = ref.watch(selectedAcademicTermProvider(widget.user.uid));
     return CampusRefreshList(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
         CampusSearchField(
           controller: searchController,
@@ -211,22 +206,23 @@ class _ClassListState extends ConsumerState<ClassList> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (effectiveTerm != null)
-                  Text(
-                    'Học kỳ $effectiveTerm',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                const SizedBox(height: 16),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (effectiveTerm != null)
+                      CampusStatusChip(
+                        'Học kỳ $effectiveTerm',
+                        icon: Icons.calendar_today_outlined,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    CampusStatusChip(
                       '${filtered.length} lớp học',
-                      style: Theme.of(context).textTheme.titleSmall,
+                      icon: Icons.school_outlined,
                     ),
-                  ),
+                  ],
                 ),
+                const SizedBox(height: 16),
                 if (filtered.isEmpty)
                   EmptyState(
                     'Không có lớp phù hợp.',
@@ -294,7 +290,7 @@ class ClassPage extends ConsumerWidget {
             );
           }
           final cls = s.data!;
-          return Scaffold(
+          return CampusScaffold(
             appBar: AppBar(
               title: Text('${cls['classCode'] ?? 'Lớp học'}'),
               actions: [
@@ -331,10 +327,12 @@ class ClassPage extends ConsumerWidget {
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute<void>(
-                      builder: (_) => Scaffold(
+                      builder: (_) => CampusScaffold(
                         appBar: AppBar(title: const Text('Nhóm học tập')),
                         body: StudyGroups(
                           classId: classId,
+                          groupChanges:
+                              PushNotifications.instance.groupChanges.stream,
                           call: (method, data) =>
                               ref.read(repositoryProvider).call('groupCall', {
                                 'method': method,
@@ -358,38 +356,50 @@ class ClassPage extends ConsumerWidget {
                     child: ClassContextHeader(cls: cls),
                   ),
                 ),
-                const TabBar(
-                  isScrollable: true,
-                  tabs: [
-                    Tab(
-                      icon: Icon(Icons.groups_outlined, size: 18),
-                      text: 'Sinh viên',
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(24),
                     ),
-                    Tab(
-                      icon: Icon(Icons.how_to_reg_outlined, size: 18),
-                      text: 'Điểm danh',
-                    ),
-                    Tab(
-                      icon: Icon(Icons.event_note_outlined, size: 18),
-                      text: 'Buổi học',
-                    ),
-                    Tab(
-                      icon: Icon(Icons.query_stats, size: 18),
-                      text: 'Thống kê',
-                    ),
-                    if (useSharedDesktop)
-                      Tab(
-                        icon: Icon(Icons.event_busy_outlined, size: 18),
-                        text: 'Đơn xin nghỉ',
+                    child: TabBar(
+                      isScrollable: true,
+                      tabAlignment: TabAlignment.start,
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      dividerColor: Colors.transparent,
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      indicatorPadding: const EdgeInsets.symmetric(vertical: 4),
+                      indicator: ShapeDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        shape: const StadiumBorder(),
                       ),
-                  ],
+                      labelStyle: Theme.of(context).textTheme.labelMedium,
+                      tabs: [
+                        for (final (icon, label) in [
+                          (Icons.groups_outlined, 'Sinh viên'),
+                          (Icons.how_to_reg_outlined, 'Điểm danh'),
+                          (Icons.event_note_outlined, 'Buổi học'),
+                          (Icons.query_stats, 'Thống kê'),
+                          if (useSharedDesktop)
+                            (Icons.event_busy_outlined, 'Đơn xin nghỉ'),
+                        ])
+                          Tab(
+                            child: Row(
+                              spacing: 4,
+                              children: [Icon(icon, size: 15), Text(label)],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
                 Expanded(
                   child: TabBarView(
                     children: [
                       if (user.isLecturer)
                         SingleChildScrollView(
-                          padding: const EdgeInsets.all(16),
+                          padding: CampusSpace.pageInsets,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -426,85 +436,82 @@ class ClassContextHeader extends StatelessWidget {
   const ClassContextHeader({super.key, required this.cls});
   @override
   Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+    margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
     decoration: BoxDecoration(
       color: Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(12),
       border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
     ),
-    padding: const EdgeInsets.all(16),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    padding: const EdgeInsets.all(12),
+    child: Row(
+      spacing: 10,
       children: [
-        Tooltip(
-          message: subjectLabel(cls),
-          child: Text(
-            subjectLabel(cls),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+        CircleAvatar(
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          foregroundColor: Theme.of(context).colorScheme.onPrimary,
+          child: const Icon(Icons.school_outlined, size: 20),
         ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 12,
-          runSpacing: 4,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text('${cls['term'] ?? 'Chưa có học kỳ'}'),
-            Text(
-              cls['studentCount'] == null
-                  ? 'Chưa có sĩ số'
-                  : '${cls['studentCount']} sinh viên',
-            ),
-            PopupMenuButton<String>(
-              tooltip: 'Công cụ lớp',
-              onSelected: (value) {
-                if (value == 'import') {
-                  openImport(context, cls: cls);
-                } else {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => ClassToolsPage(cls: cls),
-                    ),
-                  );
-                }
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: 'import',
-                  child: Text('Nhập sinh viên vào lớp'),
-                ),
-                if (useSharedDesktop)
-                  const PopupMenuItem(
-                    value: 'tools',
-                    child: Text('Ngoại lệ lịch / sửa sinh viên'),
-                  ),
-              ],
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.build_outlined,
-                      size: 18,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        'Công cụ lớp',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                    ),
-                    const Icon(Icons.arrow_drop_down),
-                  ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 6,
+            children: [
+              Tooltip(
+                message: subjectLabel(cls),
+                child: Text(
+                  subjectLabel(cls),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  CampusStatusChip(
+                    '${cls['term'] ?? 'Chưa có học kỳ'}',
+                    icon: Icons.calendar_today_outlined,
+                  ),
+                  CampusStatusChip(
+                    cls['studentCount'] == null
+                        ? 'Chưa có sĩ số'
+                        : '${cls['studentCount']} sinh viên',
+                    icon: Icons.groups_outlined,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        PopupMenuButton<String>(
+          tooltip: 'Công cụ lớp',
+          icon: const Icon(Icons.tune),
+          style: IconButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
+            foregroundColor: Theme.of(context).colorScheme.primary,
+          ),
+          onSelected: (value) {
+            if (value == 'import') {
+              openImport(context, cls: cls);
+            } else {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ClassToolsPage(cls: cls),
+                ),
+              );
+            }
+          },
+          itemBuilder: (_) => [
+            const PopupMenuItem(
+              value: 'import',
+              child: Text('Nhập sinh viên vào lớp'),
             ),
+            if (useSharedDesktop)
+              const PopupMenuItem(
+                value: 'tools',
+                child: Text('Ngoại lệ lịch / sửa sinh viên'),
+              ),
           ],
         ),
       ],
@@ -520,21 +527,20 @@ class SessionsPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final repo = ref.read(repositoryProvider);
     return CampusRefreshList(
-      padding: const EdgeInsets.all(16),
+      padding: CampusSpace.pageInsets,
       children: [
-        Text(subjectLabel(cls), style: Theme.of(context).textTheme.titleLarge),
-        Text('Lớp ${cls['classCode']}'),
-        const SizedBox(height: 16),
-        TextButton.icon(
+        const CampusInfoBanner(
+          icon: Icons.how_to_reg_outlined,
+          title: 'Điểm danh theo buổi',
+          subtitle: 'Mở phiên từ lịch dạy hoặc xem lại phiên đã chốt bên dưới.',
+        ),
+        const SizedBox(height: CampusSpace.md),
+        OutlinedButton.icon(
           onPressed: () => DefaultTabController.of(context).animateTo(2),
           icon: const Icon(Icons.calendar_month),
           label: const Text('Chọn buổi học trong lịch để điểm danh'),
         ),
-        const SizedBox(height: 20),
-        Text(
-          'Các phiên điểm danh',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
+        const CampusSectionHeader(title: 'Các phiên điểm danh'),
         LiveList(
           source: () => repo.watch(
             'attendanceSessions',
@@ -553,6 +559,12 @@ class SessionsPanel extends ConsumerWidget {
                     (session) => CampusCard(
                       child: ListTile(
                         contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          session['status'] == 'open'
+                              ? Icons.qr_code_2
+                              : Icons.fact_check_outlined,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
                         title: Text(attendanceSessionLabel(session, cls)),
                         subtitle: Text(
                           '${localDate(dateValue(session['opensAt']))} – ${localDate(dateValue(session['closesAt']))}\n'
@@ -733,7 +745,7 @@ class _AnalyticsPanelState extends ConsumerState<AnalyticsPanel> {
   Widget build(BuildContext context) {
     final repo = ref.read(repositoryProvider);
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: CampusSpace.pageInsets,
       child: LiveList(
         source: () => repo.watch(
           'attendanceSessions',
@@ -836,6 +848,10 @@ class _AnalyticsPanelState extends ConsumerState<AnalyticsPanel> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  const CampusSectionHeader(
+                    title: 'Thống kê chuyên cần',
+                    description: 'Xem kết quả đã chốt theo khoảng thời gian.',
+                  ),
                   Wrap(
                     spacing: 8,
                     children: [0, 30, 90]
@@ -850,29 +866,46 @@ class _AnalyticsPanelState extends ConsumerState<AnalyticsPanel> {
                   ),
                   const SizedBox(height: 12),
                   CampusCard(
-                    child: Wrap(
-                      spacing: 24,
-                      runSpacing: 16,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      spacing: CampusSpace.sm,
                       children: [
-                        Text('Buổi đã học: ${finalized.length}'),
                         Text(
                           'Chuyên cần: ${summary.rate?.toStringAsFixed(1) ?? 'Chưa đủ dữ liệu'}${summary.rate == null ? '' : '%'}',
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
-                        Text('Tổng lượt vắng: ${summary.absent}'),
+                        AttendanceBar(counts: summary),
+                        Wrap(
+                          spacing: CampusSpace.sm,
+                          runSpacing: CampusSpace.xs,
+                          children: [
+                            CampusStatusChip(
+                              'Buổi đã học: ${finalized.length}',
+                              icon: Icons.event_available_outlined,
+                            ),
+                            CampusStatusChip(
+                              'Tổng lượt vắng: ${summary.absent}',
+                              icon: Icons.event_busy_outlined,
+                            ),
+                            CampusStatusChip(
+                              'Vắng hôm nay: $absentToday',
+                              icon: Icons.today_outlined,
+                            ),
+                            if (user.isLecturer)
+                              CampusStatusChip(
+                                'Cần theo dõi: $risk',
+                                icon: Icons.warning_amber_outlined,
+                              ),
+                          ],
+                        ),
                         Text(
                           'Đi trễ: ${summary.late} • Vắng có phép: ${summary.excused}',
                         ),
                         if (summary.needsPolicy) Text(summary.absenceWarning),
-                        Text('Vắng hôm nay: $absentToday'),
-                        if (user.isLecturer) Text('Cần theo dõi: $risk'),
                       ],
                     ),
                   ),
-                  Text(
-                    'Phân bố theo buổi',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 12),
+                  const CampusSectionHeader(title: 'Phân bố theo buổi'),
                   ...finalized.map((s) {
                     final rows = records
                         .where((r) => r['attendanceSessionId'] == s['id'])

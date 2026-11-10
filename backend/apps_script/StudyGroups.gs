@@ -21,6 +21,7 @@ function groupAccess_(book,actor,d) {
 }
 function groupCall_(book,actor,method,d) {
   if(!d||typeof d!=='object'||Array.isArray(d)) throw Error('INVALID_INPUT');
+  if(['registerGroupPushDevice','unregisterGroupPushDevice'].includes(method)) return groupPushDevice_(book,actor,d,method==='unregisterGroupPushDevice');
   if(['getGroupSignupSheet','createGroupSignupSheet','resumeGroupSignupSheet','syncGroupSignupSheet','closeGroupSignupSheet'].includes(method)) return groupSignupCall_(book,actor,method,d);
   if(['createGroupTask','listGroupTasks','listMyTaskNotifications','readTaskNotification'].includes(method)) return groupTaskCall_(book,actor,method,d);
   lab2Class_(book,actor,String(d.classId||''),false);
@@ -117,7 +118,9 @@ function groupCall_(book,actor,method,d) {
     }
     const row={id:Utilities.getUuid(),classId:d.classId,groupId:d.groupId,sender:actor.uid,senderName:actor.entity.fullName||'Thành viên',text,fileId:file?file.getId():'',fileName:name,mimeType:mime,size,createdAt:new Date().toISOString(),requestKey:key};
     // Keep file on uncertain batch failure: retry may find committed receipt.
-    lab2Write_(book,[{table:'PortalGroupMessages',row}]);return {saved:true,id:row.id,createdAt:row.createdAt};
+    lab2Write_(book,[{table:'PortalGroupMessages',row}]);
+    return {saved:true,id:row.id,createdAt:row.createdAt,
+      _groupPush:{classId:row.classId,groupId:row.groupId}};
   }
   throw Error('FEATURE_DISABLED');
 }

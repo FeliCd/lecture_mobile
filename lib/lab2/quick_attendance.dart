@@ -8,6 +8,7 @@ import 'repository.dart';
 import 'widgets.dart';
 import 'attendance_history.dart';
 import 'student_support.dart' show consecutiveAbsences;
+import 'theme.dart';
 
 final quickHistorySessionsProvider = StreamProvider.autoDispose
     .family<List<Data>, String>(
@@ -376,7 +377,7 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
             ),
           ],
         ),
-        body: SafeArea(
+        body: CampusPageBody(
           child: switch (phase) {
             _Phase.loading when c == null => const Center(
               child: CampusLoadingState(message: 'Đang tải buổi học…'),
@@ -390,53 +391,63 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
           },
         ),
         bottomNavigationBar: c != null && d != null && editable
-            ? SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Totals stay visible while the list scrolls.
-                      _Counts(counts: d.counts),
-                      const SizedBox(height: 8),
-                      FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size.fromHeight(52),
-                        ),
-                        onPressed:
-                            phase != _Phase.ready ||
-                                d.students.isEmpty ||
-                                (completed && !d.dirty && !uncertain)
-                            ? null
-                            : conflict
-                            ? reloadAfterConflict
-                            : review,
-                        icon: phase == _Phase.sending
-                            ? const SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : Icon(
-                                conflict
-                                    ? Icons.sync
-                                    : Icons.fact_check_outlined,
-                              ),
-                        label: Text(
-                          phase == _Phase.sending
-                              ? 'Đang gửi…'
+            ? DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  border: Border(
+                    top: BorderSide(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
+                  ),
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Totals stay visible while the list scrolls.
+                        _Counts(counts: d.counts),
+                        const SizedBox(height: 8),
+                        FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(52),
+                          ),
+                          onPressed:
+                              phase != _Phase.ready ||
+                                  d.students.isEmpty ||
+                                  (completed && !d.dirty && !uncertain)
+                              ? null
                               : conflict
-                              ? 'Tải lại và đối soát'
-                              : uncertain
-                              ? 'Kiểm tra và thử lại'
-                              : completed
-                              ? 'Xem lại và lưu thay đổi'
-                              : 'Xem lại và lưu',
+                              ? reloadAfterConflict
+                              : review,
+                          icon: phase == _Phase.sending
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Icon(
+                                  conflict
+                                      ? Icons.sync
+                                      : Icons.fact_check_outlined,
+                                ),
+                          label: Text(
+                            phase == _Phase.sending
+                                ? 'Đang gửi…'
+                                : conflict
+                                ? 'Tải lại và đối soát'
+                                : uncertain
+                                ? 'Kiểm tra và thử lại'
+                                : completed
+                                ? 'Xem lại và lưu thay đổi'
+                                : 'Xem lại và lưu',
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               )
@@ -517,7 +528,7 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
       controller: scroll,
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
           sliver: SliverList.list(
             children: [
               if (!historyReady)
@@ -530,14 +541,37 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
                 const Text(
                   'Chưa có tổng slot môn học: chỉ hiển thị số slot nghỉ, chưa kết luận tỷ lệ/cấm thi.',
                 ),
-              Text(_lessonTitle(c), style: theme.textTheme.titleMedium),
-              Text(
-                '${c['room'] != null && '${c['room']}'.isNotEmpty ? 'Phòng ${c['room']} · ' : ''}Sĩ số ${d.students.length}',
-                style: theme.textTheme.bodyMedium,
+              CampusCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_lessonTitle(c), style: theme.textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        if (c['room'] != null && '${c['room']}'.isNotEmpty)
+                          CampusStatusChip(
+                            'Phòng ${c['room']}',
+                            icon: Icons.place_outlined,
+                          ),
+                        CampusStatusChip(
+                          'Sĩ số ${d.students.length}',
+                          icon: Icons.groups_outlined,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 8),
               _StatusBanner(
                 text: _statusText(c, d),
+                icon: saveError != null
+                    ? Icons.error_outline
+                    : completed && !d.dirty
+                    ? Icons.task_alt
+                    : Icons.info_outline,
                 tone: saveError != null
                     ? theme.colorScheme.errorContainer
                     : completed
@@ -596,10 +630,10 @@ class _QuickAttendancePageState extends ConsumerState<QuickAttendancePage> {
           )
         else
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             sliver: SliverList.separated(
               itemCount: rows.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
+              separatorBuilder: (_, _) => const SizedBox(height: 6),
               itemBuilder: (_, i) => _StudentTile(
                 student: rows[i],
                 historyHint: hintFor(rows[i]),
@@ -674,9 +708,15 @@ class _Counts extends StatelessWidget {
     runSpacing: 4,
     children: [
       for (final s in quickStatuses)
-        Text(
+        CampusStatusChip(
           '${quickStatusLabel(s)}: ${counts[s]}',
-          style: Theme.of(context).textTheme.labelLarge,
+          icon: s == 'present'
+              ? Icons.check_circle_outline
+              : Icons.cancel_outlined,
+          color: CampusColors.status(
+            s,
+            Theme.of(context).brightness == Brightness.dark,
+          ),
         ),
     ],
   );
@@ -685,18 +725,30 @@ class _Counts extends StatelessWidget {
 class _StatusBanner extends StatelessWidget {
   final String text;
   final Color tone;
-  const _StatusBanner({required this.text, required this.tone});
+  final IconData icon;
+  const _StatusBanner({
+    required this.text,
+    required this.tone,
+    required this.icon,
+  });
   @override
   Widget build(BuildContext context) => Semantics(
     liveRegion: true,
     child: DecoratedBox(
       decoration: BoxDecoration(
         color: tone,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(CampusRadius.control),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Text(text),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 18),
+            const SizedBox(width: 8),
+            Expanded(child: Text(text)),
+          ],
+        ),
       ),
     ),
   );
@@ -720,13 +772,29 @@ class _StudentTile extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Material(
-      color: changed ? scheme.primaryContainer.withValues(alpha: .35) : null,
+      color: changed
+          ? Color.alphaBlend(
+              scheme.primaryContainer.withValues(alpha: .35),
+              scheme.surface,
+            )
+          : scheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(CampusRadius.control),
+        side: BorderSide(
+          color: changed ? scheme.primary : scheme.outlineVariant,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: ListTile(
         minVerticalPadding: 10,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-        title: Text(student.name.isEmpty ? student.code : student.name),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+        title: Text(
+          student.name.isEmpty ? student.code : student.name,
+          style: theme.textTheme.titleSmall,
+        ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -734,7 +802,7 @@ class _StudentTile extends StatelessWidget {
             if (historyHint.isNotEmpty)
               Text(
                 historyHint,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                style: theme.textTheme.bodySmall?.copyWith(
                   color: scheme.error,
                   fontWeight: FontWeight.w600,
                 ),

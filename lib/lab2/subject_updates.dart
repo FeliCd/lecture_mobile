@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'domain.dart';
 import 'repository.dart';
@@ -115,9 +116,13 @@ class _SubjectUpdatesPageState extends ConsumerState<SubjectUpdatesPage> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(
+            horizontal: CampusSpace.page,
+            vertical: CampusSpace.sm,
+          ),
           child: Wrap(
-            spacing: 8,
+            spacing: CampusSpace.sm,
+            runSpacing: CampusSpace.xs,
             children: [
               for (final entry in {
                 'NEWS': 'Tin tức',
@@ -145,7 +150,7 @@ class _SubjectUpdatesPageState extends ConsumerState<SubjectUpdatesPage> {
           child: type == 'SAVED'
               ? const SavedArticlesPanel()
               : ListView(
-                  padding: const EdgeInsets.all(16),
+                  padding: CampusSpace.pageInsets,
                   children: [
                     const CampusSectionHeader(
                       title: 'Cập nhật kiến thức',
@@ -293,26 +298,56 @@ class _SubjectUpdatesPageState extends ConsumerState<SubjectUpdatesPage> {
                             'Chưa có nội dung phù hợp với bộ lọc.',
                           ),
                       ],
-                      ...items.map(
-                        (item) => CampusCard(
+                      for (final item in items)
+                        CampusCard(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                '${item['title']}',
-                                style: Theme.of(
-                                  context,
-                                ).textTheme.titleMedium?.copyWith(height: 1.35),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                spacing: CampusSpace.md,
+                                children: [
+                                  ArticleThumbnail(
+                                    article: {...item, 'contentType': type},
+                                  ),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      spacing: CampusSpace.xs,
+                                      children: [
+                                        Text(
+                                          type == 'NEWS'
+                                              ? 'TIN MỚI'
+                                              : 'NGHIÊN CỨU',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelSmall
+                                              ?.copyWith(
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.primary,
+                                              ),
+                                        ),
+                                        Text(
+                                          '${item['title']}',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleMedium
+                                              ?.copyWith(height: 1.3),
+                                        ),
+                                        Text(
+                                          '${item['sourceName']} • ${item['publishedAt'] == null ? 'Chưa có ngày đăng' : localDate(DateTime.parse(item['publishedAt']))}',
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.bodySmall,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 8,
-                                ),
-                                child: Text(
-                                  '${item['sourceName']} • ${item['publishedAt'] == null ? 'Chưa có ngày đăng' : localDate(DateTime.parse(item['publishedAt']))}',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ),
+                              const SizedBox(height: CampusSpace.md),
                               Text(
                                 'Môn: ${(item['subjectCodes'] as List? ?? []).join(', ')}',
                               ),
@@ -372,7 +407,6 @@ class _SubjectUpdatesPageState extends ConsumerState<SubjectUpdatesPage> {
                             ],
                           ),
                         ),
-                      ),
                       if (cursor != null)
                         OutlinedButton(
                           onPressed: busy ? null : () => load(more: true),

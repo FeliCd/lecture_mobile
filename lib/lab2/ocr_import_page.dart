@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'data_import.dart';
 import 'domain.dart';
@@ -169,7 +170,7 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
         !saved &&
         (raw.text.isNotEmpty || semester.text.isNotEmpty || rows.isNotEmpty),
     busy: busy,
-    child: Scaffold(
+    child: CampusScaffold(
       appBar: AppBar(
         title: const Text('Nhập lịch từ ảnh'),
         actions: const [
@@ -184,7 +185,7 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: CampusSpace.pageInsets,
         children: [
           const Text(
             '1. Ảnh → văn bản OCR → duyệt lịch',

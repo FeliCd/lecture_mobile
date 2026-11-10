@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'data_import.dart';
 import 'domain.dart';
@@ -239,7 +240,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
   Widget build(BuildContext context) => CampusDraftGuard(
     dirty: dirty && !saved,
     busy: busy,
-    child: Scaffold(
+    child: CampusScaffold(
       appBar: AppBar(
         title: Text(
           timetable
@@ -258,7 +259,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: CampusSpace.pageInsets,
         children: [
           SegmentedButton<bool>(
             segments: const [

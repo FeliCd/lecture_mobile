@@ -108,6 +108,22 @@ void main() {
         '/',
       );
       expect(pushDestination({'screen': 'settings'}), '/settings');
+      expect(
+        pushDestination({
+          'screen': 'group-chat',
+          'classId': 'c-1',
+          'groupId': 'g-1',
+        }),
+        '/chat/c-1/g-1',
+      );
+      expect(
+        pushDestination({
+          'screen': 'group-chat',
+          'classId': 'c-1',
+          'groupId': '../settings',
+        }),
+        '/',
+      );
     },
   );
 }

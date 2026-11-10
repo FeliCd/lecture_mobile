@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:excel/excel.dart' hide Data;
 import 'package:flutter/material.dart';
+import 'theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'domain.dart';
@@ -177,10 +178,10 @@ class _WeeklyReportState extends ConsumerState<LecturerWeeklyReportPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => CampusScaffold(
     appBar: AppBar(title: const Text('Tổng kết tuần')),
     body: ListView(
-      padding: const EdgeInsets.all(20),
+      padding: CampusSpace.pageInsets,
       children: [
         TextButton.icon(
           icon: const Icon(Icons.date_range),

@@ -5,53 +5,89 @@ import 'theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'repository.dart';
 
+/// Shared content column for the lecturer tabs and their detail pages.
+class CampusPageBody extends StatelessWidget {
+  final Widget child;
+  const CampusPageBody({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: child,
+      ),
+    ),
+  );
+}
+
+class CampusScaffold extends StatelessWidget {
+  final PreferredSizeWidget appBar;
+  final Widget body;
+  final Widget? floatingActionButton;
+  final Widget? bottomNavigationBar;
+
+  const CampusScaffold({
+    super.key,
+    required this.appBar,
+    required this.body,
+    this.floatingActionButton,
+    this.bottomNavigationBar,
+  });
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: appBar,
+    body: CampusPageBody(child: body),
+    floatingActionButton: floatingActionButton,
+    bottomNavigationBar: bottomNavigationBar,
+  );
+}
+
 /// The compact identity used across Stitch's four main screens.
 class CampusBrandTitle extends StatelessWidget {
   final String section;
   const CampusBrandTitle({super.key, required this.section});
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Row(
-        children: [
-          Flexible(
-            child: Text(
-              'FAP Smart Lecturer',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: Theme.of(context).colorScheme.primary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              'GV',
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 3),
-      Text(
-        'FPT University · $section',
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 18,
+          backgroundColor: scheme.primary,
+          foregroundColor: scheme.onPrimary,
+          child: const Icon(Icons.school_outlined, size: 20),
         ),
-      ),
-    ],
-  );
+        const SizedBox(width: 8),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'FAP Lecturer',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                section,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.primary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class CampusInfoBanner extends StatelessWidget {
@@ -568,6 +604,19 @@ class _CampusSearchFieldState extends State<CampusSearchField> {
         builder: (context, value, _) => TextField(
           controller: controller,
           decoration: InputDecoration(
+            filled: true,
+            fillColor: Theme.of(context).colorScheme.surfaceContainerLow,
+            enabledBorder: const OutlineInputBorder(
+              borderRadius: BorderRadius.all(Radius.circular(28)),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: const BorderRadius.all(Radius.circular(28)),
+              borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.primary,
+                width: 2,
+              ),
+            ),
             labelText: widget.hint,
             prefixIcon: const Icon(Icons.search),
             isDense: true,

@@ -25,8 +25,10 @@ function portalHandle_(request) {
   lab2Limit_(actor.uid, 'portal:'+String(request.method));
   const lock=LockService.getScriptLock();
   if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
-  try {return portalCall_(book,actor,String(request.method||''),request.data||{});}
+  let result;
+  try {result=portalCall_(book,actor,String(request.method||''),request.data||{});}
   finally {lock.releaseLock();}
+  return groupPushAfterCommit_(book,actor,result);
 }
 function portalAudit_(actor,classId,entityId,action,detail) {
   return {table:'PortalAudit',row:{id:Utilities.getUuid(),classId,entityId,actor:actor.uid,action,at:new Date().toISOString(),detail:JSON.stringify(detail)}};
@@ -109,6 +111,7 @@ function portalGrades_(grades,components) {
 }
 function portalCall_(book,actor,method,d) {
   if(!d||typeof d!=='object'||Array.isArray(d)) throw Error('INVALID_INPUT');
+  if(['registerGroupPushDevice','unregisterGroupPushDevice'].includes(method)) return groupPushDevice_(book,actor,d,method==='unregisterGroupPushDevice');
   if(['getGroupSignupSheet','createGroupSignupSheet','resumeGroupSignupSheet','syncGroupSignupSheet','closeGroupSignupSheet'].includes(method)) return groupCall_(book,actor,method,d);
   if(['getGroupPlan','saveGroupPlan','getGroupMessages','sendGroupMessage','downloadGroupFile','ackGroupMessages','createGroupTask','listGroupTasks','listMyTaskNotifications','readTaskNotification'].includes(method)) return groupCall_(book,actor,method,d);
   if(method==='listClasses') {

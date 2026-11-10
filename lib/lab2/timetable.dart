@@ -50,16 +50,17 @@ class LecturerTimetable extends ConsumerStatefulWidget {
 
 class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
   late DateTime selectedDay;
-  late ScrollController dayScroll;
+  late final ScrollController dayScroll;
   String subject = '';
   bool weekly = false;
   bool filtersOpen = false;
+  static const _dayWidth = 48.0;
   @override
   void initState() {
     super.initState();
     selectedDay = widget.initialDay ?? campusDay(DateTime.now());
     dayScroll = ScrollController(
-      initialScrollOffset: (selectedDay.weekday - 1) * 70.0,
+      initialScrollOffset: (selectedDay.weekday - 1) * _dayWidth,
     );
   }
 
@@ -74,7 +75,7 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && dayScroll.hasClients) {
         dayScroll.animateTo(
-          ((day.weekday - 1) * 70.0).clamp(
+          ((day.weekday - 1) * _dayWidth).clamp(
             0,
             dayScroll.position.maxScrollExtent,
           ),
@@ -164,164 +165,110 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
               .clamp(130, 250)
               .toDouble();
     return CampusRefreshList(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
         CampusEntrance(
           trigger: selectedDay,
-          child: CampusCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    IconButton(
-                      tooltip: 'Tuần trước',
-                      onPressed: () => setState(
-                        () => selectedDay = selectedDay.subtract(
-                          const Duration(days: 7),
-                        ),
-                      ),
-                      icon: const Icon(Icons.chevron_left),
-                    ),
-                    Expanded(
-                      child: Text(
-                        '${timetableDate(monday)} – ${timetableDate(days.last)} • ${monday.year}',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Tuần sau',
-                      onPressed: () => setState(
-                        () => selectedDay = selectedDay.add(
-                          const Duration(days: 7),
-                        ),
-                      ),
-                      icon: const Icon(Icons.chevron_right),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  controller: dayScroll,
-                  child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                  child: Column(
                     children: [
-                      for (final day in days)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: Semantics(
-                            selected: day == selectedDay,
-                            button: true,
-                            label:
-                                '${teachingDayName(day.weekday)}, ${timetableDate(day)}, ${byDay[day]!.length} buổi học${day == today ? ', hôm nay' : ''}',
-                            excludeSemantics: true,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(12),
-                              onTap: () => setState(() => selectedDay = day),
-                              child: Container(
-                                width: 62,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 12,
-                                  horizontal: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: day == selectedDay
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Theme.of(context).colorScheme.surface,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: day == today
-                                        ? Theme.of(context).colorScheme.primary
-                                        : Theme.of(
-                                            context,
-                                          ).colorScheme.outlineVariant,
-                                  ),
-                                ),
-                                child: Column(
-                                  children: [
-                                    Text(
-                                      day.weekday == 7
-                                          ? 'CN'
-                                          : 'T${day.weekday + 1}',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: day == selectedDay
-                                            ? Theme.of(
-                                                context,
-                                              ).colorScheme.onPrimary
-                                            : Theme.of(
-                                                context,
-                                              ).colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      '${day.day}',
-                                      style: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w700,
-                                        color: day == selectedDay
-                                            ? Theme.of(
-                                                context,
-                                              ).colorScheme.onPrimary
-                                            : Theme.of(
-                                                context,
-                                              ).colorScheme.onSurface,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 7),
-                                    Container(
-                                      width: 4,
-                                      height: 4,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: byDay[day]!.isEmpty
-                                            ? Colors.transparent
-                                            : day == selectedDay
-                                            ? Theme.of(
-                                                context,
-                                              ).colorScheme.onPrimary
-                                            : Theme.of(
-                                                context,
-                                              ).colorScheme.primary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                      Row(
+                        children: [
+                          IconButton(
+                            tooltip: 'Tuần trước',
+                            onPressed: () => selectDay(
+                              selectedDay.subtract(const Duration(days: 7)),
+                            ),
+                            icon: const Icon(Icons.chevron_left),
+                          ),
+                          Expanded(
+                            child: Text(
+                              '${timetableDate(monday)} – ${timetableDate(days.last)} • ${monday.year}',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.titleSmall,
                             ),
                           ),
-                        ),
+                          IconButton(
+                            tooltip: 'Tuần sau',
+                            onPressed: () => selectDay(
+                              selectedDay.add(const Duration(days: 7)),
+                            ),
+                            icon: const Icon(Icons.chevron_right),
+                          ),
+                        ],
+                      ),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final fits = constraints.maxWidth >= 44 * days.length;
+                          final width = fits
+                              ? constraints.maxWidth / days.length
+                              : _dayWidth;
+                          final strip = Row(
+                            children: [
+                              for (final day in days)
+                                SizedBox(
+                                  width: width,
+                                  child: _DayTile(
+                                    day: day,
+                                    count: byDay[day]!.length,
+                                    today: day == today,
+                                    selected: day == selectedDay,
+                                    onTap: () =>
+                                        setState(() => selectedDay = day),
+                                  ),
+                                ),
+                            ],
+                          );
+                          return fits
+                              ? strip
+                              : SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  controller: dayScroll,
+                                  child: strip,
+                                );
+                        },
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    TextButton.icon(
-                      onPressed: () => selectDay(today),
-                      icon: const Icon(Icons.today_outlined, size: 16),
-                      label: const Text('Hôm nay'),
-                    ),
-                    SegmentedButton<bool>(
-                      segments: const [
-                        ButtonSegment(value: false, label: Text('Ngày')),
-                        ButtonSegment(value: true, label: Text('Tuần')),
-                      ],
-                      selected: {weekly},
-                      showSelectedIcon: false,
-                      onSelectionChanged: (value) =>
-                          setState(() => weekly = value.single),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+              ),
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 4,
+                runSpacing: 4,
+                children: [
+                  SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(
+                        value: false,
+                        icon: Icon(Icons.view_agenda_outlined, size: 17),
+                        label: Text('Ngày'),
+                      ),
+                      ButtonSegment(
+                        value: true,
+                        icon: Icon(Icons.view_week_outlined, size: 17),
+                        label: Text('Tuần'),
+                      ),
+                    ],
+                    selected: {weekly},
+                    showSelectedIcon: false,
+                    onSelectionChanged: (value) =>
+                        setState(() => weekly = value.single),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => selectDay(today),
+                    icon: const Icon(Icons.today_outlined, size: 16),
+                    label: const Text('Hôm nay'),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
         Row(
@@ -446,6 +393,78 @@ class _LecturerTimetableState extends ConsumerState<LecturerTimetable> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _DayTile extends StatelessWidget {
+  const _DayTile({
+    required this.day,
+    required this.count,
+    required this.today,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final DateTime day;
+  final int count;
+  final bool today, selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final foreground = selected ? scheme.onPrimary : scheme.onSurface;
+    return Semantics(
+      selected: selected,
+      button: true,
+      label:
+          '${teachingDayName(day.weekday)}, ${timetableDate(day)}, $count buổi học${today ? ', hôm nay' : ''}',
+      onTap: onTap,
+      excludeSemantics: true,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Ink(
+            decoration: BoxDecoration(
+              color: selected ? scheme.primary : scheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(14),
+              border: today && !selected
+                  ? Border.all(color: scheme.primary)
+                  : null,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                children: [
+                  Text(
+                    day.weekday == 7 ? 'CN' : 'T${day.weekday + 1}',
+                    style: TextStyle(fontSize: 11, color: foreground),
+                  ),
+                  Text(
+                    '${day.day}',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: foreground,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: count == 0 ? Colors.transparent : foreground,
+                    ),
+                    child: const SizedBox.square(dimension: 4),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

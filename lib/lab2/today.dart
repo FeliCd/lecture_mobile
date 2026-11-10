@@ -16,6 +16,7 @@ import 'quick_attendance.dart';
 import 'package:go_router/go_router.dart';
 import 'attendance_follow_up.dart';
 import 'academic_term.dart';
+import 'dashboard_widgets.dart' show SoftLabel;
 
 TeachingPeriod? todayFocus(List<TeachingPeriod> periods, DateTime now) {
   final candidates =
@@ -82,7 +83,7 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
       );
     }
     return CampusRefreshList(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       children: [
         Text(
           widget.user.name,
@@ -90,13 +91,6 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
           overflow: TextOverflow.ellipsis,
           style: Theme.of(context).textTheme.titleMedium,
         ),
-        Text(
-          '${teachingDayName(day.weekday)}, ${timetableDate(day)} · ${day.year}',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 12),
         LiveList(
           source: () => repo.classes(widget.user),
           empty: 'Chưa có lớp được phân công.',
@@ -109,11 +103,23 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        selected == null
-                            ? 'Chưa có học kỳ'
-                            : 'Học kỳ $selected',
-                        style: Theme.of(context).textTheme.bodySmall,
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          CampusStatusChip(
+                            selected == null
+                                ? 'Chưa có học kỳ'
+                                : 'Học kỳ $selected',
+                            icon: Icons.school_outlined,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          Text(
+                            '${teachingDayName(day.weekday)}, ${timetableDate(day)} · ${day.year}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -185,33 +191,23 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              child: _TodayMetrics(
+                                scheduled: periods
+                                    .where((p) => !p.cancelled)
+                                    .length,
+                                completed: completed,
+                                cancelled: periods
+                                    .where((p) => p.cancelled)
+                                    .length,
+                              ),
+                            ),
                             AttendanceFollowUpPanel(
                               periods: periods
                                   .where((p) => !attendancePending(p, now))
                                   .toList(),
                               now: now,
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              child: Wrap(
-                                spacing: 16,
-                                runSpacing: 8,
-                                children: [
-                                  CampusStatusChip(
-                                    '${periods.where((p) => !p.cancelled).length} buổi',
-                                    icon: Icons.school_outlined,
-                                  ),
-                                  CampusStatusChip(
-                                    '$completed đã chốt',
-                                    icon: Icons.task_alt,
-                                  ),
-                                  if (periods.any((p) => p.cancelled))
-                                    CampusStatusChip(
-                                      '${periods.where((p) => p.cancelled).length} đã hủy',
-                                      icon: Icons.event_busy,
-                                    ),
-                                ],
-                              ),
                             ),
                             if (pending.isNotEmpty)
                               PendingAttendanceSection(periods: pending),
@@ -286,6 +282,74 @@ class _TodayPanelState extends ConsumerState<TodayPanel> {
       ],
     );
   }
+}
+
+class _TodayMetrics extends StatelessWidget {
+  const _TodayMetrics({
+    required this.scheduled,
+    required this.completed,
+    required this.cancelled,
+  });
+
+  final int scheduled, completed, cancelled;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final tileWidth =
+          MediaQuery.textScalerOf(context).scale(1) > 1.3 ||
+              constraints.maxWidth < 300
+          ? constraints.maxWidth
+          : (constraints.maxWidth - 8) / 2;
+      final scheme = Theme.of(context).colorScheme;
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final (icon, label, value) in [
+            (Icons.schedule_outlined, 'Tổng ca dạy', '$scheduled ca'),
+            (Icons.task_alt, 'Đã chốt', '$completed / $scheduled'),
+          ])
+            Container(
+              width: tileWidth,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 17,
+                    backgroundColor: scheme.primaryContainer,
+                    foregroundColor: scheme.onPrimaryContainer,
+                    child: Icon(icon, size: 19),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        Text(
+                          value,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (cancelled > 0)
+            CampusStatusChip('$cancelled đã hủy', icon: Icons.event_busy),
+        ],
+      );
+    },
+  );
 }
 
 class TodayTaskPreview extends ConsumerWidget {
@@ -399,33 +463,53 @@ class PendingAttendanceSection extends StatelessWidget {
       children: [
         CampusSectionHeader(
           title: 'Buổi chưa hoàn tất điểm danh (${periods.length})',
-          description:
-              'Các buổi trong ngày chưa được xác nhận. Chọn Có mặt/Vắng, xem lại và lưu trước 00:00.',
+          description: 'Xem lại và lưu điểm danh trước 00:00.',
         ),
         for (final p in periods)
           Card(
-            color: scheme.errorContainer.withValues(alpha: .35),
+            color: Color.alphaBlend(
+              scheme.errorContainer.withValues(alpha: .28),
+              scheme.surface,
+            ),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    '${p.subjectName.isEmpty ? p.subjectId : p.subjectName} · Lớp ${p.classCode}',
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  Text(
-                    '${p.slot == null ? '' : 'Slot ${p.slot} · '}${p.timeRange} · ${roomLabel(p.room)}',
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    alignment: WrapAlignment.spaceBetween,
+                    children: [
+                      CampusStatusChip(
+                        'Chưa chốt',
+                        icon: Icons.pending_actions_outlined,
+                        color: scheme.error,
+                      ),
+                      if (p.slot != null) SoftLabel('Slot ${p.slot}'),
+                    ],
                   ),
                   const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: FilledButton.tonalIcon(
-                      onPressed: () =>
-                          context.push(quickAttendanceLocation(p.selector)),
-                      icon: const Icon(Icons.checklist_rtl),
-                      label: const Text('Điểm danh nhanh'),
-                    ),
+                  Text(
+                    '${p.subjectId} · Lớp ${p.classCode}',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  if (p.subjectName.isNotEmpty) Text(p.subjectName),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      SoftLabel(p.timeRange, icon: Icons.schedule),
+                      SoftLabel(roomLabel(p.room), icon: Icons.place_outlined),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: () =>
+                        context.push(quickAttendanceLocation(p.selector)),
+                    icon: const Icon(Icons.checklist_rtl),
+                    label: const Text('Điểm danh nhanh'),
                   ),
                 ],
               ),

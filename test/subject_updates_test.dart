@@ -21,6 +21,9 @@ class UpdatesFixture extends FixtureRepository {
           'title': 'Android release',
           'sourceName': 'Official',
           'canonicalUrl': 'https://example.com/a',
+          'imageUrl': input['type'] == 'NEWS'
+              ? 'https://example.com/cover.jpg'
+              : null,
           'publishedAt': '2026-10-10T00:00:00Z',
           'excerpt': '',
           'subjectCodes': ['PRM393'],
@@ -80,6 +83,13 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       expect(find.text('Phù hợp chủ đề: Android'), findsOneWidget);
+      final thumbnail = find.byType(ArticleThumbnail);
+      final title = find.text('Android release');
+      expect(
+        tester.getTopLeft(thumbnail).dx,
+        lessThan(tester.getTopLeft(title).dx),
+      );
+      expect(find.byIcon(Icons.biotech_outlined), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

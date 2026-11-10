@@ -103,7 +103,7 @@ class _AttendanceHostState extends ConsumerState<AttendanceHost>
   @override
   Widget build(BuildContext context) {
     final repo = ref.read(repositoryProvider);
-    return Scaffold(
+    return CampusScaffold(
       appBar: AppBar(title: const Text('Phiên điểm danh QR')),
       body: StreamBuilder<Data?>(
         stream: session,
@@ -120,7 +120,7 @@ class _AttendanceHostState extends ConsumerState<AttendanceHost>
               data['status'] == 'open' &&
               dateValue(data['closesAt']).millisecondsSinceEpoch > now;
           return ListView(
-            padding: const EdgeInsets.all(16),
+            padding: CampusSpace.pageInsets,
             children: [
               Text(
                 attendanceSessionLabel(data),

@@ -5,6 +5,7 @@ import 'timetable.dart';
 import 'timetable_domain.dart';
 import 'widgets.dart';
 import 'timetable_card.dart';
+import 'theme.dart';
 
 class ClassTimetable extends ConsumerStatefulWidget {
   final Data cls;
@@ -58,40 +59,39 @@ class _ClassTimetableState extends ConsumerState<ClassTimetable> {
     }
     final count = periodsByDay.values.fold(0, (n, p) => n + p.length);
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: CampusSpace.pageInsets,
       children: [
-        Text(
-          subjectLabel(widget.cls),
-          style: Theme.of(context).textTheme.titleLarge,
+        const CampusSectionHeader(
+          title: 'Buổi học theo tuần',
+          description: 'Chọn buổi để điểm danh hoặc xem kết quả.',
         ),
-        Text('Lớp ${widget.cls['classCode']} • ${widget.cls['term']}'),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            IconButton(
-              tooltip: 'Tuần trước',
-              onPressed: () => setState(() => week--),
-              icon: const Icon(Icons.chevron_left),
-            ),
-            Expanded(
-              child: Text(
-                '${timetableDate(monday)} – ${timetableDate(days.last)}',
-                textAlign: TextAlign.center,
+        CampusCard(
+          child: Row(
+            children: [
+              IconButton(
+                tooltip: 'Tuần trước',
+                onPressed: () => setState(() => week--),
+                icon: const Icon(Icons.chevron_left),
               ),
-            ),
-            IconButton(
-              tooltip: 'Tuần sau',
-              onPressed: () => setState(() => week++),
-              icon: const Icon(Icons.chevron_right),
-            ),
-          ],
+              Expanded(
+                child: Text(
+                  '${timetableDate(monday)} – ${timetableDate(days.last)}',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Tuần sau',
+                onPressed: () => setState(() => week++),
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
         ),
         TextButton(
           onPressed: () => setState(() => week = 0),
           child: const Text('Về tuần hiện tại'),
         ),
-        Text('$count buổi học', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 12),
+        CampusSectionHeader(title: '$count buổi học'),
         if (count == 0) const EmptyState('Không có lịch học trong tuần này.'),
         for (final entry in periodsByDay.entries.where(
           (e) => e.value.isNotEmpty,

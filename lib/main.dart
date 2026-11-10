@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'lab2/app.dart';
 import 'lab2/theme.dart';
 import 'lab2/desktop_sync.dart';
+import 'lab2/repository.dart' show sharedDesktop;
 import 'cloud/cloud_services.dart';
 import 'cloud/push_notifications.dart';
 
@@ -68,6 +69,10 @@ Future<void> main() async {
       await CloudTelemetry.handled('cloud_bootstrap', e);
     }
     try {
+      if (useSharedDesktop) {
+        PushNotifications.instance.groupPushApi = (method, data) =>
+            sharedDesktop.call('groupCall', {'method': method, 'data': data});
+      }
       await PushNotifications.instance.initialize();
     } catch (e) {
       await CloudTelemetry.handled('push_bootstrap', e);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'domain.dart';
 import 'repository.dart';
@@ -11,13 +12,15 @@ class ClassToolsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final repo = ref.read(repositoryProvider);
-    return Scaffold(
+    return CampusScaffold(
       appBar: AppBar(title: const Text('Công cụ lớp học')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: CampusSpace.pageInsets,
         children: [
-          const Text(
-            'Ngoại lệ theo ngày giữ nguyên lịch định kỳ. Buổi đã có phiên điểm danh không thể đổi lịch.',
+          const CampusSectionHeader(
+            title: 'Điều chỉnh buổi học',
+            description:
+                'Ngoại lệ theo ngày giữ nguyên lịch định kỳ. Buổi đã có phiên điểm danh không thể đổi lịch.',
           ),
           LiveList(
             source: () => repo.watch('schedules'),
@@ -43,8 +46,10 @@ class ClassToolsPage extends ConsumerWidget {
             ),
           ),
           const Divider(),
-          const Text(
-            'Sửa tên / email sinh viên cần lý do. Hồ sơ dùng chung với giảng viên khác cần quản trị viên xử lý.',
+          const CampusSectionHeader(
+            title: 'Hồ sơ sinh viên',
+            description:
+                'Sửa tên hoặc email sinh viên cần lý do. Hồ sơ dùng chung với giảng viên khác cần quản trị viên xử lý.',
           ),
           LiveList(
             source: () => repo

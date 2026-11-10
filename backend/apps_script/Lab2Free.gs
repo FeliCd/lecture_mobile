@@ -9,6 +9,7 @@ const LAB2_TABLES = Object.freeze({
   PortalGroupPlans: ['classId','groups','version','updatedAt','updatedBy','requestKey'],
   PortalGroupReceipts: ['id','classId','groupId','actor','receipts'],
   PortalGroupMessages: ['id','classId','groupId','sender','senderName','text','fileId','fileName','mimeType','size','createdAt','requestKey'],
+  PortalGroupPushDevices: ['id','actor','firebaseUid','platform','token','updatedAt'],
   PortalLeaveRequests: ['id','classId','studentId','occurrenceId','scheduleId','exceptionId','sessionDate','slot','startTime','endTime','reason','status','submittedAt','reviewedAt','reviewedBy','reviewNote','version','requestKey'],
   PortalGradebooks: ['classId','components','version','activePublicationId','updatedAt','updatedBy'],
   PortalGradeDrafts: ['id','classId','studentId','grades','comment'],
@@ -598,8 +599,10 @@ function lab2Handle_(request) {
   if(name==='groupCall') {
     const lock=LockService.getScriptLock();
     if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
-    try {return groupCall_(book,actor,String(d.method||''),d.data||{});}
+    let result;
+    try {result=groupCall_(book,actor,String(d.method||''),d.data||{});}
     finally {lock.releaseLock();}
+    return groupPushAfterCommit_(book,actor,result);
   }
   if(name==='discoverArticles') return lab2Discover_(book,actor,d);
   if(name==='shareArticle') return lab2Share_(book,actor,d);

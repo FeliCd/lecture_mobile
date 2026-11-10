@@ -34,6 +34,7 @@ import '../cloud/cloud_services.dart';
 import '../cloud/cloud_view_model.dart';
 import '../cloud/cloud_diagnostics.dart';
 import '../cloud/push_notifications.dart';
+import '../groups/study_groups.dart';
 
 final themeProvider = NotifierProvider<ThemeSettings, ThemeMode>(
   ThemeSettings.new,
@@ -118,7 +119,7 @@ class _CampusAppState extends ConsumerState<CampusApp> {
         GoRoute(path: '/', builder: (_, _) => const CampusShell()),
         GoRoute(
           path: '/timetable',
-          builder: (_, _) => Scaffold(
+          builder: (_, _) => CampusScaffold(
             appBar: AppBar(title: const Text('Lịch dạy')),
             body: LecturerTimetable(user: ref.read(profileProvider).value!),
           ),
@@ -128,6 +129,28 @@ class _CampusAppState extends ConsumerState<CampusApp> {
           builder: (_, s) => ClassPage(
             classId: s.pathParameters['id']!,
             initialTab: int.tryParse(s.uri.queryParameters['tab'] ?? '') ?? 0,
+          ),
+        ),
+        GoRoute(
+          path: '/chat/:classId/:groupId',
+          builder: (context, s) => CampusScaffold(
+            appBar: AppBar(
+              title: const Text('Tin nhắn nhóm'),
+              leading: IconButton(
+                tooltip: 'Về trang chủ',
+                onPressed: () => context.go('/'),
+                icon: const Icon(Icons.home_outlined),
+              ),
+            ),
+            body: StudyGroups(
+              classId: s.pathParameters['classId']!,
+              initialGroupId: s.pathParameters['groupId'],
+              groupChanges: PushNotifications.instance.groupChanges.stream,
+              call: (method, data) => ref.read(repositoryProvider).call(
+                'groupCall',
+                {'method': method, 'data': data},
+              ),
+            ),
           ),
         ),
         GoRoute(
@@ -175,7 +198,7 @@ class _CampusAppState extends ConsumerState<CampusApp> {
               end: d['end'],
               recurring: d['sessionId'] == null,
             );
-            return Scaffold(
+            return CampusScaffold(
               appBar: AppBar(
                 title: const Text('Kiểm tra buổi học'),
                 leading: IconButton(
@@ -225,6 +248,7 @@ class _CampusAppState extends ConsumerState<CampusApp> {
         ref.invalidate(reportUploadProvider);
         ref.invalidate(cloudDiagnosticsProvider);
         if (next.value?.isLecturer == true) {
+          unawaited(PushNotifications.instance.activateGroupPush());
           PushNotifications.instance.onOpen = (route) => router.go(route);
           final pending = PushNotifications.instance.pendingRoute;
           PushNotifications.instance.pendingRoute = null;
@@ -512,25 +536,20 @@ class _CampusShellState extends ConsumerState<CampusShell> {
             ),
           ],
         ),
-        body: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 760),
-              child: CampusEntrance(
-                trigger: tab,
-                child: IndexedStack(
-                  index: tab,
-                  children: [
-                    TodayPanel(
-                      user: user,
-                      onTimetable: () => setState(() => tab = 1),
-                    ),
-                    LecturerTimetable(user: user),
-                    ClassList(user: user),
-                    SubjectUpdatesPage(user: user),
-                  ],
+        body: CampusPageBody(
+          child: CampusEntrance(
+            trigger: tab,
+            child: IndexedStack(
+              index: tab,
+              children: [
+                TodayPanel(
+                  user: user,
+                  onTimetable: () => setState(() => tab = 1),
                 ),
-              ),
+                LecturerTimetable(user: user),
+                ClassList(user: user),
+                SubjectUpdatesPage(user: user),
+              ],
             ),
           ),
         ),
@@ -718,16 +737,21 @@ class SettingsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final u = ref.watch(profileProvider).value;
-    return Scaffold(
+    return CampusScaffold(
       appBar: AppBar(title: const Text('Tài khoản và cài đặt')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: CampusSpace.pageInsets,
         children: [
+          const CampusSectionHeader(title: 'Hồ sơ giảng viên'),
           CampusCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(u?.name ?? ''),
+                Text(
+                  u?.name ?? '',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: CampusSpace.xs),
                 Text(
                   u?.email.isNotEmpty == true
                       ? u!.email
@@ -739,6 +763,7 @@ class SettingsPage extends ConsumerWidget {
               ],
             ),
           ),
+          const CampusSectionHeader(title: 'Tùy chọn'),
           if (u?.isLecturer == true) ProfileAcademicTermSelector(user: u!),
           DropdownButtonFormField<ThemeMode>(
             isExpanded: true,
@@ -758,6 +783,7 @@ class SettingsPage extends ConsumerWidget {
             },
           ),
           const SizedBox(height: 16),
+          const CampusSectionHeader(title: 'Công cụ và dịch vụ'),
           if (u?.isLecturer == true) WorkspaceShortcut(user: u!),
           ListTile(
             leading: const Icon(Icons.notifications_outlined),
@@ -788,8 +814,10 @@ class SettingsPage extends ConsumerWidget {
                 label: 'Nhập sinh viên từ Excel/CSV',
               ),
             ),
-          AppPrimaryButton(
-            label: 'Đăng xuất',
+          const SizedBox(height: CampusSpace.lg),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.logout),
+            label: const Text('Đăng xuất'),
             onPressed: () => runAction(context, () async {
               if (!await campusConfirm(
                 context,

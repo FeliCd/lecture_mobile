@@ -270,11 +270,11 @@ class CampusRepository implements AuthSessionService {
     await runLogoutCleanup({
       'reminders': () => LecturerReminders.instance.activate(null),
       'shared_cache': () async => sharedDesktop.reset(),
+      'push': () => PushNotifications.instance.logout(firebaseUid),
       'firebase': () => FirebaseAuth.instance.signOut(),
       'google': () async {
         if (googleInitialized) await GoogleSignIn.instance.signOut();
       },
-      'push': () => PushNotifications.instance.logout(firebaseUid),
       'logout_event': () => CloudTelemetry.event('logout'),
       'telemetry_identity': () => CloudTelemetry.identity(null),
     });

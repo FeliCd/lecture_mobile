@@ -11,8 +11,14 @@ import '../lab2/logout_cleanup.dart';
 String pushDestination(Map<String, dynamic> data) {
   final screen = data['screen'];
   final classId = '${data['classId'] ?? ''}';
-  if (screen == 'class' &&
-      RegExp(r'^[A-Za-z0-9_-]{1,100}$').hasMatch(classId)) {
+  final groupId = '${data['groupId'] ?? ''}';
+  final safeId = RegExp(r'^[A-Za-z0-9_-]{1,100}$');
+  if (screen == 'group-chat' &&
+      safeId.hasMatch(classId) &&
+      safeId.hasMatch(groupId)) {
+    return '/chat/$classId/$groupId';
+  }
+  if (screen == 'class' && safeId.hasMatch(classId)) {
     return '/class/$classId';
   }
   if (screen == 'settings') return '/settings';
@@ -96,7 +102,12 @@ class PushNotifications implements PushPermissionService {
   static final instance = PushNotifications();
   final history = PushHistory();
   final changes = StreamController<void>.broadcast();
+  final groupChanges = StreamController<Map<String, dynamic>>.broadcast();
   StreamSubscription<RemoteMessage>? foreground, opened;
+  StreamSubscription<String>? tokenChanges;
+  Future<Object?> Function(String, Map<String, dynamic>)? groupPushApi;
+  String? _groupPushUid, _registeredGroupToken;
+  Future<void> _groupRegistration = Future.value();
   void Function(String)? onOpen;
   String? pendingRoute;
   bool initialized = false;
@@ -110,6 +121,9 @@ class PushNotifications implements PushPermissionService {
     opened = FirebaseMessaging.onMessageOpenedApp.listen((m) {
       unawaited(open(m));
     });
+    tokenChanges = FirebaseMessaging.instance.onTokenRefresh.listen((token) {
+      unawaited(_registerGroupPush(token));
+    });
     initialized = true;
     final initial = await FirebaseMessaging.instance.getInitialMessage();
     if (initial != null) await open(initial);
@@ -119,12 +133,53 @@ class PushNotifications implements PushPermissionService {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
     if (m.data['recipientUid'] != null && m.data['recipientUid'] != uid) return;
+    if (m.data['screen'] == 'group-chat' && m.data['recipientUid'] == uid) {
+      groupChanges.add(m.data);
+    }
     try {
       await history.record(m, uid);
       changes.add(null);
     } catch (e) {
       await CloudTelemetry.handled('push_history', e);
     }
+  }
+
+  Future<void> activateGroupPush() async {
+    if (groupPushApi == null || !supported) return;
+    final account = uid;
+    if (_groupPushUid != account) _registeredGroupToken = null;
+    _groupPushUid = account;
+    await _registerGroupPush();
+  }
+
+  Future<void> _registerGroupPush([String? refreshedToken]) {
+    final account = _groupPushUid;
+    final api = groupPushApi;
+    if (account == null || api == null) return Future.value();
+    _groupRegistration = _groupRegistration.then((_) async {
+      try {
+        if (_groupPushUid != account || uid != account) return;
+        final permission = await permissionStatus();
+        if (permission != PushPermission.authorized &&
+            permission != PushPermission.provisional) {
+          return;
+        }
+        final token =
+            refreshedToken ?? await FirebaseMessaging.instance.getToken();
+        if (token == null || _groupPushUid != account || uid != account) return;
+        if (token == _registeredGroupToken) return;
+        await api('registerGroupPushDevice', {
+          'platform': 'android',
+          'token': token,
+        }).timeout(const Duration(seconds: 6));
+        if (_groupPushUid == account && uid == account) {
+          _registeredGroupToken = token;
+        }
+      } catch (_) {
+        // The shared deployment can support chat before push is configured.
+      }
+    });
+    return _groupRegistration;
   }
 
   Future<void> open(RemoteMessage m) async {
@@ -185,6 +240,7 @@ class PushNotifications implements PushPermissionService {
     if (result == PushPermission.authorized ||
         result == PushPermission.provisional) {
       await FirebaseMessaging.instance.setAutoInitEnabled(true);
+      unawaited(_registerGroupPush());
     }
     return result;
   }
@@ -201,7 +257,22 @@ class PushNotifications implements PushPermissionService {
 
   Future<void> logout(String? uid) async {
     pendingRoute = null;
+    _groupPushUid = null;
+    final registered = _registeredGroupToken;
+    _registeredGroupToken = null;
     await runLogoutCleanup({
+      'group_push': () async {
+        final api = groupPushApi;
+        if (api == null || registered == null) return;
+        try {
+          await api('unregisterGroupPushDevice', {
+            'platform': 'android',
+            'token': registered,
+          }).timeout(const Duration(seconds: 4));
+        } catch (_) {
+          // The SDK deletes the device token in the next cleanup step.
+        }
+      },
       'push_history': () async {
         if (uid != null) await history.clear(uid);
       },

@@ -282,7 +282,7 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
     final repo = ref.read(repositoryProvider);
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => Scaffold(
+        builder: (_) => CampusScaffold(
           appBar: AppBar(title: const Text('Đơn xin nghỉ của buổi')),
           body: LeaveRequestsPanel(
             classId: session['classId'] as String,
@@ -482,7 +482,7 @@ class _LiveAttendancePageState extends ConsumerState<LiveAttendancePage>
     final pinControls =
         MediaQuery.sizeOf(context).height >= 600 &&
         MediaQuery.viewInsetsOf(context).bottom == 0;
-    return Scaffold(
+    return CampusScaffold(
       appBar: AppBar(
         title: Text(
           live == null

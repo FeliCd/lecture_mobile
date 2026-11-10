@@ -128,8 +128,8 @@ void main() {
       await tester.tap(find.text('Xóa bộ lọc'));
       await tester.pumpAndSettle();
       expect(find.byType(ClassTile), findsNWidgets(2));
-      await tester.ensureVisible(find.text('Chọn buổi điểm danh').first);
-      await tester.tap(find.text('Chọn buổi điểm danh').first);
+      await tester.ensureVisible(find.text('Điểm danh').first);
+      await tester.tap(find.text('Điểm danh').first);
       await tester.pumpAndSettle();
       expect(find.text('Chọn buổi: c / 2'), findsOneWidget);
       expect(tester.takeException(), isNull);

@@ -71,25 +71,36 @@ class TeachingPeriodCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final action = periodAction(period);
     final active =
         !period.cancelled &&
         !period.completed &&
         !DateTime.now().toUtc().isBefore(period.scheduledStartAt) &&
         DateTime.now().toUtc().isBefore(period.scheduledEndAt);
+    final accent = conflict
+        ? scheme.error
+        : period.completed
+        ? scheme.tertiary
+        : scheme.primary;
     return CampusEntrance(
       trigger:
           '${period.sessionDate}:${period.slot}:${period.classCode}:${period.sessionId}:$action',
       child: Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: Material(
-          color: scheme.surface,
+          color: featured || active
+              ? Color.alphaBlend(
+                  scheme.primaryContainer.withValues(alpha: .24),
+                  scheme.surface,
+                )
+              : scheme.surface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(CampusRadius.card),
             side: BorderSide(
               color: featured || active
-                  ? scheme.primary.withValues(alpha: .35)
+                  ? accent.withValues(alpha: .35)
                   : scheme.outlineVariant,
             ),
           ),
@@ -97,11 +108,9 @@ class TeachingPeriodCard extends StatelessWidget {
           child: InkWell(
             onTap: () => openClass(context),
             child: Container(
-              decoration: featured || active
+              decoration: featured || active || period.completed || conflict
                   ? BoxDecoration(
-                      border: Border(
-                        left: BorderSide(color: scheme.primary, width: 4),
-                      ),
+                      border: Border(left: BorderSide(color: accent, width: 4)),
                     )
                   : null,
               padding: EdgeInsets.all(compact ? 14 : 16),
@@ -123,20 +132,30 @@ class TeachingPeriodCard extends StatelessWidget {
                           color: scheme.primary,
                         )
                       else
-                        Text(
+                        CampusStatusChip(
                           '${period.timeRange} · Slot ${period.slot ?? '—'}',
-                          style: Theme.of(context).textTheme.titleSmall,
+                          icon: Icons.schedule_outlined,
                         ),
                       if (conflict)
                         CampusStatusChip(
                           'Trùng giờ',
                           icon: Icons.warning_amber,
                           color: scheme.error,
-                        )
-                      else if (featured && active)
+                        ),
+                      if (featured && active && !conflict)
                         CampusStatusChip(
                           'Còn ${period.scheduledEndAt.difference(DateTime.now().toUtc()).inMinutes} phút',
                           icon: Icons.schedule,
+                        ),
+                      if (!showAction)
+                        CampusStatusChip(
+                          action,
+                          icon: period.completed
+                              ? Icons.task_alt
+                              : Icons.how_to_reg_outlined,
+                          color: period.completed || active
+                              ? accent
+                              : scheme.secondary,
                         ),
                     ],
                   ),
@@ -144,13 +163,9 @@ class TeachingPeriodCard extends StatelessWidget {
                   DefaultTextStyle(
                     style:
                         (featured
-                                ? Theme.of(context).textTheme.titleLarge!
-                                : Theme.of(context).textTheme.titleMedium!)
-                            .copyWith(
-                              color: featured
-                                  ? scheme.onSurface
-                                  : scheme.primary,
-                            ),
+                                ? theme.textTheme.titleLarge!
+                                : theme.textTheme.titleMedium!)
+                            .copyWith(color: scheme.onSurface),
                     child: Wrap(
                       spacing: 6,
                       runSpacing: 4,
@@ -229,30 +244,18 @@ class TeachingPeriodCard extends StatelessWidget {
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),
+                        if (!showAction)
+                          const Icon(Icons.chevron_right, size: 20),
                       ],
                     ),
-                  const SizedBox(height: 12),
-                  if (showAction)
+                  if (showAction) ...[
+                    const SizedBox(height: 12),
                     FilledButton.icon(
                       onPressed: () => openClass(context),
                       icon: const Icon(Icons.qr_code_scanner, size: 18),
                       label: Text(action),
-                    )
-                  else
-                    Row(
-                      children: [
-                        Expanded(
-                          child: CampusStatusChip(
-                            action,
-                            icon: period.completed
-                                ? Icons.task_alt
-                                : Icons.schedule,
-                            color: active ? scheme.primary : scheme.secondary,
-                          ),
-                        ),
-                        const Icon(Icons.chevron_right, size: 20),
-                      ],
                     ),
+                  ],
                   LessonNotebookButton(period: period),
                 ],
               ),

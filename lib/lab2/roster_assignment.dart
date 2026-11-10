@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'data_import.dart';
 import 'domain.dart';
@@ -123,7 +124,7 @@ class _RosterAssignmentPageState extends ConsumerState<RosterAssignmentPage> {
     return CampusDraftGuard(
       dirty: workbook.isNotEmpty && !saved.contains('$sheet|$classId'),
       busy: busy,
-      child: Scaffold(
+      child: CampusScaffold(
         appBar: AppBar(
           title: const Text('Gán sinh viên từ Excel'),
           actions: const [
@@ -138,7 +139,7 @@ class _RosterAssignmentPageState extends ConsumerState<RosterAssignmentPage> {
           ],
         ),
         body: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: CampusSpace.pageInsets,
           children: [
             const Text(
               'Lịch đã lưu. Chọn file, sheet và lớp tương ứng để nhập danh sách sinh viên.',

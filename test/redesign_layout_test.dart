@@ -16,10 +16,12 @@ import 'package:lecturer_companion/lab2/widgets.dart';
 import 'package:lecturer_companion/lab2/timetable.dart';
 import 'package:lecturer_companion/lab2/today.dart';
 import 'package:lecturer_companion/lab2/live_attendance.dart';
+import 'package:lecturer_companion/lab2/quick_attendance.dart';
 import 'lab2_navigation_test.dart' show FixtureRepository;
 import 'timetable_test.dart' show teachingClasses, teachingSchedules;
 import 'attendance_slot_flow_test.dart' show SlotFixture, user;
 import 'refactor_live_test.dart' show LiveFixture;
+import 'quick_attendance_test.dart' show QuickFixture, selector;
 
 class RoomPreviewFixture extends SlotFixture {
   @override
@@ -68,6 +70,7 @@ void main() {
     'subjectId': 'PRM393',
     'term': 'Fall 2026',
     'studentCount': 3,
+    'totalSlots': 20,
   };
   for (final dark in [false, true]) {
     for (final scale in [1.0, 1.8]) {
@@ -140,6 +143,7 @@ void main() {
           'timetable',
           'login',
           'live',
+          'quick',
         ]) {
           final boundaryKey = GlobalKey();
           await tester.pumpWidget(
@@ -156,6 +160,8 @@ void main() {
                     key: boundaryKey,
                     child: screen == 'login'
                         ? const CampusLogin()
+                        : screen == 'quick'
+                        ? quickPreview()
                         : screen == 'live'
                         ? ProviderScope(
                             overrides: [
@@ -284,4 +290,43 @@ void main() {
       });
     }
   }
+}
+
+Widget quickPreview() {
+  final repo = QuickFixture(size: 12)
+    ..totalSlots = 20
+    ..status = 'OPEN'
+    ..existing = {2: 'absent', 3: 'absent'}
+    ..historySessions = [
+      for (var day = 1; day <= 3; day++)
+        {
+          'id': 'history-$day',
+          'classId': 'c1',
+          'slot': 1,
+          'opensAt': DateTime.utc(2026, 10, day, 1).millisecondsSinceEpoch,
+          'status': 'finalized',
+          'attendanceCompleted': true,
+          'eligibleStudentUids': ['student-st1'],
+        },
+    ]
+    ..historyRecords = [
+      for (var day = 1; day <= 3; day++)
+        {
+          'attendanceSessionId': 'history-$day',
+          'studentUid': 'student-st1',
+          'status': day == 2 ? 'excused' : 'absent',
+        },
+    ];
+  return ProviderScope(
+    overrides: [
+      repositoryProvider.overrideWithValue(repo),
+      quickHistorySessionsProvider(
+        'c1',
+      ).overrideWith((_) => Stream.value(repo.historySessions)),
+      quickHistoryRecordsProvider(
+        'c1',
+      ).overrideWith((_) => Stream.value(repo.historyRecords)),
+    ],
+    child: const QuickAttendancePage(selector: selector, uid: 'lecturer-1'),
+  );
 }

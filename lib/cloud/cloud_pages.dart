@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../lab2/widgets.dart';
+import '../lab2/theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'cloud_services.dart';
@@ -58,7 +60,7 @@ class _NotificationCenterState extends ConsumerState<NotificationCenter>
     final uid = widget.uid;
     final rows = ref.watch(pushHistoryProvider(uid));
     final permission = ref.watch(pushPermissionProvider);
-    return Scaffold(
+    return CampusScaffold(
       appBar: AppBar(title: const Text('Thông báo')),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -70,11 +72,14 @@ class _NotificationCenterState extends ConsumerState<NotificationCenter>
         },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(20),
+          padding: CampusSpace.pageInsets,
           children: [
-            const Text(
-              'Lịch sử push trên thiết bị này. Thông báo nhận khi đã đăng xuất không được lưu.',
+            const CampusInfoBanner(
+              icon: Icons.notifications_outlined,
+              title: 'Lịch sử trên thiết bị',
+              subtitle: 'Xem thông báo nhận được khi tài khoản đang đăng nhập.',
             ),
+            const SizedBox(height: CampusSpace.md),
             permission.when(
               data: (value) => Text(pushPermissionLabel(value)),
               loading: () => const LinearProgressIndicator(),
@@ -96,11 +101,7 @@ class _NotificationCenterState extends ConsumerState<NotificationCenter>
                   const Text('Chưa tải được thông báo. Kéo xuống để thử lại.'),
               data: (list) => Column(
                 children: [
-                  if (list.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text('Chưa có thông báo.'),
-                    ),
+                  if (list.isEmpty) const EmptyState('Chưa có thông báo.'),
                   for (final m in list)
                     Card(
                       child: ListTile(
@@ -156,17 +157,15 @@ class _CloudSettingsPageState extends ConsumerState<CloudSettingsPage> {
     final settings = ref.watch(cloudSettingsProvider);
     final diagnostics = ref.watch(cloudDiagnosticsProvider);
     final permission = ref.watch(pushPermissionProvider);
-    return Scaffold(
+    return CampusScaffold(
       appBar: AppBar(title: const Text('Dịch vụ đám mây')),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: CampusSpace.pageInsets,
         children: [
-          const Text(
-            'Trạng thái trên thiết bị',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          const Text(
-            'Các trạng thái dưới đây không thay thế kiểm tra gửi và nhận dữ liệu thực tế.',
+          const CampusSectionHeader(
+            title: 'Trạng thái trên thiết bị',
+            description:
+                'Xem cấu hình và quyền của từng dịch vụ. Dùng các nút bên dưới để kiểm tra kết nối thực tế.',
           ),
           diagnostics.when(
             loading: () => const LinearProgressIndicator(),

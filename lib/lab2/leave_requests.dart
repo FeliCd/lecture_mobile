@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'domain.dart';
+import 'theme.dart';
 import 'widgets.dart';
 
 class LeaveRequestsPanel extends StatefulWidget {
@@ -181,10 +182,15 @@ class _LeaveRequestsPanelState extends State<LeaveRequestsPanel> {
       onRefresh: _refresh,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
+        padding: CampusSpace.pageInsets,
         children: [
+          const CampusSectionHeader(
+            title: 'Lọc đơn xin nghỉ',
+            description: 'Xem lý do và phản hồi cho từng yêu cầu.',
+          ),
           Wrap(
-            spacing: 12,
+            spacing: CampusSpace.md,
+            runSpacing: CampusSpace.sm,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               DropdownButton<String>(
@@ -206,6 +212,7 @@ class _LeaveRequestsPanelState extends State<LeaveRequestsPanel> {
               ),
             ],
           ),
+          const SizedBox(height: CampusSpace.md),
           if (_busy) const LinearProgressIndicator(),
           if (_error != null)
             Semantics(
@@ -227,50 +234,63 @@ class _LeaveRequestsPanelState extends State<LeaveRequestsPanel> {
     final status = row['status'];
     final scheduleChanged = row['scheduleChanged'] == true;
     final actionable = !_busy && _error == null;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_lesson(row), style: Theme.of(context).textTheme.titleSmall),
-            Text('${row['studentCode']} · ${labels[status] ?? status}'),
-            const SizedBox(height: 8),
-            Text('${row['reason']}'),
-            if ('${row['reviewNote'] ?? ''}'.isNotEmpty)
-              Text('Phản hồi: ${row['reviewNote']}'),
-            if (scheduleChanged)
-              const Text('Lịch buổi học đã thay đổi. Kiểm tra lại đơn.'),
-            if (status == 'PENDING')
-              Wrap(
-                spacing: 8,
-                children: [
-                  FilledButton(
-                    onPressed: actionable && !scheduleChanged
-                        ? () => _review(row, approve: true)
-                        : null,
-                    child: const Text('Duyệt'),
-                  ),
-                  TextButton(
-                    onPressed: actionable
-                        ? () => _review(row, approve: false)
-                        : null,
-                    child: const Text('Từ chối'),
-                  ),
-                ],
-              ),
-            if (status == 'APPROVED' &&
-                widget.closedSessionId != null &&
-                !scheduleChanged)
-              if (_applied.contains(row['id']))
-                const Text('Đã cập nhật nghỉ có phép.')
-              else
-                TextButton(
-                  onPressed: actionable ? () => _apply(row) : null,
-                  child: const Text('Cập nhật nghỉ có phép'),
+    final theme = Theme.of(context);
+    final (icon, color) = switch (status) {
+      'PENDING' => (Icons.schedule, theme.colorScheme.primary),
+      'APPROVED' => (
+        Icons.check_circle_outline,
+        CampusColors.status('present', theme.brightness == Brightness.dark),
+      ),
+      'REJECTED' => (Icons.cancel_outlined, theme.colorScheme.error),
+      _ => (Icons.remove_circle_outline, theme.colorScheme.onSurfaceVariant),
+    };
+    return CampusCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(_lesson(row), style: Theme.of(context).textTheme.titleSmall),
+          Text('${row['studentCode']}'),
+          const SizedBox(height: CampusSpace.sm),
+          CampusStatusChip(
+            '${labels[status] ?? status}',
+            icon: icon,
+            color: color,
+          ),
+          const SizedBox(height: CampusSpace.md),
+          Text('${row['reason']}'),
+          if ('${row['reviewNote'] ?? ''}'.isNotEmpty)
+            Text('Phản hồi: ${row['reviewNote']}'),
+          if (scheduleChanged)
+            const Text('Lịch buổi học đã thay đổi. Kiểm tra lại đơn.'),
+          if (status == 'PENDING')
+            Wrap(
+              spacing: 8,
+              children: [
+                FilledButton(
+                  onPressed: actionable && !scheduleChanged
+                      ? () => _review(row, approve: true)
+                      : null,
+                  child: const Text('Duyệt'),
                 ),
-          ],
-        ),
+                TextButton(
+                  onPressed: actionable
+                      ? () => _review(row, approve: false)
+                      : null,
+                  child: const Text('Từ chối'),
+                ),
+              ],
+            ),
+          if (status == 'APPROVED' &&
+              widget.closedSessionId != null &&
+              !scheduleChanged)
+            if (_applied.contains(row['id']))
+              const Text('Đã cập nhật nghỉ có phép.')
+            else
+              TextButton(
+                onPressed: actionable ? () => _apply(row) : null,
+                child: const Text('Cập nhật nghỉ có phép'),
+              ),
+        ],
       ),
     );
   }

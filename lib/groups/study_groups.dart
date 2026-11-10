@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import '../lab2/widgets.dart';
+import '../lab2/theme.dart';
 import 'package:file_picker/file_picker.dart';
 import 'group_tasks.dart';
 import 'group_api.dart';
@@ -13,7 +15,15 @@ export 'group_api.dart';
 class StudyGroups extends StatefulWidget {
   final GroupCall call;
   final String classId;
-  const StudyGroups({super.key, required this.call, required this.classId});
+  final String? initialGroupId;
+  final Stream<Map<String, dynamic>>? groupChanges;
+  const StudyGroups({
+    super.key,
+    required this.call,
+    required this.classId,
+    this.initialGroupId,
+    this.groupChanges,
+  });
   @override
   State<StudyGroups> createState() => _StudyGroupsState();
 }
@@ -27,12 +37,21 @@ class _StudyGroupsState extends State<StudyGroups> {
   final text = TextEditingController();
   Map<String, dynamic>? attachment, pending;
   Timer? timer;
+  StreamSubscription<Map<String, dynamic>>? pushSubscription;
   int generation = 0;
   bool firstMessages = true;
   bool signupLocked = false;
   @override
   void initState() {
     super.initState();
+    selected = widget.initialGroupId;
+    pushSubscription = widget.groupChanges?.listen((data) {
+      if (data['classId'] == widget.classId &&
+          data['groupId'] == selected &&
+          !busy) {
+        unawaited(readMessages());
+      }
+    });
     load();
     timer = Timer.periodic(const Duration(seconds: 10), (_) {
       if (!busy && selected != null) readMessages();
@@ -43,6 +62,7 @@ class _StudyGroupsState extends State<StudyGroups> {
   void dispose() {
     generation++;
     timer?.cancel();
+    unawaited(pushSubscription?.cancel());
     text.dispose();
     super.dispose();
   }
@@ -234,10 +254,12 @@ class _StudyGroupsState extends State<StudyGroups> {
 
   @override
   Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(20),
+    padding: CampusSpace.pageInsets,
     children: [
-      Text('Nhóm học tập', style: Theme.of(context).textTheme.headlineSmall),
-      const Text('Chia nhóm, trao đổi và chia sẻ tài liệu trong lớp.'),
+      const CampusSectionHeader(
+        title: 'Phân nhóm sinh viên',
+        description: 'Chia nhóm, trao đổi và chia sẻ tài liệu trong lớp.',
+      ),
       if (plan != null)
         GroupSignupPanel(
           key: ValueKey('signup/${widget.classId}'),
@@ -368,30 +390,38 @@ class _StudyGroupsState extends State<StudyGroups> {
                 ListTile(
                   title: Text('${s['fullName']}'),
                   subtitle: Text('${s['studentCode']}'),
-                  trailing: DropdownButton<String>(
-                    value: g['id'],
-                    items: groups
-                        .map(
-                          (x) => DropdownMenuItem<String>(
-                            value: x['id'],
-                            child: Text('${x['name']}'),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: busy || signupLocked || pending != null
-                        ? null
-                        : (id) => setState(() {
-                            for (final x in groups) {
-                              x['memberIds'] = List.of(x['memberIds'])
-                                ..remove(s['studentId']);
-                            }
-                            (groups.firstWhere(
-                                      (x) => x['id'] == id,
-                                    )['memberIds']
-                                    as List)
-                                .add(s['studentId']);
-                            dirty = true;
-                          }),
+                  trailing: SizedBox(
+                    width: 120,
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: g['id'],
+                      items: groups
+                          .map(
+                            (x) => DropdownMenuItem<String>(
+                              value: x['id'],
+                              child: Text(
+                                '${x['name']}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: busy || signupLocked || pending != null
+                          ? null
+                          : (id) => setState(() {
+                              for (final x in groups) {
+                                x['memberIds'] = List.of(x['memberIds'])
+                                  ..remove(s['studentId']);
+                              }
+                              (groups.firstWhere(
+                                        (x) => x['id'] == id,
+                                      )['memberIds']
+                                      as List)
+                                  .add(s['studentId']);
+                              dirty = true;
+                            }),
+                    ),
                   ),
                 ),
             ],
@@ -415,28 +445,37 @@ class _StudyGroupsState extends State<StudyGroups> {
           ListTile(
             title: Text('${s['fullName']}'),
             subtitle: Text('${s['studentCode']}'),
-            trailing: DropdownButton<String>(
-              hint: const Text('Chọn nhóm'),
-              items: groups
-                  .map(
-                    (g) => DropdownMenuItem<String>(
-                      value: g['id'],
-                      child: Text('${g['name']}'),
-                    ),
-                  )
-                  .toList(),
-              onChanged: busy || signupLocked
-                  ? null
-                  : (id) => setState(() {
-                      (groups.firstWhere((g) => g['id'] == id)['memberIds']
-                              as List)
-                          .add(s['studentId']);
-                      dirty = true;
-                    }),
+            trailing: SizedBox(
+              width: 120,
+              child: DropdownButton<String>(
+                isExpanded: true,
+                hint: const Text('Chọn nhóm'),
+                items: groups
+                    .map(
+                      (g) => DropdownMenuItem<String>(
+                        value: g['id'],
+                        child: Text(
+                          '${g['name']}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: busy || signupLocked
+                    ? null
+                    : (id) => setState(() {
+                        (groups.firstWhere((g) => g['id'] == id)['memberIds']
+                                as List)
+                            .add(s['studentId']);
+                        dirty = true;
+                      }),
+              ),
             ),
           ),
       ],
       if (groups.isNotEmpty) ...[
+        const CampusSectionHeader(title: 'Trao đổi và giao việc'),
         FilledButton.icon(
           icon: const Icon(Icons.assignment_outlined),
           label: const Text('Giao việc cho nhóm'),
@@ -461,12 +500,17 @@ class _StudyGroupsState extends State<StudyGroups> {
         DropdownButtonFormField<String>(
           key: ValueKey(selected),
           initialValue: selected,
+          isExpanded: true,
           decoration: const InputDecoration(labelText: 'Phòng trao đổi'),
           items: groups
               .map(
                 (g) => DropdownMenuItem<String>(
                   value: g['id'],
-                  child: Text('${g['name']}'),
+                  child: Text(
+                    '${g['name']}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               )
               .toList(),

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../lab2/widgets.dart';
+import '../lab2/theme.dart';
 import 'group_api.dart';
 
 String groupTaskDeadline(DateTime utc) {
@@ -187,10 +189,10 @@ class _GroupTasksPageState extends State<GroupTasksPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => CampusScaffold(
     appBar: AppBar(title: Text('Giao việc · ${widget.groupName}')),
     body: ListView(
-      padding: const EdgeInsets.all(20),
+      padding: CampusSpace.pageInsets,
       children: [
         if (error != null)
           Text(
@@ -198,6 +200,10 @@ class _GroupTasksPageState extends State<GroupTasksPage> {
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
         if (success != null) Semantics(liveRegion: true, child: Text(success!)),
+        const CampusSectionHeader(
+          title: 'Nội dung công việc',
+          description: 'Sinh viên nhận việc qua Student Web và email trường.',
+        ),
         Form(
           key: form,
           child: Column(
@@ -251,7 +257,7 @@ class _GroupTasksPageState extends State<GroupTasksPage> {
           ),
         ),
         const SizedBox(height: 24),
-        Text('Việc đã giao', style: Theme.of(context).textTheme.titleLarge),
+        const CampusSectionHeader(title: 'Việc đã giao'),
         TextButton(
           onPressed: busy || loading ? null : load,
           child: const Text('Tải lại công việc'),

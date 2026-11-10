@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../lab2/widgets.dart';
+import '../lab2/theme.dart';
 import '../grade_forecast/grade_forecast_page.dart';
 import 'gradebook_controller.dart';
 
@@ -176,18 +178,18 @@ class _LecturerGradebookPageState extends State<LecturerGradebookPage> {
           });
         }
       },
-      child: Scaffold(
+      child: CampusScaffold(
         appBar: AppBar(title: const Text('Bảng điểm')),
         body: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: CampusSpace.pageInsets,
           children: [
-            Text(
-              widget.classLabel,
-              style: Theme.of(context).textTheme.titleLarge,
+            CampusInfoBanner(
+              icon: Icons.grading_outlined,
+              title: widget.classLabel,
+              subtitle:
+                  'Lưu nháp trước, công bố sau. Sinh viên chỉ xem bản đã công bố.',
             ),
-            const Text(
-              'Lưu nháp trước, công bố sau. Sinh viên chỉ xem bản đã công bố.',
-            ),
+            const SizedBox(height: CampusSpace.md),
             if (model.busy) const LinearProgressIndicator(),
             if (model.error != null)
               Semantics(
@@ -197,6 +199,7 @@ class _LecturerGradebookPageState extends State<LecturerGradebookPage> {
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
+            const CampusSectionHeader(title: 'Thao tác bảng điểm'),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -253,14 +256,35 @@ class _LecturerGradebookPageState extends State<LecturerGradebookPage> {
                 ),
               ],
             ),
-            if (model.book != null)
-              Text(
-                'Phiên bản ${model.book!['version']} · ${model.book!['activePublicationId'] == '' ? 'Chưa công bố' : 'Có bản đang công bố'}${model.dirty ? ' · Có thay đổi chưa lưu' : ''}',
+            if (model.book != null) ...[
+              const SizedBox(height: CampusSpace.sm),
+              Wrap(
+                spacing: CampusSpace.sm,
+                runSpacing: CampusSpace.xs,
+                children: [
+                  CampusStatusChip(
+                    'Phiên bản ${model.book!['version']}',
+                    icon: Icons.history,
+                  ),
+                  CampusStatusChip(
+                    model.book!['activePublicationId'] == ''
+                        ? 'Chưa công bố'
+                        : 'Có bản đang công bố',
+                    icon: Icons.visibility_outlined,
+                  ),
+                  if (model.dirty)
+                    const CampusStatusChip(
+                      'Có thay đổi chưa lưu',
+                      icon: Icons.edit_outlined,
+                    ),
+                ],
               ),
+            ],
             if (model.pendingPublish != null)
               const Text(
                 'Đang giữ mã công bố để thử lại an toàn. Các thao tác sửa điểm được khóa đến khi kiểm tra xong.',
               ),
+            const CampusSectionHeader(title: 'Cột điểm'),
             Wrap(
               spacing: 8,
               children: model.components
@@ -284,14 +308,17 @@ class _LecturerGradebookPageState extends State<LecturerGradebookPage> {
                   )
                   .toList(),
             ),
+            if (model.book != null)
+              const CampusSectionHeader(title: 'Điểm theo sinh viên'),
             if (model.book != null && model.students.isEmpty)
-              const Text(
+              const EmptyState(
                 'Chưa có sinh viên. Kiểm tra danh sách lớp trên desktop.',
               ),
             for (final student in model.students)
               Card(
                 child: ExpansionTile(
                   key: ValueKey('${student['studentId']}/${model.revision}'),
+                  leading: const Icon(Icons.person_outline),
                   title: Text('${student['fullName']}'),
                   subtitle: Text('${student['studentCode']}'),
                   childrenPadding: const EdgeInsets.all(12),

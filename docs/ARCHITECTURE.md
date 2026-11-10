@@ -4,6 +4,8 @@
 
 Firebase Lab 3: View -> Riverpod controllers (`cloud_view_model.dart`) -> injected RemoteSettingsService/ReportStorageService -> SDK. Telemetry/error handlers và FCM nằm trong `lib/cloud`, UI không import SDK trực tiếp. Push history dùng SharedPreferencesAsync theo UID Firebase/message, token không ghi log, route whitelist và auth guard. Report owner path dùng UID Firebase, độc lập ID nghiệp vụ Sheets. Xem [triển khai](LAB3_GROUPS_IMPLEMENTATION.md).
 
+Chat nhóm dùng Apps Script và Sheets để lưu lịch sử, với tệp riêng tư trên Drive. Sau khi lưu tin, backend dùng Firebase Cloud Messaging HTTP v1 để báo tin mới cho giảng viên trên Android và sinh viên trên Web đã bật thông báo. Desktop Windows đọc hội thoại qua API chung. Xem [cấu hình FCM cho chat nhóm](GROUP_CHAT_FCM.md).
+
 Nhóm: ba client -> authenticated portal/lab2 handlers -> `StudyGroups.gs` -> `PortalGroupPlans`/`PortalGroupMessages`, private Drive attachments. Lecturer ownership + current enrollment/group membership kiểm lại mỗi request. Giữ hai Firebase project hiện tại, không dùng token của project này truy cập Firestore project khác. Chat polling 10s, tối đa 50 tin/trang và file 500 KB; chưa có socket/background group push. Shared Flutter group workspace nhận GroupCall dependency, không gọi Firebase SDK.
 
 Mobile giảng viên, Desktop và Student Web đọc/ghi cùng workbook Sheets qua cùng Apps Script deployment. Source tại máy đã refactor; deployment thật cần migration theo [IMPLEMENTATION_REPORT](IMPLEMENTATION_REPORT.md). Mô tả cũ lưu trong [ARCHITECTURE_LEGACY](ARCHITECTURE_LEGACY.md).

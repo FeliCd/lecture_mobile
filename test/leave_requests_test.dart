@@ -72,7 +72,8 @@ void main() {
         'reviewNote': '',
       });
       expect(calls[2], calls[0]);
-      expect(find.textContaining('SE1 · Đã duyệt'), findsOneWidget);
+      expect(find.text('SE1'), findsOneWidget);
+      expect(find.text('Đã duyệt'), findsOneWidget);
       await tester.tap(find.text('Cập nhật nghỉ có phép'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cập nhật'));

@@ -1,8 +1,73 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lecturer_companion/groups/study_groups.dart';
+import 'package:lecturer_companion/lab2/theme.dart';
 
 void main() {
+  testWidgets('long group names fit on a narrow screen with large text', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    const name = 'Nhóm nghiên cứu thiết kế và phát triển ứng dụng di động';
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: campusTheme(Brightness.dark),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(1.4)),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: StudyGroups(
+            classId: 'c1',
+            call: (method, _) async => switch (method) {
+              'getGroupPlan' => {
+                'version': 1,
+                'groups': [
+                  {
+                    'id': 'g1',
+                    'name': name,
+                    'memberIds': ['s1'],
+                  },
+                ],
+                'students': [
+                  {
+                    'studentId': 's1',
+                    'studentCode': 'SE1',
+                    'fullName': 'Sinh viên mẫu',
+                  },
+                ],
+              },
+              'getGroupSignupSheet' => {},
+              'getGroupMessages' => {'messages': []},
+              _ => throw StateError(method),
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final list = find
+        .descendant(
+          of: find.byType(ListView),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    final group = find.text('$name · 1 thành viên').hitTestable();
+    await tester.scrollUntilVisible(group, 150, scrollable: list);
+    await tester.tap(group);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Sinh viên mẫu').hitTestable(),
+      150,
+      scrollable: list,
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets(
     'automatic division includes every student exactly once and waits for explicit save',
     (tester) async {

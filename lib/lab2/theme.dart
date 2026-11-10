@@ -3,27 +3,28 @@ import 'package:flutter/material.dart';
 
 abstract final class CampusSpace {
   static const xs = 4.0, sm = 8.0, md = 12.0, lg = 16.0, xl = 24.0, page = 20.0;
+  static const pageInsets = EdgeInsets.fromLTRB(page, sm, page, xl);
 }
 
 abstract final class CampusRadius {
-  static const control = 8.0, card = 12.0, sheet = 16.0;
+  static const control = 12.0, card = 16.0, sheet = 24.0;
 }
 
 abstract final class CampusColors {
   static const brand = Color(0xFFF37021),
-      action = Color(0xFFB54708),
+      action = Color(0xFFC2410C),
       white = Colors.white,
-      ink = Color(0xFF172033),
-      border = Color(0xFFE6E9F4),
-      canvas = Color(0xFFF9F9FF),
-      soft = Color(0xFFF1F3FF),
-      blue = Color(0xFF0F6B93);
+      ink = Color(0xFF131B2E),
+      border = Color(0xFFE2E8F0),
+      canvas = Color(0xFFFAF8FF),
+      soft = Color(0xFFF2F3FF),
+      blue = Color(0xFF005A89);
   static Color status(String s, bool dark) => switch (s) {
     'present' => dark ? const Color(0xFF74D89A) : const Color(0xFF15803D),
     'late' => dark ? const Color(0xFFFFD27A) : const Color(0xFF98600B),
     'absent' => dark ? const Color(0xFFFF8E85) : const Color(0xFFB42318),
-    'excused' => dark ? const Color(0xFF8ED8F3) : const Color(0xFF0F6B93),
-    _ => dark ? const Color(0xFFB6C0CE) : const Color(0xFF667085),
+    'excused' => dark ? const Color(0xFF8ED8F3) : const Color(0xFF005A89),
+    _ => dark ? const Color(0xFFB6C0CE) : const Color(0xFF59413A),
   };
 }
 
@@ -38,27 +39,33 @@ ThemeData campusTheme(Brightness brightness) {
         onPrimary: dark ? const Color(0xFF24150D) : CampusColors.white,
         primaryContainer: dark
             ? const Color(0xFF543020)
-            : const Color(0xFFFFE7D5),
+            : const Color(0xFFFFDBD0),
         onPrimaryContainer: dark
             ? const Color(0xFFFFE3D0)
-            : const Color(0xFF7C2E05),
+            : const Color(0xFF832600),
+        secondaryContainer: dark
+            ? const Color(0xFF543020)
+            : const Color(0xFFFFDBD0),
+        onSecondaryContainer: dark
+            ? const Color(0xFFFFE3D0)
+            : const Color(0xFF832600),
         secondary: dark ? const Color(0xFFAFC6ED) : const Color(0xFF334E76),
         tertiary: dark ? const Color(0xFF8ED8C2) : const Color(0xFF167D64),
         surface: dark ? const Color(0xFF1B2535) : CampusColors.white,
         surfaceContainerLow: dark ? const Color(0xFF202D42) : CampusColors.soft,
         surfaceContainer: dark
             ? const Color(0xFF26344B)
-            : const Color(0xFFE9EDFF),
+            : const Color(0xFFEAEDFF),
         surfaceContainerHigh: dark
             ? const Color(0xFF2D3A50)
-            : const Color(0xFFE1E8FF),
+            : const Color(0xFFE2E7FF),
         surfaceContainerHighest: dark
             ? const Color(0xFF34425A)
-            : const Color(0xFFD9E2FC),
+            : const Color(0xFFDAE2FD),
         onSurface: dark ? const Color(0xFFEDF2FA) : CampusColors.ink,
         onSurfaceVariant: dark
             ? const Color(0xFFAEBBD0)
-            : const Color(0xFF667085),
+            : const Color(0xFF59413A),
         outline: dark ? const Color(0xFF43526B) : const Color(0xFFCBD4E1),
         outlineVariant: dark ? const Color(0xFF2D3A50) : CampusColors.border,
       );
@@ -123,7 +130,7 @@ ThemeData campusTheme(Brightness brightness) {
       elevation: 0,
       scrolledUnderElevation: 0,
       titleSpacing: 20,
-      toolbarHeight: 68,
+      toolbarHeight: 64,
       titleTextStyle: base.textTheme.titleLarge?.copyWith(
         color: s.onSurface,
         fontSize: 20,
@@ -161,35 +168,27 @@ ThemeData campusTheme(Brightness brightness) {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: const Size(48, 48),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(CampusRadius.control),
-        ),
+        shape: const StadiumBorder(),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         minimumSize: const Size(48, 48),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(CampusRadius.control),
-        ),
+        shape: const StadiumBorder(),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         minimumSize: const Size(48, 48),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(CampusRadius.control),
-        ),
+        shape: const StadiumBorder(),
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: dark ? const Color(0xFF111A29) : CampusColors.canvas,
+      backgroundColor: dark ? const Color(0xFF111A29) : s.surface,
       indicatorColor: s.primaryContainer,
       elevation: 0,
-      height: 72,
-      indicatorShape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      height: 68,
+      indicatorShape: const StadiumBorder(),
       labelTextStyle: WidgetStateProperty.resolveWith(
         (states) => TextStyle(
           fontSize: 12,
@@ -212,9 +211,7 @@ ThemeData campusTheme(Brightness brightness) {
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: ButtonStyle(
         side: WidgetStatePropertyAll(BorderSide(color: s.outlineVariant)),
-        shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
+        shape: WidgetStatePropertyAll(const StadiumBorder()),
         backgroundColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.selected)
               ? s.primaryContainer
@@ -222,7 +219,7 @@ ThemeData campusTheme(Brightness brightness) {
         ),
         foregroundColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.selected)
-              ? s.primary
+              ? s.onPrimaryContainer
               : s.onSurfaceVariant,
         ),
       ),
@@ -231,6 +228,17 @@ ThemeData campusTheme(Brightness brightness) {
       color: s.outlineVariant,
       thickness: 1,
       space: 24,
+    ),
+    listTileTheme: ListTileThemeData(
+      iconColor: s.onSurfaceVariant,
+      contentPadding: const EdgeInsets.symmetric(horizontal: CampusSpace.lg),
+    ),
+    expansionTileTheme: ExpansionTileThemeData(
+      shape: const Border(),
+      collapsedShape: const Border(),
+      textColor: s.primary,
+      iconColor: s.primary,
+      collapsedIconColor: s.onSurfaceVariant,
     ),
     tabBarTheme: TabBarThemeData(
       labelColor: s.primary,

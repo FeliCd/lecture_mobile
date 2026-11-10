@@ -14,6 +14,7 @@ function fixture(now) {
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../apps_script/Lab2Free.gs'),'utf8'),c);
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../apps_script/AttendanceSafety.gs'),'utf8'),c);
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../apps_script/SubjectInsights.gs'),'utf8'),c);
+  vm.runInContext(fs.readFileSync(path.join(__dirname,'../apps_script/GroupPush.gs'),'utf8'),c);
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../apps_script/ClassTools.gs'),'utf8'),c);
   vm.runInContext(fs.readFileSync(path.join(__dirname,'../apps_script/ScheduleAttendance.gs'),'utf8'),c);
   const schemas = vm.runInContext('({...SCHEMA,...LAB2_TABLES})',c);
@@ -622,6 +623,10 @@ test('content normalization sanitizes metadata, validates URLs, excludes irrelev
   const item=f.c.contentNormalize_(raw,source,config,'NEWS',Date.now());
   assert.equal(item.title,'Flutter update');assert.equal(item.excerpt,'Android release');assert.equal(item.matchedTopics.length,2);
   assert.equal(item.url,'https://android-developers.googleblog.com/update');
+  const imageUrl='https://cdn.example.com/article.webp';
+  assert.equal(f.c.contentNormalize_({...raw,imageUrl},source,config,'NEWS',Date.now()).imageUrl,imageUrl);
+  for(const imageUrl of ['http://cdn.example.com/a.png','https://127.0.0.1/a.png','https://user@cdn.example.com/a.png'])
+    assert.equal(f.c.contentNormalize_({...raw,imageUrl},source,config,'NEWS',Date.now()).imageUrl,undefined);
   for(const url of ['javascript:alert(1)','https://127.0.0.1/x','https://user:pass@example.com/x','https://evil.example/x'])
     assert.equal(f.c.contentNormalize_({...raw,url},source,config,'NEWS',Date.now()),null);
   assert.equal(f.c.contentNormalize_({...raw,title:'medical Android'},source,config,'NEWS',Date.now()),null);
@@ -658,6 +663,8 @@ test('RSS and Atom parse source dates; DTD is rejected before XML parsing',()=>{
   f.c.XmlService={parse:xml=>({getRootElement:()=>wrap(new JSDOM(xml,{contentType:'text/xml'}).window.document.documentElement)})};
   assert.equal(f.c.contentRss_('<rss><channel><item><title>Android</title><link>https://example.com/a</link><pubDate>2026-10-10</pubDate><description><![CDATA[<p>Source text</p>]]></description></item></channel></rss>')[0].excerpt,'<p>Source text</p>');
   assert.equal(f.c.contentRss_('<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Flutter</title><link rel="alternate" href="https://example.com/b"/><published>2026-10-10</published></entry></feed>')[0].url,'https://example.com/b');
+  assert.equal(f.c.contentRss_('<rss xmlns:media="http://search.yahoo.com/mrss/"><channel><item><media:group><media:thumbnail url="https://example.com/cover.jpg"/></media:group></item></channel></rss>')[0].imageUrl,'https://example.com/cover.jpg');
+  assert.equal(f.c.contentRss_('<rss><channel><item><description><![CDATA[<img src="https://example.com/cover.png?v=2&amp;size=200">]]></description></item></channel></rss>')[0].imageUrl,'https://example.com/cover.png?v=2&size=200');
   assert.throws(()=>f.c.contentRss_('<!DOCTYPE rss><rss/>'),/UPSTREAM_UNAVAILABLE/);
 });
 

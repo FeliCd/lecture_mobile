@@ -22,6 +22,70 @@ String articleKey(Data article) {
       .toString();
 }
 
+class ArticleThumbnail extends StatelessWidget {
+  final Data article;
+
+  const ArticleThumbnail({super.key, required this.article});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final research = article['contentType'] != 'NEWS';
+    final placeholder = DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: research
+              ? [
+                  colors.surfaceContainerHigh,
+                  colors.secondary.withValues(alpha: .22),
+                ]
+              : [colors.primaryContainer, colors.surfaceContainerLow],
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          research ? Icons.biotech_outlined : Icons.newspaper_outlined,
+          size: 32,
+          color: research ? colors.secondary : colors.onPrimaryContainer,
+        ),
+      ),
+    );
+    final value = article['imageUrl'];
+    final url = value is String && value.length <= 1000
+        ? Uri.tryParse(value)
+        : null;
+    final hasImage =
+        url != null &&
+        url.scheme == 'https' &&
+        url.userInfo.isEmpty &&
+        RegExp(
+          r'^[a-z0-9.-]+\.[a-z]{2,}$',
+          caseSensitive: false,
+        ).hasMatch(url.host);
+    return ExcludeSemantics(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          width: 80,
+          height: 88,
+          child: hasImage
+              ? Image.network(
+                  url.toString(),
+                  fit: BoxFit.cover,
+                  cacheWidth: 240,
+                  frameBuilder: (_, child, frame, _) =>
+                      frame == null ? placeholder : child,
+                  errorBuilder: (_, _, _) => placeholder,
+                )
+              : placeholder,
+        ),
+      ),
+    );
+  }
+}
+
 class ArticleLibrary {
   final FirebaseFirestore db;
   final FirebaseAuth auth;

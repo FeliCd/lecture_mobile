@@ -113,7 +113,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('SE001'), findsOneWidget);
       expect(find.text('SE002'), findsNothing);
-      await tester.tap(find.text('Tất cả'));
+      await tester.ensureVisible(find.text('Tất cả (3)'));
+      await tester.tap(find.text('Tất cả (3)'));
       roster.add({
         ...members,
         'added': {'displayName': 'Dung', 'studentCode': 'SE004'},

@@ -1,5 +1,6 @@
 import 'motion.dart';
 import 'package:flutter/material.dart';
+import 'theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'domain.dart';
 import 'repository.dart';
@@ -108,7 +109,7 @@ class _WorkspacePageState extends ConsumerState<LecturerWorkspacePage> {
   Widget build(BuildContext context) {
     final value = ref.watch(workspaceProvider(widget.user.uid));
     final store = ref.read(workspaceStoreProvider(widget.user.uid));
-    return Scaffold(
+    return CampusScaffold(
       appBar: AppBar(
         title: const Text('Trợ lý giảng dạy'),
         actions: [
@@ -165,8 +166,11 @@ class _WorkspacePageState extends ConsumerState<LecturerWorkspacePage> {
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 110),
             children: [
-              const Text(
-                'Riêng tài khoản này • Lưu trên máy, chưa đồng bộ. Gỡ ứng dụng sẽ mất dữ liệu cá nhân.',
+              const CampusInfoBanner(
+                icon: Icons.phonelink_lock_outlined,
+                title: 'Dữ liệu cá nhân trên máy',
+                subtitle:
+                    'Sổ tay và việc cá nhân thuộc tài khoản hiện tại. Gỡ ứng dụng sẽ xóa dữ liệu này.',
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
@@ -764,7 +768,7 @@ class _NotebookState extends ConsumerState<LessonNotebookPage> {
     return CampusDraftGuard(
       dirty: failed,
       busy: pending > 0,
-      child: Scaffold(
+      child: CampusScaffold(
         appBar: AppBar(
           title: const Text('Sổ tay'),
           actions: const [
@@ -776,7 +780,7 @@ class _NotebookState extends ConsumerState<LessonNotebookPage> {
           ],
         ),
         body: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: CampusSpace.pageInsets,
           children: [
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,

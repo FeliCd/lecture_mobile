@@ -51,16 +51,32 @@ function contentUrl_(url) {
 function contentDate_(value) {
   const t=Date.parse(value);return Number.isFinite(t)?new Date(t).toISOString():null;
 }
+function contentImageUrl_(value) {
+  const url=String(value||'').trim().replace(/&amp;/gi,'&');
+  return url.length<=1000 && /^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(?:\/|$)/i.test(url) ? contentUrl_(url) : null;
+}
 function contentRss_(xml) {
   if(xml.length>1000000||/<!DOCTYPE|<!ENTITY/i.test(xml)) throw Error('UPSTREAM_UNAVAILABLE');
   const root=XmlService.parse(xml).getRootElement(), entries=[];
   function walk(n) {if(['item','entry'].includes(n.getName())) entries.push(n);else n.getChildren().forEach(walk);}
   walk(root);
   return entries.slice(0,40).map(e=>{
-    const child=name=>e.getChildren().find(c=>c.getName()===name),text=name=>child(name)?child(name).getText():'';
-    const link=e.getChildren().find(c=>c.getName()==='link'&&(!c.getAttribute('rel')||c.getAttribute('rel').getValue()==='alternate'));
+    const children=e.getChildren(),child=name=>children.find(c=>c.getName()===name),text=name=>child(name)?child(name).getText():'';
+    const attr=(node,name)=>node.getAttribute(name)?.getValue()||'';
+    const link=children.find(c=>c.getName()==='link'&&(!attr(c,'rel')||attr(c,'rel')==='alternate'));
+    const media=children.flatMap(c=>c.getName()==='group'?c.getChildren():[c]);
+    const image=media.map(c=>{
+      const name=c.getName(),type=attr(c,'type');
+      if(name==='thumbnail'||(name==='content'&&attr(c,'medium')==='image')||/^image\//i.test(type)) {
+        return contentImageUrl_(attr(c,'url')||attr(c,'href'));
+      }
+      return null;
+    }).find(Boolean);
+    const html=text('encoded')||text('content')||text('description')||text('summary');
+    const embedded=html.match(/<img\b[^>]*?\ssrc\s*=\s*["']([^"']+)["']/i)?.[1];
     return {title:text('title'),url:link?(link.getAttribute('href')?link.getAttribute('href').getValue():link.getText()):'',
-      publishedAt:text('pubDate')||text('published')||text('updated'),excerpt:text('description')||text('summary')};
+      publishedAt:text('pubDate')||text('published')||text('updated'),excerpt:text('description')||text('summary'),
+      imageUrl:image||contentImageUrl_(embedded)};
   });
 }
 function contentFetch_(source,topics) {
@@ -83,7 +99,9 @@ function contentFetch_(source,topics) {
   return items.slice(0,40).map(r=>{
     const date=source.type==='CROSSREF'?((r.published||{})['date-parts']||[])[0]:null;
     const doi=String(r.DOI||r.doi||'').replace(/^https?:\/\/(?:dx\.)?doi.org\//i,'').toLowerCase();
+    const image=Array.isArray(r.link)?r.link.find(l=>/^image\//i.test(l?.['content-type'])&&contentImageUrl_(l.URL)):null;
     return {title:Array.isArray(r.title)?r.title[0]:r.display_name||r.title,doi,url:doi?'https://doi.org/'+doi:r.URL,
+      imageUrl:image?.URL,
       publishedAt:date?date.map((v,i)=>i?String(v).padStart(2,'0'):v).join('-'):r.publication_date,
       excerpt:lab2Abstract_(r),authors:source.type==='CROSSREF'?(r.author||[]).slice(0,10).map(a=>[a.given,a.family].filter(Boolean).join(' ')):
         (r.authorships||[]).slice(0,10).map(a=>(a.author||{}).display_name).filter(Boolean)};
@@ -97,7 +115,9 @@ function contentNormalize_(raw,source,config,type,now) {
   const matched=topics.filter(t=>haystack.includes(t.toLowerCase()));
   if(!matched.length||excludes.some(t=>haystack.includes(t.toLowerCase()))) return null;
   const doi=String(raw.doi||'').toLowerCase();
+  const imageUrl=contentImageUrl_(raw.imageUrl);
   return {id:lab2Hash_(doi||url),contentType:type,title,canonicalUrl:url,url,doi,sourceName:source.label,source:source.label,
+    ...(imageUrl?{imageUrl}:{}),
     publishedAt:contentDate_(raw.publishedAt),fetchedAt:new Date(now).toISOString(),excerpt,abstractSnippet:excerpt,
     authors:(raw.authors||[]).map(v=>contentText_(v,100)).slice(0,10),subjectCodes:[config.subjectCode],subjectIds:[config.subjectCode],
     matchedTopics:matched,relevanceScore:matched.length};
