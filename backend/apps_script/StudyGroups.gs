@@ -10,7 +10,7 @@ function setupStudyGroups() {
   return {ready:true};
 }
 function groupPlan_(book,classId) {
-  const row=lab2Read_(book,'PortalGroupPlans').find(r=>r.classId===classId);
+  const row=sharedRowsWhere_(book,'PortalGroupPlans','classId',classId)[0];
   return row?{...row,version:Number(row.version),groups:JSON.parse(row.groups)}:{classId,version:0,groups:[],requestKey:''};
 }
 function groupAccess_(book,actor,d) {
@@ -34,6 +34,7 @@ function groupCall_(book,actor,method,d) {
   if(method==='saveGroupPlan') {
     portalTeacher_(actor);const key=portalKey_(d.requestKey);
     if(plan.requestKey===key) return {saved:true,version:plan.version};
+    if(book.firestore&&firestoreRows_(book,'PortalGroupSignups',null,[d.classId])[0]?.state==='OPEN') throw Error('GROUP_SIGNUP_OPEN');
     if(typeof groupSignupRecord_==='function'&&['PREPARING','OPEN','CONFLICT'].includes(groupSignupRecord_(book,d.classId)?.state)) throw Error('GROUP_SIGNUP_OPEN');
     portalVersion_(plan,d.version);
     if(!Array.isArray(d.groups)||d.groups.length>50) throw Error('INVALID_GROUPS');
@@ -53,12 +54,12 @@ function groupCall_(book,actor,method,d) {
     return {saved:true,version:row.version};
   }
   const group=groupAccess_(book,actor,d);
-  const rows=lab2Read_(book,'PortalGroupMessages').filter(m=>m.classId===d.classId&&m.groupId===d.groupId);
+  const rows=sharedRowsWhere_(book,'PortalGroupMessages','groupId',d.groupId).filter(m=>m.classId===d.classId);
   if(method==='ackGroupMessages') {
-    if(!book.getSheetByName('PortalGroupReceipts')) throw Error('GROUP_RECEIPTS_SETUP_REQUIRED');
+    if(!sharedHasTable_(book,'PortalGroupReceipts')) throw Error('GROUP_RECEIPTS_SETUP_REQUIRED');
     const delivered=d.deliveredIds||[],read=d.readIds||[];
     if(!Array.isArray(delivered)||!Array.isArray(read)||delivered.length>50||read.length>50||[...delivered,...read].some(id=>typeof id!=='string'||!rows.some(m=>m.id===id))) throw Error('INVALID_RECEIPTS');
-    const id=lab2Hash_(d.classId+'|'+d.groupId+'|'+actor.uid),stored=lab2Read_(book,'PortalGroupReceipts').find(r=>r.id===id);
+    const id=lab2Hash_(d.classId+'|'+d.groupId+'|'+actor.uid),stored=sharedRowsWhere_(book,'PortalGroupReceipts','id',id)[0];
     const receipts=stored?JSON.parse(stored.receipts):{},now=new Date().toISOString();let changed=false;
     for(const messageId of new Set([...delivered,...read])) {
       if(rows.find(m=>m.id===messageId).sender===actor.uid) continue;
@@ -75,9 +76,9 @@ function groupCall_(book,actor,method,d) {
     const before=d.before?rows.findIndex(m=>m.id===d.before):rows.length;
     if(before<0) throw Error('INVALID_CURSOR');
     const start=Math.max(0,before-50);
-    const tracking=!!book.getSheetByName('PortalGroupReceipts');
+    const tracking=sharedHasTable_(book,'PortalGroupReceipts');
     const members=new Set(group.memberIds.filter(id=>roster.some(s=>s.studentId===id)).map(id=>'student-'+id));
-    const receipts=tracking?lab2Read_(book,'PortalGroupReceipts').filter(r=>r.classId===d.classId&&r.groupId===d.groupId&&members.has(r.actor)).map(r=>({actor:r.actor,receipts:JSON.parse(r.receipts)})):[];
+    const receipts=tracking?sharedRowsWhere_(book,'PortalGroupReceipts','groupId',d.groupId).filter(r=>r.classId===d.classId&&members.has(r.actor)).map(r=>({actor:r.actor,receipts:JSON.parse(r.receipts)})):[];
     return {viewerId:actor.uid,receiptTracking:tracking,messages:rows.slice(start,before).map(({requestKey,fileId,...m})=>{
       const mine=m.sender===actor.uid,result={...m,mine,size:Number(m.size),hasFile:!!fileId};
       if(mine) {

@@ -13,7 +13,7 @@ function installGroupTaskEmailTrigger() {
 }
 function groupTasksReady_(book) {
   for(const name of ['PortalGroupTasks','PortalTaskNotifications']) {
-    if(!book.getSheetByName(name)) throw Error('GROUP_TASKS_SETUP_REQUIRED');
+    if(!sharedHasTable_(book,name)) throw Error('GROUP_TASKS_SETUP_REQUIRED');
   }
 }
 function groupTaskVisible_(book,actor,task,notification) {
@@ -24,7 +24,7 @@ function groupTaskVisible_(book,actor,task,notification) {
   } catch(_) {return false;}
 }
 function groupTaskReceipt_(book,task) {
-  const rows=lab2Read_(book,'PortalTaskNotifications').filter(n=>n.taskId===task.id);
+  const rows=sharedRowsWhere_(book,'PortalTaskNotifications','taskId',task.id);
   return {id:task.id,recipientCount:rows.length,readCount:rows.filter(n=>n.readAt).length,
     emailSentCount:rows.filter(n=>n.emailStatus==='SENT').length,
     emailPendingCount:rows.filter(n=>n.emailStatus==='PENDING').length,
@@ -35,7 +35,7 @@ function groupTaskCall_(book,actor,method,d) {
   groupTasksReady_(book);
   if(method==='listMyTaskNotifications'||method==='readTaskNotification') {
     portalStudent_(actor);
-    const tasks=lab2Read_(book,'PortalGroupTasks'),mine=lab2Read_(book,'PortalTaskNotifications').filter(n=>n.studentId===actor.entity.studentId);
+    const tasks=lab2Read_(book,'PortalGroupTasks'),mine=sharedRowsWhere_(book,'PortalTaskNotifications','studentId',actor.entity.studentId);
     const classes=lab2Read_(book,'Classes');
     const visible=mine.filter(n=>groupTaskVisible_(book,actor,tasks.find(t=>t.id===n.taskId),n));
     if(method==='readTaskNotification') {
@@ -88,7 +88,7 @@ function groupTaskCall_(book,actor,method,d) {
 }
 // Deliberately separate from request handling: a slow mail service cannot duplicate tasks.
 function sendGroupTaskEmails() {
-  const started=Date.now(),book=SpreadsheetApp.openById(config_().id),lock=LockService.getScriptLock();
+  const started=Date.now(),book=openSharedBook_(),lock=sharedLock_();
   if(!lock.tryLock(1000)) return {busy:true};
   let sent=0,skipped=0;
   try {

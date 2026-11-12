@@ -1,6 +1,6 @@
 /* Shared student portal. Run setupStudentPortal manually; deploy alongside the shared backend. */
 function setupStudentPortal() {
-  const book=SpreadsheetApp.openById(config_().id),lock=LockService.getScriptLock();
+  const book=SpreadsheetApp.openById(config_().id),lock=sharedLock_();
   if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
   try {
     for(const name of Object.keys(LAB2_TABLES).filter(n=>n.startsWith('Portal'))) {
@@ -12,18 +12,18 @@ function setupStudentPortal() {
   } finally {lock.releaseLock();}
 }
 function portalHandle_(request) {
-  const cfg=config_(),book=SpreadsheetApp.openById(cfg.id),p=PropertiesService.getScriptProperties();
+  const cfg=config_(),book=openSharedBook_(cfg),p=PropertiesService.getScriptProperties();
   let actor;
   if(request.firebaseAuth===true) {
     if(!p.getProperty('PORTAL_FIREBASE_PROJECT_ID')||!p.getProperty('PORTAL_FIREBASE_API_KEY')) throw Error('SHARED_BACKEND_SETUP_REQUIRED');
     const identity=lab2FirebaseIdentity_(request.idToken,{project:p.getProperty('PORTAL_FIREBASE_PROJECT_ID'),key:p.getProperty('PORTAL_FIREBASE_API_KEY')});
     // Membership, rather than a caller-provided roll or email, establishes student identity.
-    const matches=lab2Read_(book,'Students').filter(s=>String(s.schoolEmail).trim().toLowerCase()===identity.email);
+    const matches=sharedIdentityRows_(book,'Students',identity.email);
     if(matches.length!==1) throw Error('PROFILE_NOT_REGISTERED');
     actor={...identity,role:'student',entity:matches[0],uid:'student-'+matches[0].studentId};
   } else actor=lab2DesktopActor_(authenticate_(request.idToken,cfg,book));
   lab2Limit_(actor.uid, 'portal:'+String(request.method));
-  const lock=LockService.getScriptLock();
+  const lock=sharedLock_();
   if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
   let result;
   try {result=portalCall_(book,actor,String(request.method||''),request.data||{});}
@@ -43,12 +43,12 @@ function portalVersion_(row,version) {
   if(!Number.isInteger(version)||Number(row.version)!==version) throw Error('VERSION_CONFLICT');
 }
 function portalBook_(book,classId) {
-  const r=lab2Read_(book,'PortalGradebooks').find(r=>r.classId===classId);
+  const r=sharedRowsWhere_(book,'PortalGradebooks','classId',classId)[0];
   return r||{classId,components:'[]',version:'0',activePublicationId:'',updatedAt:'',updatedBy:''};
 }
 function portalRoster_(book,classId) {
-  const ids=new Set(lab2Read_(book,'Enrollments').filter(e=>e.classId===classId).map(e=>e.studentId));
-  const students=lab2Read_(book,'Students').filter(s=>ids.has(s.studentId));
+  const ids=sharedRowsWhere_(book,'Enrollments','classId',classId).map(e=>e.studentId);
+  const students=sharedRowsById_(book,'Students',ids);
   if(students.length>400) throw Error('CLASS_TOO_LARGE');
   return students;
 }
@@ -82,7 +82,7 @@ function portalLeaveViews_(book,rows) {
 function portalLeaveView_(book,r) {return portalLeaveViews_(book,[r])[0];}
 // Optional for old deployments: never create tables while reading/finalizing attendance.
 function portalApprovedForSession_(book,session) {
-  if(!book.getSheetByName('PortalLeaveRequests')) return new Map();
+  if(!sharedHasTable_(book,'PortalLeaveRequests')) return new Map();
   const candidates=lab2Read_(book,'PortalLeaveRequests').filter(r=>r.classId===session.classId&&r.sessionDate===session.date&&String(r.slot)===String(session.slot)&&r.status==='APPROVED');
   const result=new Map();
   for(const r of portalLeaveViews_(book,candidates)) {

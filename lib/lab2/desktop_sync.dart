@@ -5,8 +5,13 @@ import 'domain.dart';
 
 const useSharedDesktop = bool.fromEnvironment('USE_SHARED_DESKTOP');
 const quizEnabled = false;
+const firebaseSharedApiUrl = String.fromEnvironment(
+  'FIREBASE_SHARED_API_URL',
+  defaultValue:
+      'https://asia-southeast1-fap-attendance-88920.cloudfunctions.net/sharedApi',
+);
 
-/// Account-scoped shared snapshot. Sheets remains authoritative.
+/// Account-scoped snapshot of the shared Firestore dataset.
 class DesktopSync {
   final String endpoint;
   final Future<String?> Function() token;
@@ -30,11 +35,14 @@ class DesktopSync {
     final uri = Uri.tryParse(value);
     return uri != null &&
         uri.scheme == 'https' &&
-        uri.host == 'script.google.com' &&
+        ((uri.host ==
+                    'asia-southeast1-fap-attendance-88920.cloudfunctions.net' &&
+                uri.path == '/sharedApi') ||
+            (uri.host == 'script.google.com' &&
+                RegExp(r'^/macros/s/[\w-]+/exec$').hasMatch(uri.path))) &&
         uri.userInfo.isEmpty &&
         uri.query.isEmpty &&
-        uri.fragment.isEmpty &&
-        RegExp(r'^/macros/s/[\w-]+/exec$').hasMatch(uri.path);
+        uri.fragment.isEmpty;
   }
 
   Future<Data> request(String action, [Data input = const {}]) async {
@@ -43,16 +51,23 @@ class DesktopSync {
     }
     final idToken = await token();
     if (idToken == null) throw StateError('UNAUTHENTICATED');
-    final req = http.Request('POST', Uri.parse(endpoint))
+    final uri = Uri.parse(endpoint);
+    final firebase = uri.path == '/sharedApi';
+    final req = http.Request('POST', uri)
       ..followRedirects = false
       ..headers['Content-Type'] = 'application/json'
-      ..body = jsonEncode({...input, 'action': action, 'idToken': idToken});
+      ..body = jsonEncode({
+        ...input,
+        'action': action,
+        if (!firebase) 'idToken': idToken,
+      });
+    if (firebase) req.headers['Authorization'] = 'Bearer $idToken';
     Future<http.Response> send(http.Request r) async =>
         http.Response.fromStream(
           await client.send(r).timeout(const Duration(seconds: 35)),
         ).timeout(const Duration(seconds: 35));
     var response = await send(req);
-    if ([302, 303].contains(response.statusCode)) {
+    if (!firebase && [302, 303].contains(response.statusCode)) {
       final redirect = Uri.tryParse(response.headers['location'] ?? '');
       if (redirect == null ||
           redirect.scheme != 'https' ||

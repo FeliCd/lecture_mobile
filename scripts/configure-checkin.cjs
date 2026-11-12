@@ -2,11 +2,11 @@
 const fs = require('node:fs'), path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const config = JSON.parse(fs.readFileSync(path.join(root, 'config/lab2.free.json'), 'utf8'));
-if (!config.FIREBASE_PROJECT_ID || !config.FIREBASE_API_KEY || !config.APPS_SCRIPT_URL) {
-  throw new Error('Missing Firebase/Apps Script config in config/lab2.free.json.');
+if (!config.FIREBASE_PROJECT_ID || !config.FIREBASE_API_KEY) {
+  throw new Error('Missing Firebase config in config/lab2.free.json.');
 }
 const web = {
-  appsScriptUrl: config.APPS_SCRIPT_URL,
+  firebaseApiUrl: config.FIREBASE_SHARED_API_URL || 'https://asia-southeast1-' + config.FIREBASE_PROJECT_ID + '.cloudfunctions.net/sharedApi',
   firebase: {
     apiKey: config.FIREBASE_API_KEY,
     authDomain: `${config.FIREBASE_PROJECT_ID}.firebaseapp.com`,

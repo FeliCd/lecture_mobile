@@ -1,7 +1,7 @@
 /* Additive attendance migration. Public Sessions/Attendance schemas stay unchanged. */
 // Optional on old deployments: reads never create or modify a sheet.
 function lab2ClassAttendanceConfigs_(book) {
-  return book.getSheetByName('Lab2ClassAttendanceConfig')
+  return sharedHasTable_(book,'Lab2ClassAttendanceConfig')
     ? lab2Read_(book,'Lab2ClassAttendanceConfig') : [];
 }
 // Caller holds the script lock; only an assigned lecturer can change the total.
@@ -14,9 +14,8 @@ function lab2SetClassAttendanceConfig_(book,actor,d) {
   const confirmed=lab2Read_(book,'Sessions').filter(s=>s.classId===cls.classId&&s.status==='CLOSED'&&
     !completion.some(c=>c.sessionId===s.sessionId&&c.status==='PENDING'));
   if(new Set(confirmed.map(s=>s.date+'|'+s.slot)).size>d.totalSlots) throw Error('TOTAL_SLOTS_BELOW_COMPLETED');
-  let sheet=book.getSheetByName('Lab2ClassAttendanceConfig');
-  if(!sheet) {
-    sheet=book.insertSheet('Lab2ClassAttendanceConfig');
+  if(!sharedHasTable_(book,'Lab2ClassAttendanceConfig')) {
+    const sheet=book.insertSheet('Lab2ClassAttendanceConfig');
     sheet.getRange(1,1,1,LAB2_TABLES.Lab2ClassAttendanceConfig.length)
       .setValues([LAB2_TABLES.Lab2ClassAttendanceConfig]);
     sheet.setFrozenRows(1);
@@ -71,7 +70,7 @@ function lab2BulkPending_(book,actor,session,d) {
   if(session.status!=='OPEN'||Date.now()>=meta.closesAt) throw Error('SESSION_CLOSED');
   // Legacy sessions without captured membership must use individual corrections.
   if(!meta.eligibleStudentIds) throw Error('BULK_ROSTER_REQUIRED');
-  const records=lab2Read_(book,'Attendance').filter(a=>a.sessionId===session.sessionId);
+  const records=sharedRowsWhere_(book,'Attendance','sessionId',session.sessionId);
   if(new Set(records.map(a=>a.studentId)).size!==records.length) throw Error('INVALID_SHEET_IDS');
   if(d.expectedRevision!==lab2Hash_(JSON.stringify([session.status,records]))) throw Error('ATTENDANCE_CONFLICT');
   if(changes.some(e=>!meta.eligibleStudentIds.includes(e.id))) throw Error('NOT_ENROLLED');
@@ -89,13 +88,13 @@ function lab2BulkPending_(book,actor,session,d) {
 
 /** Editor/time-trigger only. Only sessions with captured roster/deadline are reconciled. */
 function reconcileExpiredSessions() {
-  const book=SpreadsheetApp.openById(config_().id), lock=LockService.getScriptLock();
+  const book=openSharedBook_(), lock=sharedLock_();
   if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
   try {
     const meta=lab2Read_(book,'Lab2SessionMeta'), now=Date.now();
     const sessions=lab2Read_(book,'Sessions').filter(s=>s.status==='OPEN'&&meta.some(m=>m.sessionId===s.sessionId&&Number(m.closesAt)<=now));
     for(const s of sessions.slice(0,25)) lab2Finalize_(book,s,true);
-    if(SpreadsheetApp.flush) SpreadsheetApp.flush();
+    if(!book.firestore&&SpreadsheetApp.flush) SpreadsheetApp.flush();
     return {closed:Math.min(sessions.length,25),remaining:Math.max(0,sessions.length-25)};
   } finally {lock.releaseLock();}
 }
@@ -109,22 +108,24 @@ function installAttendanceReconciliation() {
 
 function lab2Live_(book,actor,d) {
   if(actor.role!=='lecturer') throw Error('PERMISSION_DENIED');
-  const lock=LockService.getScriptLock();
+  const lock=sharedLock_();
   if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
   try {
-    let session=lab2Read_(book,'Sessions').find(s=>s.sessionId===d.sessionId);
+    let session=sharedRowsWhere_(book,'Sessions','sessionId',d.sessionId)[0];
     if(!session) throw Error('PERMISSION_DENIED');
     const cls=lab2Class_(book,actor,session.classId,true), meta=lab2Meta_(book,session);
     if(session.status==='OPEN'&&meta.eligibleStudentIds&&meta.closesAt<=Date.now()) {
       lab2Finalize_(book,session,true);
-      session=lab2Read_(book,'Sessions').find(s=>s.sessionId===d.sessionId);
+      session=sharedRowsWhere_(book,'Sessions','sessionId',d.sessionId)[0];
     }
-    const records=lab2Read_(book,'Attendance').filter(r=>r.sessionId===session.sessionId);
+    const records=sharedRowsWhere_(book,'Attendance','sessionId',session.sessionId);
     if(new Set(records.map(r=>r.studentId)).size!==records.length) throw Error('INVALID_SHEET_IDS');
     const eligible=meta.eligibleStudentIds||(session.status==='CLOSED'?records.map(r=>r.studentId):
-      lab2Read_(book,'Enrollments').filter(e=>e.classId===session.classId).map(e=>e.studentId));
-    const byId=new Map(records.map(r=>[r.studentId,r])), roster=lab2Read_(book,'Students');
-    const students=[...new Set([...eligible,...byId.keys()])].map(id=>{
+      sharedRowsWhere_(book,'Enrollments','classId',session.classId).map(e=>e.studentId));
+    const byId=new Map(records.map(r=>[r.studentId,r]));
+    const ids=[...new Set([...eligible,...byId.keys()])];
+    const roster=sharedRowsById_(book,'Students',ids);
+    const students=ids.map(id=>{
       const student=roster.find(s=>s.studentId===id)||{}, record=byId.get(id);
       return {studentUid:'student-'+id,studentCode:student.studentCode||'',displayName:student.fullName||'',
         status:record?record.status.toLowerCase():'pending',notes:record?record.note:'',checkedInAt:record?record.checkInTime:null};
@@ -154,7 +155,7 @@ function lab2DesktopAttendance_(book,lecturer,request) {
   if(name!=='getAttendanceDay') throw Error('FEATURE_DISABLED');
   const date=String(d.sessionDate||'');
   if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||new Date(lab2Millis_(date,'00:00')+7*3600000).toISOString().slice(0,10)!==date) throw Error('INVALID_SESSION_DATE');
-  const lock=LockService.getScriptLock();if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
+  const lock=sharedLock_();if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
   try {
     const tables={Classes:lab2Read_(book,'Classes'),Schedules:lab2Read_(book,'Schedules'),ScheduleExceptions:lab2Read_(book,'ScheduleExceptions')};
     const now=Date.now(),today=Utilities.formatDate(new Date(now),'Asia/Ho_Chi_Minh','yyyy-MM-dd'),lessons=[];
@@ -191,13 +192,13 @@ function lab2QuickState_(book,actor,d) {
   const completed=!!session&&session.status==='CLOSED'&&(!completion||completion.status==='CONFIRMED');
   const today=Utilities.formatDate(new Date(now),'Asia/Ho_Chi_Minh','yyyy-MM-dd');
   const state=completed?'CLOSED':existing.resetOnly?'RESET':o.sessionDate===today?'AVAILABLE':o.sessionDate>today?'NOT_YET':'DAY_EXPIRED';
-  const records=session?lab2Read_(book,'Attendance').filter(r=>r.sessionId===session.sessionId):[];
+  const records=session?sharedRowsWhere_(book,'Attendance','sessionId',session.sessionId):[];
   if(new Set(records.map(r=>r.studentId)).size!==records.length) throw Error('INVALID_SHEET_IDS');
   let eligible;
   if(session) {
     const meta=lab2Meta_(book,session);
     eligible=meta.eligibleStudentIds||(session.status==='CLOSED'?records.map(r=>r.studentId):
-      lab2Read_(book,'Enrollments').filter(e=>e.classId===session.classId).map(e=>e.studentId));
+      sharedRowsWhere_(book,'Enrollments','classId',session.classId).map(e=>e.studentId));
   } else eligible=lab2Read_(book,'Enrollments').filter(e=>e.classId===o.classId).map(e=>e.studentId);
   eligible=[...new Set([...eligible,...records.map(r=>r.studentId)])];
   if(eligible.length>400) throw Error('CLASS_TOO_LARGE');
@@ -209,7 +210,7 @@ function lab2QuickCounts_(eligible,statusOf) {
   return counts;
 }
 function lab2QuickContext_(book,actor,d) {
-  const lock=LockService.getScriptLock(); if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
+  const lock=sharedLock_(); if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
   try {
     const q=lab2QuickState_(book,actor,d), roster=lab2Read_(book,'Students'), byId=new Map(q.records.map(r=>[r.studentId,r]));
     const students=q.eligible.map(id=>{

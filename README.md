@@ -1,8 +1,8 @@
 # FAP Attendance — Mobile giảng viên
 
-Bổ sung 02/11/2026: [Firebase Lab 3 và nhóm học tập](docs/LAB3_GROUPS_IMPLEMENTATION.md), [kế hoạch Analytics](docs/analytics-plan.md), [ca nghiệm thu Android/ARTEMIS](docs/LAB3_ACCEPTANCE_CASES.md). Source có chia nhóm/chat/tệp dùng chung Mobile-Desktop-Student Web; cần cập nhật Apps Script và bật dịch vụ Firebase theo hướng dẫn trước khi nghiệm thu cloud.
+Bổ sung 02/11/2026: [Firebase Lab 3 và nhóm học tập](docs/LAB3_GROUPS_IMPLEMENTATION.md), [kế hoạch Analytics](docs/analytics-plan.md), [ca nghiệm thu Android/ARTEMIS](docs/LAB3_ACCEPTANCE_CASES.md). Ba nền tảng chia sẻ nhóm học tập, chat và tệp qua Firebase.
 
-Flutter Android/iOS, entry `lib/main.dart` → `lib/lab2/app.dart`. Bản shared hiện hành dành cho giảng viên; sinh viên điểm danh bằng Google trên Student Web. Lớp, lịch, roster, phiên và attendance dùng chung Apps Script/Google Sheets với Desktop. Firebase Auth xác thực; Firestore lưu thư viện bài viết riêng. Quiz đang tắt.
+Flutter Android/iOS, entry `lib/main.dart` → `lib/lab2/app.dart`. Mobile và Desktop dành cho giảng viên. Sinh viên điểm danh bằng Google trên Student Web. Ba ứng dụng dùng chung Cloud Functions và Cloud Firestore. Xem [trạng thái chuyển đổi và cách kiểm tra](docs/FIRESTORE_MIGRATION.md). Firebase Auth xác thực và Firestore lưu thư viện bài viết riêng. Quiz đang tắt.
 
 ## Chức năng
 
@@ -13,13 +13,13 @@ Flutter Android/iOS, entry `lib/main.dart` → `lib/lab2/app.dart`. Bản shared
 - **Lớp học:** roster, QR/secret, live polling, chốt phiên, điều chỉnh có lý do/audit, thống kê và CSV. Giữ OCR/Excel/CSV; sửa tên/email có kiểm soát; hủy/dời/bù/đổi phòng.
 - **Cập nhật:** NEWS từ RSS chính thức, RESEARCH Crossref/OpenAlex theo môn được phân công; lọc nguồn/ngày/từ khóa, provenance, lưu/ghi chú/bỏ lưu.
 
-Backend kiểm identity, ownership, enrollment/frozen roster, expiry và token trong write lock. Mobile chọn 5/10/15/20/30 phút; Desktop mặc định 10 phút. Backend mở ngay theo giờ server, giới hạn bởi giờ kết thúc buổi học và chặn cả hai client ngoài cửa sổ hợp lệ. PRESENT/LATE/ABSENT/EXCUSED riêng; nếu chưa cấu hình quy định late/excused, tỷ lệ liên quan hiển thị chưa đủ cấu hình. Không suy diễn trạng thái lịch sử.
+Backend kiểm identity, ownership, enrollment/frozen roster, expiry và token trước khi ghi transaction Firestore. Mobile chọn 5/10/15/20/30 phút; Desktop mặc định 10 phút. Backend mở ngay theo giờ server, giới hạn bởi giờ kết thúc buổi học và chặn cả hai client ngoài cửa sổ hợp lệ. PRESENT/LATE/ABSENT/EXCUSED riêng; nếu chưa cấu hình quy định late/excused, tỷ lệ liên quan hiển thị chưa đủ cấu hình. Không suy diễn trạng thái lịch sử.
 
 ## Chạy shared mode
 
-Mobile hiện đăng nhập **Google duy nhất**. Firebase xác minh tài khoản; Apps Script đối chiếu email đã xác minh với đúng một giảng viên trong `Lecturers`. Tài khoản sinh viên, chưa được cấp quyền, bị vô hiệu hóa hoặc hồ sơ trùng bị từ chối. Giữ nguyên provider của Desktop/Student Web. Thiết kế Material 3 sáng/tối, luồng màn hình và checklist Android/iOS: [MOBILE_UI_UX_REDESIGN_REPORT](docs/MOBILE_UI_UX_REDESIGN_REPORT.md).
+Mobile hiện đăng nhập **Google duy nhất**. Firebase xác minh tài khoản; Cloud Functions đối chiếu email đã xác minh với đúng một giảng viên trong `Lecturers`. Tài khoản sinh viên, chưa được cấp quyền, bị vô hiệu hóa hoặc hồ sơ trùng bị từ chối. Giữ nguyên provider của Desktop/Student Web. Thiết kế Material 3 sáng/tối, luồng màn hình và checklist Android/iOS: [MOBILE_UI_UX_REDESIGN_REPORT](docs/MOBILE_UI_UX_REDESIGN_REPORT.md).
 
-Copy `config/lab2.free.example.json` sang `config/lab2.free.json` (ignored), điền public Firebase config và URL Apps Script hiện hành. Private keys/OAuth secret/OpenAlex key chỉ ở backend.
+Copy `config/lab2.free.example.json` sang `config/lab2.free.json` (ignored), điền cấu hình Firebase công khai của ứng dụng Android. OpenAlex API key nằm trong Secret Manager.
 
 ```powershell
 flutter run --dart-define-from-file=config/lab2.free.json
@@ -39,7 +39,7 @@ npm --prefix functions test
 firebase emulators:exec --only firestore --project demo-refactor-rules --config firebase.articles.json "node --test functions/test/articles-rules.cjs"
 ```
 
-Functions/emulator giữ source nghiệp vụ cũ để regression, không phải backend chính bản shared. Demo dùng `scripts/start-lab2-backend.ps1` và config emulator. `lib/main_legacy.dart` là entry cũ.
+Cloud Functions nằm trong `functions/`. Các bài kiểm thử Apps Script dùng để đối chiếu nghiệp vụ trước khi chuyển đổi. Demo dùng `scripts/start-lab2-backend.ps1` và config emulator. `lib/main_legacy.dart` là entry cũ.
 
 ## Tài liệu và giới hạn
 
@@ -50,4 +50,4 @@ Functions/emulator giữ source nghiệp vụ cũ để regression, không phả
 - Desktop calendar cũ chưa render exceptions nhưng backend chặn mở occurrence đã hủy/dời. FAP bridge Desktop chưa ánh xạ EXCUSED; cần chốt quy định, không tự đổi thành ABSENT.
 - Chưa xác minh cloud E2E với tài khoản thật, tải50 người đồng thời, iOS và camera thật cho refactor. Báo cáo deployment trước đây là lịch sử.
 
-Hướng dẫn cũ: [LEGACY_README](docs/LEGACY_README.md), [SETUP](docs/SETUP.md), [FREE_DESKTOP_SYNC](docs/FREE_DESKTOP_SYNC.md). Khi khác mô tả cũ, báo cáo refactor11/10/2026 là mô tả source hiện hành.
+Hướng dẫn cũ: [LEGACY_README](docs/LEGACY_README.md), [SETUP](docs/SETUP.md), [FREE_DESKTOP_SYNC](docs/FREE_DESKTOP_SYNC.md). Thông tin Firebase hiện hành nằm trong [FIRESTORE_MIGRATION](docs/FIRESTORE_MIGRATION.md).

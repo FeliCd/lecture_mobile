@@ -57,7 +57,7 @@ function lab2OccurrenceState_(o,existing,now) {
   return 'AVAILABLE';
 }
 function lab2OccurrenceView_(book,actor,d) {
-  const lock=LockService.getScriptLock();if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
+  const lock=sharedLock_();if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
   try {
     let o;
     try {o=lab2ResolveOccurrence_(book,actor,d);}

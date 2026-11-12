@@ -10,7 +10,7 @@ function groupSignupTrigger_() {
   }
 }
 function groupSignupRecord_(book,classId) {
-  if(!book.getSheetByName('PortalGroupSignupSheets')) return null;
+  if(!sharedHasTable_(book,'PortalGroupSignupSheets')) return null;
   return lab2Read_(book,'PortalGroupSignupSheets').find(r=>r.classId===classId)||null;
 }
 function groupSignupRoster_(book,classId) {
@@ -40,13 +40,14 @@ function groupSignupCall_(book,actor,method,d) {
     return groupSignupView_(book,row);
   }
   portalTeacher_(actor);
-  if(!book.getSheetByName('PortalGroupSignupSheets')) throw Error('GROUP_SIGNUP_SETUP_REQUIRED');
+  if(!sharedHasTable_(book,'PortalGroupSignupSheets')) throw Error('GROUP_SIGNUP_SETUP_REQUIRED');
   if(method==='resumeGroupSignupSheet') {
     if(row?.state==='OPEN') return groupSignupView_(book,row);
     if(row?.state!=='PREPARING') throw Error('GROUP_SIGNUP_NOT_OPEN');
     return groupSignupFinishCreate_(book,actor,row);
   }
   if(method==='createGroupSignupSheet') {
+    if(book.firestore&&firestoreRows_(book,'PortalGroupSignups',null,[cls.classId])[0]?.state==='OPEN') throw Error('GROUP_SIGNUP_OPEN');
     const key=portalKey_(d.requestKey),plan=groupPlan_(book,cls.classId);
     if(row&&row.requestKey===key) {
       if(row.createdBy!==actor.uid) throw Error('PERMISSION_DENIED');
@@ -217,11 +218,11 @@ function groupSignupSync_(book,row) {
 }
 // One clock trigger for all classes, not one trigger for every student/file.
 function syncGroupSignupSheets() {
-  const started=Date.now(),book=SpreadsheetApp.openById(config_().id),lock=LockService.getScriptLock();
+  const started=Date.now(),book=openSharedBook_(),lock=sharedLock_();
   if(!lock.tryLock(1000)) return {busy:true};
   let checked=0;
   try {
-    if(!book.getSheetByName('PortalGroupSignupSheets')) return {checked};
+    if(!sharedHasTable_(book,'PortalGroupSignupSheets')) return {checked};
     for(const row of lab2Read_(book,'PortalGroupSignupSheets').filter(r=>r.state==='OPEN').sort((a,b)=>a.lastSyncedAt.localeCompare(b.lastSyncedAt))) {
       if(Date.now()-started>45000) break;
       try {groupSignupSync_(book,row);checked++;}

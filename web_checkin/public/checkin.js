@@ -13,15 +13,14 @@
   async function request(action, data = {}) {
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 30000);
     try {
-      const response = await fetch(window.FAP_CONFIG.appsScriptUrl, {
-        method: 'POST', headers: {'Content-Type':'text/plain;charset=UTF-8'},
-        body: JSON.stringify({action, sessionId, token, ...(googleMode && credential ? {idToken: credential, firebaseAuth: !!window.FAP_CONFIG.firebase} : {}), ...data}), signal: controller.signal
+      const response = await fetch(window.FAP_CONFIG.firebaseApiUrl, {
+        method: 'POST', headers: {'Content-Type':'application/json', Authorization: 'Bearer ' + credential},
+        body: JSON.stringify({action, sessionId, token, ...data}), signal: controller.signal
       });
       if (!response.ok) throw new Error('Không kết nối được máy chủ. Vui lòng thử lại.');
       let result;
       try { result = await response.json(); } catch { throw new Error('Máy chủ trả dữ liệu không hợp lệ. Liên hệ giảng viên.'); }
       if (!result.ok) {
-        if (/Cần đăng nhập Google|Tài khoản Google không được phép/.test(result.error || '')) throw new Error('Máy chủ chưa cập nhật API sinh viên. Giảng viên cần triển khai Apps Script phiên bản mới.');
         throw new Error(result.error || 'Không thực hiện được yêu cầu.');
       }
       return result.data;
@@ -133,15 +132,7 @@
         } catch { $('login-hint').textContent = 'Không khởi tạo được Google. Mở liên kết trong Chrome/Safari hoặc liên hệ giảng viên.'; }
         return;
       }
-      if (window.google?.accounts?.id && window.FAP_CONFIG?.googleWebClientId) {
-        clearInterval(ready);
-        try {
-          google.accounts.id.initialize({client_id: window.FAP_CONFIG.googleWebClientId,
-            callback: login, ux_mode: 'popup', auto_select: false, use_fedcm_for_button: false});
-          google.accounts.id.renderButton($('google-button'), {theme:'outline',size:'large',text:'signin_with',width:280});
-          $('login-hint').textContent = 'Sử dụng Google email trường có trong danh sách lớp. Sau đăng nhập, buổi học hiển thị ngay tại đây.';
-        } catch { $('login-hint').textContent = 'Không khởi tạo được Google. Mở liên kết trong Chrome/Safari hoặc liên hệ giảng viên.'; }
-      } else if (Date.now() - started > 15000) {
+      if (Date.now() - started > 15000) {
         clearInterval(ready); $('login-hint').textContent = 'Chưa tải được Google. Mở liên kết trong Chrome/Safari hoặc liên hệ giảng viên.';
       }
     }, 150);

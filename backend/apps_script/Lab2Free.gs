@@ -1,7 +1,4 @@
-/* Shared Desktop/Mobile Lab 2. No Cloud Functions, Firestore attendance writes,
- * service-account keys or client-supplied roles. Existing Sheets are authoritative.
- * Add this file to the existing Desktop Apps Script project and call setupLab2Free.
- */
+/* Shared Mobile, Desktop and Student Web business logic. */
 const LAB2_TABLES = Object.freeze({
   PortalGroupSignupSheets: ['classId','spreadsheetId','sheetId','state','planVersion','groups','roster','prepared','createdBy','lecturerId','lecturerEmail','createdAt','lastSyncedAt','lastError','requestKey'],
   PortalGroupTasks: ['id','classId','groupId','groupName','title','description','dueAt','createdAt','createdBy','requestKey','fingerprint'],
@@ -83,11 +80,11 @@ function diagnoseLab2Sheets() {
 }
 /** Owner-only editor check. Not exposed by doPost; prints counts, never roster or keys. */
 function verifyLab2Free() {
-  const book=SpreadsheetApp.openById(config_().id), tables={}, counts={};
+  const book=openSharedBook_(), tables={}, counts={};
   for(const name of ['Lecturers','Classes','Students','Enrollments','Sessions','Attendance','Lab2SessionMeta','Lab2AttendanceCompletion','Lab2SharedArticles']) {
     try { tables[name]=lab2Read_(book,name); counts[name]=tables[name].length; }
     catch(error) {
-      console.log(JSON.stringify({schemaError:name,header:book.getSheetByName(name).getDataRange().getDisplayValues()[0]}));
+      console.log(JSON.stringify({schemaError:name}));
       throw error;
     }
   }
@@ -108,12 +105,13 @@ function verifyLab2Free() {
 }
 function lab2Health_() {
   const p = PropertiesService.getScriptProperties();
-  return {version: 'lab2-shared-sheets-v2', capabilities:['attendanceSafety','subjectInsights','scheduleExceptions','rosterAudit','scheduleDrivenSessions','bulkPendingAttendance','quickAttendanceDaily','courseSlotAttendance'], quizEnabled:false,
+  return {version: 'lab2-shared-sheets-v2', database:sharedMode_(), firestoreMigrationVersion:1, capabilities:['attendanceSafety','subjectInsights','scheduleExceptions','rosterAudit','scheduleDrivenSessions','bulkPendingAttendance','quickAttendanceDaily','courseSlotAttendance'], quizEnabled:false,
     firebaseProject:p.getProperty('LAB2_FIREBASE_PROJECT_ID') || 'fap-attendance-88920',
     authConfigured:!!p.getProperty('LAB2_FIREBASE_API_KEY'),
     openAlexConfigured:!!p.getProperty('OPENALEX_API_KEY')};
 }
 function lab2Read_(book,name) {
+  if(book.firestore) return firestoreRows_(book,name);
   if (!LAB2_TABLES[name]) return read_(book,name).rows;
   const sheet = book.getSheetByName(name);
   if (!sheet) throw Error('SHARED_BACKEND_SETUP_REQUIRED');
@@ -129,6 +127,7 @@ function lab2Read_(book,name) {
 // valid duplicate; identity, roster, attendance and shared articles stay strict.
 function lab2ReadNewsCache_(book,name) {
   if (!['Lab2Feeds','Lab2ArticleCache'].includes(name)) throw Error('INVALID_INPUT');
+  if(book.firestore) return firestoreRows_(book,name);
   const sheet=book.getSheetByName(name);
   if(!sheet) throw Error('SHARED_BACKEND_SETUP_REQUIRED');
   const header=LAB2_TABLES[name], values=sheet.getDataRange().getDisplayValues();
@@ -181,15 +180,15 @@ function lab2FirebaseIdentity_(token, firebaseConfig) {
 }
 function lab2Actor_(identity,cfg,book) {
   if (!cfg.domains.includes(identity.email.split('@')[1])) throw Error('PERMISSION_DENIED');
-  const teachers = lab2Read_(book,'Lecturers').filter(r => String(r.email).trim().toLowerCase() === identity.email);
+  const teachers = sharedIdentityRows_(book,'Lecturers',identity.email);
   if (teachers.length > 1) throw Error('DUPLICATE_PROFILE');
   if (teachers.length === 1) return {...identity,role:'lecturer',entity:teachers[0],uid:'lecturer-'+teachers[0].lecturerId};
-  const students = lab2Read_(book,'Students').filter(r => String(r.schoolEmail).trim().toLowerCase() === identity.email);
+  const students = sharedIdentityRows_(book,'Students',identity.email);
   if (students.length !== 1) throw Error('PROFILE_NOT_REGISTERED');
   return {...identity,role:'student',entity:students[0],uid:'student-'+students[0].studentId};
 }
 function lab2Limit_(uid,action) {
-  const lock = LockService.getScriptLock();
+  const lock = sharedLock_();
   if (!lock.tryLock(15000)) throw Error('RATE_LIMITED');
   try {
     const cache = CacheService.getScriptCache(), key = 'lab2rate:'+lab2Hash_(uid+':'+action);
@@ -202,16 +201,18 @@ function lab2Limit_(uid,action) {
   } finally { lock.releaseLock(); }
 }
 function lab2Class_(book,actor,id,teacherOnly) {
-  const cls = lab2Read_(book,'Classes').find(c => c.classId === id);
+  const cls = sharedRowsWhere_(book,'Classes','classId',id)[0];
   if (!cls) throw Error('PERMISSION_DENIED');
   if (actor.role === 'lecturer') {
     if (cls.lecturerId !== actor.entity.lecturerId) throw Error('PERMISSION_DENIED');
-  } else if (teacherOnly || !lab2Read_(book,'Enrollments').some(e => e.classId === id && e.studentId === actor.entity.studentId)) {
+  } else if (teacherOnly || !sharedRowsWhere_(book,'Enrollments','classId',id).some(e=>e.studentId===actor.entity.studentId)) {
     throw Error('NOT_ENROLLED');
   }
   return cls;
 }
 function lab2Write_(book,changes) {
+  assertSharedWritable_(book);
+  if(book.firestore) return firestoreWrite_(book,changes);
   const requests = [], nextRows = {}, indexes = {}, capacities = {};
   for (const change of changes) {
     const header = LAB2_TABLES[change.table] || SCHEMA[change.table];
@@ -245,7 +246,7 @@ function lab2Millis_(date,time) {
   return value;
 }
 function lab2Meta_(book,session) {
-  const stored = lab2Read_(book,'Lab2SessionMeta').find(m => m.sessionId === session.sessionId);
+  const stored = sharedRowsWhere_(book,'Lab2SessionMeta','sessionId',session.sessionId)[0];
   if (stored) return {...stored,opensAt:Number(stored.opensAt),closesAt:Number(stored.closesAt),lateThresholdAt:Number(stored.lateThresholdAt),
     eligibleStudentIds:JSON.parse(stored.eligibleStudentIds)};
   // Desktop legacy sessions have no late threshold or historical membership snapshot.
@@ -255,9 +256,9 @@ function lab2Meta_(book,session) {
 function lab2Finalize_(book,session,automatic=false) {
   if (session.status !== 'OPEN') return;
   const meta = lab2Meta_(book,session);
-  const eligible = meta.eligibleStudentIds || lab2Read_(book,'Attendance').filter(e => e.sessionId === session.sessionId).map(e => e.studentId);
+  const eligible = meta.eligibleStudentIds || sharedRowsWhere_(book,'Attendance','sessionId',session.sessionId).map(e => e.studentId);
   if (eligible.length > 400) throw Error('CLASS_TOO_LARGE');
-  const attendance = lab2Read_(book,'Attendance').filter(a => a.sessionId === session.sessionId);
+  const attendance = sharedRowsWhere_(book,'Attendance','sessionId',session.sessionId);
   const now = new Date().toISOString();
   const changes = [{table:'Sessions',row:{...session,status:'CLOSED',currentToken:'',tokenExpiredAt:''}},
     {table:'Lab2AttendanceCompletion',row:{sessionId:session.sessionId,status:automatic?'PENDING':'CONFIRMED',confirmedAt:automatic?'':now,confirmedBy:automatic?'':session.createdBy}}];
@@ -333,25 +334,48 @@ function lab2SnapshotFrom_(tables,actor) {
   return {version:'lab2-shared-sheets-v1',syncedAt:Date.now(),profile:{uid:actor.uid,firebaseUid:actor.firebaseUid,
     displayName:actor.entity.fullName,email:actor.email,lecturerId:actor.role==='lecturer'?actor.entity.lecturerId:'',department:actor.entity.department||'',role:actor.role,active:true,subjectIds:subjects,attendancePolicy:lab2Policy_()},collections:c};
 }
-function lab2Snapshot_(book,actor) {
+function lab2SnapshotTables_(book,actor) {
+  if(book.firestore) return firestoreReadSnapshot_(book,()=>{
+    const lecturer=actor.role==='lecturer';
+    const classes=lecturer?sharedRowsWhere_(book,'Classes','lecturerId',actor.entity.lecturerId):
+      sharedRowsById_(book,'Classes',sharedRowsWhere_(book,'Enrollments','studentId',actor.entity.studentId).map(row=>row.classId));
+    const classIds=classes.map(row=>row.classId);
+    const enrollments=sharedRowsWhere_(book,'Enrollments','classId',classIds);
+    const sessions=sharedRowsWhere_(book,'Sessions','classId',classIds).filter(row=>row.status!=='RESET');
+    const sessionIds=sessions.map(row=>row.sessionId);
+    return {
+      Classes:classes, Enrollments:enrollments, Sessions:sessions,
+      Schedules:sharedRowsWhere_(book,'Schedules','lecturerId',lecturer?actor.entity.lecturerId:classes.map(row=>row.lecturerId)),
+      Students:sharedRowsById_(book,'Students',enrollments.map(row=>row.studentId)),
+      Attendance:sharedRowsWhere_(book,'Attendance','sessionId',sessionIds),
+      Lab2SessionMeta:sharedRowsById_(book,'Lab2SessionMeta',sessionIds),
+      Lab2AttendanceCompletion:sharedRowsById_(book,'Lab2AttendanceCompletion',sessionIds),
+      Lab2ClassAttendanceConfig:sharedRowsById_(book,'Lab2ClassAttendanceConfig',classIds),
+      Lab2SharedArticles:sharedRowsWhere_(book,'Lab2SharedArticles','classId',classIds),
+      ScheduleExceptions:sharedRowsWhere_(book,'ScheduleExceptions','classId',classIds)
+    };
+  });
   const tables = {};
   tables.Lab2ClassAttendanceConfig=lab2ClassAttendanceConfigs_(book);
   for (const name of ['Schedules','Classes','Students','Enrollments','Sessions','Attendance','Lab2SessionMeta','Lab2AttendanceCompletion','Lab2SharedArticles','ScheduleExceptions']) tables[name]=lab2Read_(book,name);
+  return tables;
+}
+
+function lab2Snapshot_(book,actor) {
+  let tables=lab2SnapshotTables_(book,actor);
   const allowed = new Set(tables.Classes.filter(c => actor.role==='lecturer' ? c.lecturerId===actor.entity.lecturerId :
     tables.Enrollments.some(e=>e.classId===c.classId&&e.studentId===actor.entity.studentId)).map(c=>c.classId));
   const expired = tables.Sessions.filter(s=>s.status==='OPEN'&&allowed.has(s.classId)&&
     tables.Lab2SessionMeta.some(m=>m.sessionId===s.sessionId&&Number(m.closesAt)<=Date.now()));
   if (expired.length) {
-    const lock=LockService.getScriptLock();
+    const lock=sharedLock_();
     if(!lock.tryLock(15000)) throw Error('RATE_LIMITED');
     try {
       for(const old of expired) {
-        const current=lab2Read_(book,'Sessions').find(s=>s.sessionId===old.sessionId);
-        if(current&&current.status==='OPEN') lab2Finalize_(book,current,true);
+        const current=sharedRowsWhere_(book,'Sessions','sessionId',old.sessionId)[0];
+        if(current&&current.status==='OPEN'&&lab2Meta_(book,current).closesAt<=Date.now()) lab2Finalize_(book,current,true);
       }
-      tables.Sessions=lab2Read_(book,'Sessions');
-      tables.Attendance=lab2Read_(book,'Attendance');
-      tables.Lab2AttendanceCompletion=lab2Read_(book,'Lab2AttendanceCompletion');
+      tables=lab2SnapshotTables_(book,actor);
     } finally { lock.releaseLock(); }
   }
   return lab2SnapshotFrom_(tables,actor);
@@ -405,7 +429,7 @@ function lab2ImportStudents_(book,actor,d) {
   return {added:next.added,existing:next.existing};
 }
 function lab2Mutate_(book,actor,name,d) {
-  const lock = LockService.getScriptLock();
+  const lock = sharedLock_();
   if (!lock.tryLock(15000)) throw Error('RATE_LIMITED');
   try {
     if(name==='setClassAttendanceConfig') return lab2SetClassAttendanceConfig_(book,actor,d);
@@ -436,7 +460,7 @@ function lab2Mutate_(book,actor,name,d) {
         if(!d.secretCode) throw Error('SECRET_REQUIRED');
         if(String(d.secretCode).trim()!==view.currentSecretCode) throw Error('SECRET_INVALID');
       }
-      const previous=lab2Read_(book,'Attendance').filter(a=>a.sessionId===s.sessionId&&a.studentId===actor.entity.studentId);
+      const previous=sharedRowsWhere_(book,'Attendance','sessionId',s.sessionId).filter(a=>a.studentId===actor.entity.studentId);
       if(previous.length>1) throw Error('INVALID_SHEET_IDS');
       if(previous.length) { if(!['PRESENT','LATE'].includes(previous[0].status)) throw Error('ATTENDANCE_ADJUSTED'); return {status:previous[0].status.toLowerCase(),checkedInAt:Date.parse(previous[0].checkInTime),alreadyRecorded:true}; }
       const status='PRESENT';
@@ -457,7 +481,7 @@ function lab2Mutate_(book,actor,name,d) {
       if(!['PRESENT','LATE','ABSENT','EXCUSED'].includes(status)||notes.length>500||!notes) throw Error('INVALID_INPUT');
       const meta=lab2Meta_(book,s);
       const eligible=meta.eligibleStudentIds || lab2Read_(book,'Enrollments').filter(e=>e.classId===s.classId).map(e=>e.studentId);
-      const previous=lab2Read_(book,'Attendance').filter(a=>a.sessionId===s.sessionId&&a.studentId===studentId);
+      const previous=sharedRowsWhere_(book,'Attendance','sessionId',s.sessionId).filter(a=>a.studentId===studentId);
       if(previous.length>1) throw Error('INVALID_SHEET_IDS');
       if(!eligible.includes(studentId)&&!previous.length) throw Error('NOT_ENROLLED');
       const old=previous[0], now=new Date().toISOString();
@@ -545,7 +569,7 @@ function lab2Discover_(book,actor,d) {
     const articles=Object.values(unique), feed={articles,nextPage:items.length===20?page+1:null,fetchedAt:now,expiresAt:now+21600000};
     let cacheSaved=true;
     try {
-    const lock=LockService.getScriptLock(); if(!lock.tryLock(15000)) throw Error('RATE_LIMITED');
+    const lock=sharedLock_(); if(!lock.tryLock(15000)) throw Error('RATE_LIMITED');
     try {
       const previous=lab2ReadNewsCache_(book,'Lab2ArticleCache');
       if(previous.length>2000) throw Error('ARTICLE_CACHE_FULL');
@@ -563,14 +587,18 @@ function lab2Share_(book,actor,d) {
   if(note.length>500) throw Error('INVALID_INPUT');
   const article=lab2ReadNewsCache_(book,'Lab2ArticleCache').find(a=>a.id===d.articleId&&JSON.parse(a.subjectIds).includes(cls.subjectCode));
   if(!article) throw Error('INVALID_INPUT');
-  const lock=LockService.getScriptLock(); if(!lock.tryLock(15000)) throw Error('RATE_LIMITED');
+  const lock=sharedLock_(); if(!lock.tryLock(15000)) throw Error('RATE_LIMITED');
   try { lab2Write_(book,[{table:'Lab2SharedArticles',row:{id:d.classId+'_'+article.id,classId:d.classId,
     articleId:article.id,article:article.article,sharedBy:actor.uid,note,sharedAt:Date.now()}}]); return {shared:true}; }
   finally { lock.releaseLock(); }
 }
 function lab2Handle_(request) {
-  if(request.action==='lab2Health') return lab2Health_();
-  const cfg=config_(), book=SpreadsheetApp.openById(cfg.id);
+  if(request.action==='lab2Health') {
+    const health=lab2Health_();
+    if(health.database==='firestore') openSharedBook_();
+    return health;
+  }
+  const cfg=config_(), book=openSharedBook_(cfg);
   const identity=lab2FirebaseIdentity_(request.idToken), actor=lab2Actor_(identity,cfg,book);
   const name=request.action==='lab2Snapshot'?'snapshot':request.name;
   lab2Limit_(actor.firebaseUid,name);
@@ -587,7 +615,7 @@ function lab2Handle_(request) {
     if(identity.signInProvider!=='google.com') throw Error('GOOGLE_ONLY');
     if(actor.role!=='lecturer') throw Error('PERMISSION_DENIED');
     if(!['getGradebook','saveGradebook','publishGrades','revokeGrades','listClassLeaveRequests','reviewLeaveRequest','applyApprovedLeave'].includes(d.method)) throw Error('UNKNOWN_PORTAL_METHOD');
-    const lock=LockService.getScriptLock();
+    const lock=sharedLock_();
     if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
     try {
       const result=portalCall_(book,actor,d.method,d.data||{});
@@ -597,7 +625,7 @@ function lab2Handle_(request) {
     finally { lock.releaseLock(); }
   }
   if(name==='groupCall') {
-    const lock=LockService.getScriptLock();
+    const lock=sharedLock_();
     if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
     let result;
     try {result=groupCall_(book,actor,String(d.method||''),d.data||{});}

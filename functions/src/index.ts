@@ -654,3 +654,5 @@ export const shareArticle = endpoint(
   },
 );
 export { discoverArticles } from "./news";
+export { sharedGroupSignup } from "./shared";
+export { sharedApi, finalizeSharedAttendance, processSharedTaskMail } from "./shared/api";

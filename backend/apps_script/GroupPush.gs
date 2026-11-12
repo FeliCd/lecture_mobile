@@ -9,7 +9,7 @@ function groupPushDevice_(book,actor,d,remove) {
   if(!['android','web'].includes(d.platform)||typeof d.token!=='string'||
       !/^[A-Za-z0-9_:\-]{20,4096}$/.test(d.token)) throw Error('INVALID_FCM_TOKEN');
   if(actor.role!==(d.platform==='android'?'lecturer':'student')) throw Error('PERMISSION_DENIED');
-  if(!book.getSheetByName('PortalGroupPushDevices')) {
+  if(!sharedHasTable_(book,'PortalGroupPushDevices')) {
     if(remove) return {enabled:false};
     throw Error('GROUP_PUSH_SETUP_REQUIRED');
   }
@@ -37,7 +37,7 @@ function groupPushAfterCommit_(book,actor,result) {
   delete result._groupPush;
   try {
     const project=groupPushProject_();
-    if(!project||!book.getSheetByName('PortalGroupPushDevices')) return result;
+    if(!project||!sharedHasTable_(book,'PortalGroupPushDevices')) return result;
     const cls=lab2Class_(book,actor,event.classId,false), group=groupAccess_(book,actor,event);
     const enrolled=new Set(portalRoster_(book,event.classId).map(s=>s.studentId));
     const recipients=new Set(['lecturer-'+cls.lecturerId,

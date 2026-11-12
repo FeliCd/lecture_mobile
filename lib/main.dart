@@ -18,10 +18,7 @@ Future<void> main() async {
     const emulator = bool.fromEnvironment('USE_EMULATORS');
     const project = String.fromEnvironment('FIREBASE_PROJECT_ID');
     if (useSharedDesktop &&
-        (emulator ||
-            !DesktopSync.validEndpoint(
-              const String.fromEnvironment('APPS_SCRIPT_URL'),
-            ))) {
+        (emulator || !DesktopSync.validEndpoint(firebaseSharedApiUrl))) {
       throw StateError(
         'Cấu hình dữ liệu Desktop chưa hợp lệ. Dùng config/lab2.free.json.',
       );

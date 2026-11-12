@@ -8,7 +8,7 @@ const CONTENT_SOURCES = [
 ];
 /** Run after setupLab2Free. Adds defaults only for subjects actually present; never overwrites admin edits. */
 function seedSubjectInsights() {
-  const book=SpreadsheetApp.openById(config_().id),lock=LockService.getScriptLock();
+  const book=openSharedBook_(),lock=sharedLock_();
   if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
   try {
     const defaults={PRM393:[['Flutter','Dart','Android','Firebase'],['android','crossref']],
@@ -128,7 +128,7 @@ function contentFeed_(book,config,type) {
   let cached=null;try{cached=cacheRow?JSON.parse(cacheRow.feed):null;}catch(_){/* rebuildable cache */}
   if(cached&&cached.configVersion!==configVersion) cached=null;
   if(cached&&Number(cacheRow.expiresAt)>now) return cached;
-  const lock=LockService.getScriptLock(),cache=CacheService.getScriptCache(),lease='content:'+key;
+  const lock=sharedLock_(),cache=CacheService.getScriptCache(),lease='content:'+key;
   const stale=()=>({...cached,items:cached?cached.items:[],stale:true,lastUpdatedAt:cached?cached.lastUpdatedAt:null,partialSourcesFailed:['Đang chờ nguồn / giới hạn làm mới']});
   if(!lock.tryLock(500)) return stale();
   try {
@@ -160,10 +160,16 @@ function contentFeed_(book,config,type) {
 
 /** Editor maintenance only; only rebuildable expired feed metadata is removed. */
 function pruneSubjectContentCache() {
-  const book=SpreadsheetApp.openById(config_().id),lock=LockService.getScriptLock();
+  const book=openSharedBook_(),lock=sharedLock_();
   if(!lock.tryLock(15000)) throw Error('LOCK_BUSY');
   try {
-    lab2Read_(book,'SubjectContentCache'); // Validate before removing any rebuildable rows.
+    const rows=lab2Read_(book,'SubjectContentCache');
+    assertSharedWritable_(book);
+    if(book.firestore) {
+      const expired=rows.filter(row=>row.expiresAt!==''&&Number.isFinite(Number(row.expiresAt))&&Number(row.expiresAt)<Date.now()-7*86400000).slice(-100);
+      firestoreWrite_(book,expired.map(row=>({table:'SubjectContentCache',id:row.id,delete:true})));
+      return {removed:expired.length};
+    }
     const sheet=book.getSheetByName('SubjectContentCache'),values=sheet.getDataRange().getDisplayValues();
     const expired=values.slice(1).map((r,i)=>({row:i+2,expiry:r[2]===''?NaN:Number(r[2])})).filter(r=>Number.isFinite(r.expiry)&&r.expiry<Date.now()-7*86400000).slice(-100);
     for(const r of expired.reverse()) sheet.deleteRow(r.row);

@@ -14,7 +14,7 @@ import 'auth_session_service.dart';
 import 'logout_cleanup.dart';
 
 final sharedDesktop = DesktopSync(
-  endpoint: const String.fromEnvironment('APPS_SCRIPT_URL'),
+  endpoint: firebaseSharedApiUrl,
   token: () async => FirebaseAuth.instance.currentUser?.getIdToken(),
   identity: () => FirebaseAuth.instance.currentUser?.uid,
   lecturerGoogleOnly: true,
@@ -127,6 +127,24 @@ class CampusRepository implements AuthSessionService {
       call('portalCall', {'method': method, 'data': data});
 
   Future<Data> call(String name, Data input) async {
+    final method = input['method'];
+    if (name == 'groupCall' &&
+        (method == 'firebaseGroupSignup' ||
+            (const bool.fromEnvironment('FIREBASE_GROUP_SIGNUP') &&
+                method == 'getGroupPlan'))) {
+      final data = Map<String, dynamic>.from(input['data'] as Map);
+      if (method == 'getGroupPlan') data['action'] = 'plan';
+      if (const bool.fromEnvironment('USE_EMULATORS')) {
+        return _callEmulator('sharedGroupSignup', data);
+      }
+      final response = await functions
+          .httpsCallable(
+            'sharedGroupSignup',
+            options: HttpsCallableOptions(timeout: const Duration(seconds: 35)),
+          )
+          .call(data);
+      return Map<String, dynamic>.from(response.data as Map);
+    }
     if (useSharedDesktop) {
       try {
         final result = await sharedDesktop.call(name, input);

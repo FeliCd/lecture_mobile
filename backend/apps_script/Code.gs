@@ -10,11 +10,87 @@ const SCHEMA = Object.freeze({
   SyncLogs: ['logId', 'action', 'userEmail', 'timestamp', 'description']
 });
 
+let sharedFirestoreBook_;
+let sharedBookMode_;
+
+function sharedMode_() {
+  const mode=PropertiesService.getScriptProperties().getProperty('SHARED_DATABASE_MODE')||'sheets';
+  if(!['sheets','firestore'].includes(mode)) throw Error('INVALID_SHARED_DATABASE_MODE');
+  return mode;
+}
+
+function openSharedBook_(cfg) {
+  const mode=sharedMode_();
+  if(sharedBookMode_&&sharedBookMode_!==mode) throw Error('DATABASE_MAINTENANCE');
+  sharedBookMode_=mode;
+  if(mode==='sheets') return SpreadsheetApp.openById((cfg||config_()).id);
+  if(sharedFirestoreBook_) return sharedFirestoreBook_;
+  const p=PropertiesService.getScriptProperties();
+  const book=firestoreBook_(p.getProperty('SHARED_FIRESTORE_PROJECT'),p.getProperty('SHARED_FIRESTORE_DATASET'));
+  if(book.request('/'+book.root).fields?.state?.stringValue!=='ready') throw Error('DATABASE_NOT_READY');
+  sharedFirestoreBook_=book;
+  return book;
+}
+
+function assertSharedWritable_(book) {
+  const mode=sharedMode_();
+  if((mode==='firestore')!==!!book.firestore) throw Error('DATABASE_MAINTENANCE');
+}
+
+function sharedHasTable_(book,table) {
+  return book.firestore ? Object.hasOwn(SCHEMA,table)||Object.hasOwn(LAB2_TABLES,table) : !!book.getSheetByName(table);
+}
+
+function sharedRowsById_(book,table,ids) {
+  const unique=[...new Set(ids)].filter(id=>typeof id==='string'&&id);
+  if(book.firestore) return firestoreRows_(book,table,null,unique);
+  const keys=new Set(unique), header=LAB2_TABLES[table]||SCHEMA[table];
+  return lab2Read_(book,table).filter(row=>keys.has(row[header[0]]));
+}
+
+function sharedIdentityRows_(book,table,email) {
+  if(book.firestore) return firestoreRows_(book,table,['identityEmail',email]);
+  const key=table==='Lecturers'?'email':'schoolEmail';
+  return read_(book,table).rows.filter(row=>String(row[key]).trim().toLowerCase()===email);
+}
+
+function sharedRowsWhere_(book,table,key,value) {
+  if(book.firestore) {
+    if((LAB2_TABLES[table]||SCHEMA[table])[0]===key)
+      return sharedRowsById_(book,table,Array.isArray(value)?value:[value]);
+    return firestoreRows_(book,table,[key,value]);
+  }
+  if(Array.isArray(value)) {
+    const values=new Set(value);
+    return lab2Read_(book,table).filter(row=>values.has(row[key]));
+  }
+  return lab2Read_(book,table).filter(row=>row[key]===String(value));
+}
+function sharedLock_() {
+  const initialMode=sharedBookMode_||sharedMode_();
+  const lock=LockService.getScriptLock();
+  return {
+    tryLock(timeout) {
+      if(!lock.tryLock(timeout)) return false;
+      try {
+        const mode=sharedMode_();
+        if(mode!==initialMode) throw Error('DATABASE_MAINTENANCE');
+        if(sharedFirestoreBook_) sharedFirestoreBook_.cache.clear();
+        return true;
+      } catch(error) {
+        lock.releaseLock();
+        throw error;
+      }
+    },
+    releaseLock() { lock.releaseLock(); }
+  };
+}
+
 function config_() {
   const p = PropertiesService.getScriptProperties();
   const id = p.getProperty('SPREADSHEET_ID');
   const audience = p.getProperty('GOOGLE_CLIENT_ID');
-  if (!id || !audience) throw new Error('Máy chủ chưa cấu hình SPREADSHEET_ID / GOOGLE_CLIENT_ID.');
+  if ((!id && sharedMode_()!=='firestore') || !audience) throw new Error('Máy chủ chưa cấu hình SPREADSHEET_ID / GOOGLE_CLIENT_ID.');
   return {id, audience, mobileAudience: p.getProperty('GOOGLE_MOBILE_CLIENT_ID') || '', webAudience: p.getProperty('GOOGLE_WEB_CLIENT_ID') || '', domains: (p.getProperty('SCHOOL_DOMAINS') || 'fpt.edu.vn,fe.edu.vn').split(',').map(s => s.trim().toLowerCase())};
 }
 
@@ -33,6 +109,7 @@ function setupSheets() {
 
 function read_(book, name) {
   if (!Object.prototype.hasOwnProperty.call(SCHEMA, name)) throw new Error('Sheet không được hỗ trợ.');
+  if(book.firestore) return {rows:firestoreRows_(book,name)};
   const sheet = book.getSheetByName(name);
   if (!sheet) throw new Error('Thiếu sheet ' + name + '. Chạy setupSheets.');
   const range = sheet.getDataRange();
@@ -71,7 +148,7 @@ function authenticate_(idToken, cfg, book) {
       ![true, 'true'].includes(claims.email_verified) || parts.length !== 2 || !parts[0] || !cfg.domains.includes(parts[1])) {
     throw new Error('Tài khoản Google không được phép truy cập.');
   }
-  const matches = read_(book, 'Lecturers').rows.filter(r => r.email.trim().toLowerCase() === email);
+  const matches = sharedIdentityRows_(book,'Lecturers',email);
   if (matches.length !== 1) throw new Error('Email chưa có trong Lecturers hoặc hồ sơ bị trùng. Liên hệ trưởng nhóm.');
   return matches[0];
 }
@@ -146,7 +223,7 @@ function writeSchedules_(cfg, sheet, rows, lecturer, action) {
 }
 
 function handleSession_(book, cfg, lecturer, request) {
-  const lock = LockService.getScriptLock();
+  const lock = sharedLock_();
   if (!lock.tryLock(15000)) throw new Error('Máy chủ đang bận. Thử lại sau.');
   try {
     const sessions = read_(book, 'Sessions');
@@ -327,14 +404,12 @@ function handleSession_(book, cfg, lecturer, request) {
               note: 'Chốt vắng tự động khi kết thúc phiên',
               updatedBy: markedBy
             };
-            newRows.push(SCHEMA.Attendance.map(k => String(newRecord[k] || '')));
+            newRows.push({table:'Attendance',row:newRecord});
           }
         }
       });
 
-      if (newRows.length > 0) {
-        attendance.sheet.getRange(attendance.sheet.getLastRow() + 1, 1, newRows.length, SCHEMA.Attendance.length).setValues(newRows);
-      }
+      lab2Write_(book,newRows);
       return {saved: true, count: newRows.length};
     }
 
@@ -362,20 +437,17 @@ function authenticateStudent_(idToken, cfg, book) {
   if (claims.aud !== cfg.webAudience || !['accounts.google.com', 'https://accounts.google.com'].includes(claims.iss) ||
       !Number.isFinite(Number(claims.exp)) || Number(claims.exp) <= Date.now()/1000 ||
       ![true, 'true'].includes(claims.email_verified) || !cfg.domains.includes(email.split('@')[1])) throw new Error('Chỉ tài khoản Google email trường đã xác minh được phép điểm danh.');
-  const matches = read_(book, 'Students').rows.filter(s => String(s.schoolEmail).trim().toLowerCase() === email);
+  const matches = sharedIdentityRows_(book,'Students',email);
   if (matches.length !== 1) throw new Error('Email trường chưa có trong danh sách sinh viên hoặc đang bị trùng. Liên hệ giảng viên.');
   return matches[0];
 }
 // Mobile-created sessions keep an explicit deadline and frozen roster.
 // Apply these checks on the public web path too, before showing or recording a lesson.
 function assertMobileQrSession_(book, session, request, student) {
-  const sheet = book.getSheetByName('Lab2SessionMeta');
-  if (!sheet) return;
-  const values = sheet.getDataRange().getDisplayValues();
-  const header = values[0] || [], id = header.indexOf('sessionId');
-  const row = values.slice(1).find(r => r[id] === session.sessionId);
+  if (!sharedHasTable_(book,'Lab2SessionMeta')) return;
+  const row = sharedRowsWhere_(book,'Lab2SessionMeta','sessionId',session.sessionId)[0];
   if (!row) return; // Desktop legacy behavior stays in its own handler.
-  const deadline = Number(row[header.indexOf('closesAt')]);
+  const deadline = Number(row.closesAt);
   const expiry = Date.parse(session.tokenExpiredAt), view = sessionView_(session);
   if (!Number.isFinite(deadline) || Date.now() >= deadline || !Number.isFinite(expiry) || Date.now() >= expiry)
     throw new Error('Phiên điểm danh đã hết hạn. Quét mã của phiên mới.');
@@ -383,7 +455,7 @@ function assertMobileQrSession_(book, session, request, student) {
     throw new Error('Mã QR đã thay đổi. Quét mã mới đang hiển thị.');
   if (student) {
     let eligible;
-    try { eligible = JSON.parse(row[header.indexOf('eligibleStudentIds')]); } catch (_) { throw new Error('Không đọc được danh sách phiên. Liên hệ giảng viên.'); }
+    try { eligible = JSON.parse(row.eligibleStudentIds); } catch (_) { throw new Error('Không đọc được danh sách phiên. Liên hệ giảng viên.'); }
     if (!Array.isArray(eligible) || !eligible.includes(student.studentId))
       throw new Error('Sinh viên không thuộc danh sách lớp tại thời điểm mở phiên.');
   }
@@ -392,7 +464,7 @@ function authenticateFirebaseStudent_(idToken, cfg, book) {
   if (typeof lab2FirebaseIdentity_ !== 'function') throw new Error('Máy chủ chưa cập nhật xác thực Firebase.');
   const identity = lab2FirebaseIdentity_(idToken);
   if (!cfg.domains.includes(identity.email.split('@')[1])) throw new Error('Chỉ tài khoản Google email trường được phép điểm danh.');
-  const matches = read_(book, 'Students').rows.filter(s => String(s.schoolEmail).trim().toLowerCase() === identity.email);
+  const matches = sharedIdentityRows_(book,'Students',identity.email);
   if (matches.length !== 1) throw new Error('Email trường chưa có trong danh sách sinh viên hoặc đang bị trùng. Liên hệ giảng viên.');
   return matches[0];
 }
@@ -410,17 +482,17 @@ function studentContext_(request, cfg, book, byCode = false, verifiedStudent = n
     student = matches[0];
     if(student.studentId!==verified.studentId) throw new Error('MSSV không thuộc tài khoản đã xác minh.');
   } else student = verifiedStudent || (request.firebaseAuth === true ? authenticateFirebaseStudent_(request.idToken, cfg, book) : authenticateStudent_(request.idToken, cfg, book));
-  const session = read_(book, 'Sessions').rows.find(s => s.sessionId === request.sessionId);
+  const session = sharedRowsWhere_(book,'Sessions','sessionId',request.sessionId)[0];
   if (!session) throw new Error('Phiên điểm danh không tồn tại.');
   if (session.status !== 'OPEN') throw new Error('Phiên đã kết thúc hoặc được reset. Quét mã mới.');
   assertMobileQrSession_(book, session, request, student);
-  if (!read_(book, 'Enrollments').rows.some(e => e.classId === session.classId && e.studentId === student.studentId)) throw new Error('Sinh viên không thuộc danh sách lớp của buổi học này.');
-  const cls = read_(book, 'Classes').rows.find(c => c.classId === session.classId);
+  if (!sharedRowsWhere_(book,'Enrollments','classId',session.classId).some(e=>e.studentId===student.studentId)) throw new Error('Sinh viên không thuộc danh sách lớp của buổi học này.');
+  const cls = sharedRowsWhere_(book,'Classes','classId',session.classId)[0];
   if (!cls) throw new Error('Không tìm thấy lớp học.');
   return {student, session, cls};
 }
 function handleStudentSession_(request) {
-  const cfg = config_(), book = SpreadsheetApp.openById(cfg.id);
+  const cfg = config_(), book = openSharedBook_(cfg);
   const {student, session, cls} = studentContext_(request, cfg, book);
   return {student: {fullName: student.fullName, studentCode: student.studentCode, email: student.schoolEmail},
     session: {sessionId: session.sessionId, classCode: cls.classCode, subjectCode: cls.subjectCode,
@@ -433,15 +505,15 @@ function handleStudentCodeSession_(request) {
   return handleStudentSession_(request);
 }
 function legacyStudentCodeSessionView_(request) {
-  const book = SpreadsheetApp.openById(config_().id);
-  const session = read_(book, 'Sessions').rows.find(s => s.sessionId === request.sessionId);
+  const book = openSharedBook_();
+  const session = sharedRowsWhere_(book,'Sessions','sessionId',request.sessionId)[0];
   if (!session) throw new Error('Phiên điểm danh không tồn tại.');
   if (session.status !== 'OPEN') throw new Error('Phiên đã kết thúc hoặc được reset. Quét mã mới.');
   assertMobileQrSession_(book, session, request);
   const view = sessionView_(session);
   
   
-  const cls = read_(book, 'Classes').rows.find(c => c.classId === session.classId);
+  const cls = sharedRowsWhere_(book,'Classes','classId',session.classId)[0];
   if (!cls) throw new Error('Không tìm thấy lớp học.');
   return {session: {classCode: cls.classCode, subjectCode: cls.subjectCode, date: session.date,
     slot: session.slot, startTime: session.startTime, endTime: session.endTime,
@@ -449,13 +521,13 @@ function legacyStudentCodeSessionView_(request) {
 }
 function handleStudentCheckIn_(request, byCode = false) {
   if (request.confirmPresent !== true) throw new Error('Bạn phải xác nhận đang có mặt trong lớp để điểm danh.');
-  const cfg = config_(), book = SpreadsheetApp.openById(cfg.id);
+  const cfg = config_(), book = openSharedBook_(cfg);
   if(byCode&&PropertiesService.getScriptProperties().getProperty('ALLOW_VERIFIED_STUDENT_CODE')!=='true')
     throw new Error('Điểm danh bằng MSSV đã tắt. Đăng nhập Google hoặc liên hệ giảng viên.');
   // Verify over the network before acquiring the write lock; reread session/roster inside it.
   const verified=request.firebaseAuth===true?authenticateFirebaseStudent_(request.idToken,cfg,book):authenticateStudent_(request.idToken,cfg,book);
   lab2Limit_(verified.studentId,'studentCheckIn');
-  const lock = LockService.getScriptLock();
+  const lock = sharedLock_();
   if (!lock.tryLock(15000)) throw new Error('Hệ thống đang bận. Thử lại.');
   try {
     const {student, session} = studentContext_(request, cfg, book, byCode, verified);
@@ -468,8 +540,7 @@ function handleStudentCheckIn_(request, byCode = false) {
       if (request.useSecret === true) throw new Error('Secret Code chưa được bật. Quét lại mã QR.');
       if (!view.currentToken || String(request.token || '') !== view.currentToken) throw new Error('Mã QR không hợp lệ hoặc đã thay đổi. Quét mã mới.');
     }
-    const attendance = read_(book, 'Attendance');
-    const previous=attendance.rows.filter(a=>a.sessionId===session.sessionId&&a.studentId===student.studentId);
+    const previous=sharedRowsWhere_(book,'Attendance','sessionId',session.sessionId).filter(a=>a.studentId===student.studentId);
     if(previous.length>1) throw new Error('INVALID_SHEET_IDS');
     if(previous.length) {
       if(!['PRESENT','LATE'].includes(previous[0].status)) throw new Error('Điểm danh đã được giảng viên điều chỉnh. Liên hệ giảng viên.');
@@ -487,7 +558,7 @@ function handleStudentCheckIn_(request, byCode = false) {
 
 function handle_(request) {
   const cfg = config_();
-  const book = SpreadsheetApp.openById(cfg.id);
+  const book = openSharedBook_(cfg);
   const lecturer = authenticate_(request.idToken, cfg, book);
   if (request.action === 'profile') return lecturer;
   if (request.action === 'desktopAttendanceCall') {
@@ -506,12 +577,21 @@ function handle_(request) {
   if (request.sheet !== 'Schedules' || !['appendRow', 'updateRow', 'deleteRow', 'batchUpdate'].includes(request.action)) {
     throw new Error('Thao tác chưa được hỗ trợ. Không có generic write cho sheet khác.');
   }
-  const lock = LockService.getScriptLock();
+  const lock = sharedLock_();
   if (!lock.tryLock(15000)) throw new Error('Máy chủ đang bận. Thử lại sau.');
   try {
     const current = read_(book, 'Schedules');
     const rows = mutateSchedules_(current.rows, request.action, request, lecturer);
-    writeSchedules_(cfg, current.sheet, rows, lecturer, request.action);
+    assertSharedWritable_(book);
+    if(book.firestore) {
+      const old=new Map(current.rows.map(row=>[row.scheduleId,row]));
+      const next=new Set(rows.map(row=>row.scheduleId));
+      const changes=rows.filter(row=>JSON.stringify(old.get(row.scheduleId))!==JSON.stringify(row)).map(row=>({table:'Schedules',row}));
+      current.rows.filter(row=>!next.has(row.scheduleId)).forEach(row=>changes.push({table:'Schedules',id:row.scheduleId,delete:true}));
+      changes.push({table:'SyncLogs',row:{logId:Utilities.getUuid(),action:request.action,userEmail:lecturer.email,
+        timestamp:new Date().toISOString(),description:'Schedules: '+rows.length+' rows after mutation'}});
+      lab2Write_(book,changes);
+    } else writeSchedules_(cfg, current.sheet, rows, lecturer, request.action);
     return {saved: true};
   } finally { lock.releaseLock(); }
 }
@@ -575,7 +655,7 @@ function importRoster_(request, state, lecturer, uuid) {
 }
 
 function handleRoster_(book, cfg, lecturer, request) {
-  const lock = LockService.getScriptLock();
+  const lock = sharedLock_();
   if (!lock.tryLock(15000)) throw new Error('Máy chủ đang bận. Thử lại sau.');
   try {
     const classes = read_(book, 'Classes'), students = read_(book, 'Students'), enrollments = read_(book, 'Enrollments');
@@ -586,6 +666,17 @@ function handleRoster_(book, cfg, lecturer, request) {
       return students.rows.filter(s => ids.has(s.studentId)).map(s => ({...s, classCode: target.classCode}));
     }
     const next = importRoster_(request, {classes: classes.rows, students: students.rows, enrollments: enrollments.rows, schedules}, lecturer, () => Utilities.getUuid());
+    assertSharedWritable_(book);
+    if(book.firestore) {
+      const changes=[];
+      for(const [table,current,rows] of [['Classes',classes,next.classes],['Students',students,next.students],['Enrollments',enrollments,next.enrollments]]) {
+        for(const row of rows.slice(current.rows.length)) changes.push({table,row});
+      }
+      changes.push({table:'SyncLogs',row:{logId:Utilities.getUuid(),action:'importRoster',userEmail:lecturer.email,
+        timestamp:new Date().toISOString(),description:'Added enrollments: '+next.added}});
+      lab2Write_(book,changes);
+      return {added:next.added,existing:next.existing,classId:next.classId};
+    }
     const requests = [];
     for (const [name, current, rows] of [['Classes', classes, next.classes], ['Students', students, next.students], ['Enrollments', enrollments, next.enrollments]]) {
       const appended = rows.slice(current.rows.length);
