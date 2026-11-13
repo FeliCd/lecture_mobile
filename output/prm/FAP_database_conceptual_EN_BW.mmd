@@ -1,0 +1,28 @@
+%%{init: {"theme": "base", "themeVariables": {"background": "#FFFFFF", "mainBkg": "#FFFFFF", "primaryColor": "#FFFFFF", "secondaryColor": "#FFFFFF", "tertiaryColor": "#FFFFFF", "primaryBorderColor": "#000000", "primaryTextColor": "#000000", "textColor": "#000000", "lineColor": "#000000", "noteBkgColor": "#FFFFFF", "noteBorderColor": "#000000", "noteTextColor": "#000000", "classText": "#000000", "edgeLabelBackground": "#FFFFFF"}}}%%
+%% UML conceptual model · Attendance, leave and grade publication
+%% Sources: backend/apps_script/Code.gs, Lab2Free.gs, ScheduleAttendance.gs, StudentPortal.gs
+classDiagram
+    direction LR
+    class Student["Student"]
+    class Enrollment["Enrollment"]
+    class CourseClass["Class"]
+    class Occurrence["Class Meeting"]
+    class LeaveRequest["Leave Request"]
+    class Session["Attendance Session"]
+    class Attendance["Attendance"]
+    class Gradebook["Gradebook"]
+    class Publication["Grade Publication"]
+    Student "1" -- "0..*" Enrollment
+    CourseClass "1" -- "0..*" Enrollment
+    CourseClass "1" -- "0..*" Occurrence
+    Student "1" -- "0..*" LeaveRequest
+    Occurrence "1" -- "0..*" LeaveRequest
+    Occurrence "1" -- "0..*" Session
+    Session "1" -- "0..*" Attendance
+    Student "1" -- "0..*" Attendance
+    CourseClass "1" -- "0..1" Gradebook
+    Gradebook "1" -- "0..*" Publication : publication history
+    note for Attendance "BR-02. At most one attendance record per session and student."
+    note for Session "A class meeting has at most one current session. A reset may retain older sessions."
+    note for Gradebook "A gradebook has at most one active publication."
+

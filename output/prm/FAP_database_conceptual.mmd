@@ -1,0 +1,27 @@
+%% UML conceptual model · Attendance, leave and grade publication
+%% Sources: backend/apps_script/Code.gs, Lab2Free.gs, ScheduleAttendance.gs, StudentPortal.gs
+classDiagram
+    direction LR
+    class Student["Sinh viên"]
+    class Enrollment["Ghi danh"]
+    class CourseClass["Lớp"]
+    class Occurrence["Buổi học"]
+    class LeaveRequest["Đơn xin nghỉ"]
+    class Session["Phiên điểm danh"]
+    class Attendance["Chuyên cần"]
+    class Gradebook["Bảng điểm"]
+    class Publication["Bản công bố"]
+    Student "1" -- "0..*" Enrollment
+    CourseClass "1" -- "0..*" Enrollment
+    CourseClass "1" -- "0..*" Occurrence
+    Student "1" -- "0..*" LeaveRequest
+    Occurrence "1" -- "0..*" LeaveRequest
+    Occurrence "1" -- "0..*" Session
+    Session "1" -- "0..*" Attendance
+    Student "1" -- "0..*" Attendance
+    CourseClass "1" -- "0..1" Gradebook
+    Gradebook "1" -- "0..*" Publication : lịch sử công bố
+    note for Attendance "BR-02: mỗi cặp phiên và sinh viên có tối đa một bản ghi."
+    note for Session "Một buổi có tối đa một phiên hiện hành. Có thể còn phiên cũ sau reset."
+    note for Gradebook "Một bảng điểm có tối đa một bản công bố đang hiệu lực."
+

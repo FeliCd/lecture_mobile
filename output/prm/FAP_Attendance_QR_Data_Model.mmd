@@ -1,0 +1,54 @@
+---
+config:
+  look: classic
+  theme: base
+  themeVariables:
+    background: "#ffffff"
+    primaryColor: "#ffffff"
+    primaryTextColor: "#000000"
+    primaryBorderColor: "#000000"
+    secondaryColor: "#ffffff"
+    tertiaryColor: "#ffffff"
+    lineColor: "#000000"
+    textColor: "#000000"
+    classText: "#000000"
+    edgeLabelBackground: "#ffffff"
+---
+classDiagram
+    direction LR
+
+    class Classes {
+        string classId
+        string classCode
+    }
+    class Students {
+        string studentId
+        string studentCode
+    }
+    class Enrollments {
+        string classId
+        string studentId
+    }
+    class Sessions {
+        string sessionId
+        string classId
+        string status
+    }
+    class Lab2SessionMeta {
+        string sessionId
+        number closesAt
+        string eligibleStudentIds
+    }
+    class Attendance {
+        string sessionId
+        string studentId
+        string status
+        string checkInTime
+    }
+
+    Classes "1" -- "0..*" Enrollments : has enrollments
+    Students "1" -- "0..*" Enrollments : enrolls
+    Classes "1" -- "0..*" Sessions : has sessions
+    Sessions "1" -- "0..1" Lab2SessionMeta : has metadata
+    Sessions "1" -- "0..*" Attendance : has records
+    Students "1" -- "0..*" Attendance : has results

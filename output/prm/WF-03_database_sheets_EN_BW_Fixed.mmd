@@ -1,0 +1,48 @@
+%%{init: {"theme": "base", "themeVariables": {"background": "#FFFFFF", "mainBkg": "#FFFFFF", "primaryColor": "#FFFFFF", "secondaryColor": "#FFFFFF", "tertiaryColor": "#FFFFFF", "primaryBorderColor": "#000000", "primaryTextColor": "#000000", "textColor": "#000000", "lineColor": "#000000", "noteBkgColor": "#FFFFFF", "noteBorderColor": "#000000", "noteTextColor": "#000000", "classText": "#000000", "edgeLabelBackground": "#FFFFFF"}}}%%
+%% UML model of physical Google Sheets columns and logical references · WF-03
+%% A single-line class header keeps title and attributes in separate compartments in draw.io.
+%% Source: backend/apps_script/Lab2Free.gs (LAB2_TABLES), StudentPortal.gs
+classDiagram
+    direction LR
+    class PortalGradebooks {
+        ID classId
+        JSON components
+        Integer version
+        ID activePublicationId
+        ISODateTime updatedAt
+        Email updatedBy
+    }
+    class PortalGradeDrafts {
+        ID id
+        ID classId
+        ID studentId
+        JSON grades
+        String comment
+    }
+    class PortalPublications {
+        ID id
+        ID classId
+        Integer version
+        JSON components
+        ISODateTime publishedAt
+        Email publishedBy
+        String requestKey
+    }
+    class PortalPublishedGrades {
+        ID id
+        ID publicationId
+        ID studentId
+        JSON grades
+        String comment
+    }
+    PortalGradebooks "1" -- "0..*" PortalGradeDrafts : classId
+    PortalGradebooks "1" -- "0..*" PortalPublications : history by classId
+    PortalGradebooks "0..1" -- "0..1" PortalPublications : activePublicationId
+    PortalPublications "1" -- "0..*" PortalPublishedGrades : publicationId
+%% note for PortalGradebooks "Logical key is classId. activePublicationId is empty or points to a publication for the same class."
+%% note for PortalGradeDrafts "ID is derived from classId and studentId."
+%% note for PortalPublications "Logical key is id. Retries are matched by classId and requestKey."
+%% note for PortalPublishedGrades "ID is derived from publicationId and studentId. Student Web reads records by student identity."
+%% Types shown are the logical types that Apps Script reads and validates.
+%% Relationships represent references handled by Apps Script across the four gradebook sheets.
+

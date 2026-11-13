@@ -1,0 +1,57 @@
+%% STATUS: IMPLEMENTED
+%% Precondition: A lecturer has opened the attendance session and displayed its QR code.
+sequenceDiagram
+    actor S as Student
+    participant UI as QR Check-in Page
+    participant API as Cloud Functions
+    participant DB as Cloud Firestore
+    participant AUTH as Firebase Auth
+
+    S->>UI: Scan attendance QR
+    S->>UI: Sign in with school Google account
+    UI->>AUTH: signInWithPopup(GoogleAuthProvider)
+    activate AUTH
+    AUTH-->>UI: Signed-in account
+    deactivate AUTH
+
+    UI->>API: studentSessionInfo(sessionId, qrToken)
+    activate API
+    API->>API: Verify Firebase ID token
+    API->>DB: Read session and student eligibility
+    activate DB
+    DB-->>API: Session and roster data
+    deactivate DB
+    API-->>UI: Session details or validation error
+    deactivate API
+
+    alt [session valid and student eligible]
+        UI-->>S: Show lesson details
+        S->>UI: Confirm presence
+        opt [Secret Code enabled]
+            S->>UI: Enter Secret Code
+        end
+        UI->>API: studentCheckIn(sessionId, qrToken, confirmPresent, secretCode)
+        activate API
+        API->>API: Verify identity and presence confirmation
+        API->>DB: Read session deadline, eligibility and attendance
+        activate DB
+        DB-->>API: Session state and existing record
+        deactivate DB
+        alt [session closed, QR or Secret Code invalid, or student ineligible]
+            API-->>UI: Check-in rejected
+        else [valid check-in already recorded]
+            API-->>UI: Return original receipt
+        else [record was adjusted by lecturer]
+            API-->>UI: Ask student to contact lecturer
+        else [valid first check-in]
+            API->>DB: Save attendance as PRESENT
+            activate DB
+            DB-->>API: Commit successful
+            deactivate DB
+            API-->>UI: Return check-in receipt
+        end
+        deactivate API
+        UI-->>S: Show check-in outcome
+    else [session invalid or student ineligible]
+        UI-->>S: Show validation error
+    end

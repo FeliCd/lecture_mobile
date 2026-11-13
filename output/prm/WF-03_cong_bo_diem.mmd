@@ -1,0 +1,78 @@
+%%{init: {"theme":"base","look":"classic","fontFamily":"Arial, sans-serif","themeVariables":{"background":"#FFFFFF","primaryColor":"#FFFFFF","secondaryColor":"#FFFFFF","tertiaryColor":"#FFFFFF","primaryTextColor":"#000000","secondaryTextColor":"#000000","tertiaryTextColor":"#000000","primaryBorderColor":"#000000","secondaryBorderColor":"#000000","tertiaryBorderColor":"#000000","lineColor":"#000000","textColor":"#000000","mainBkg":"#FFFFFF","nodeBorder":"#000000","clusterBkg":"#FFFFFF","clusterBorder":"#000000","edgeLabelBackground":"#FFFFFF","actorBkg":"#FFFFFF","actorBorder":"#000000","actorTextColor":"#000000","actorLineColor":"#000000","signalColor":"#000000","signalTextColor":"#000000","labelBoxBkgColor":"#FFFFFF","labelBoxBorderColor":"#000000","labelTextColor":"#000000","loopTextColor":"#000000","noteBkgColor":"#FFFFFF","noteBorderColor":"#000000","noteTextColor":"#000000","activationBkgColor":"#FFFFFF","activationBorderColor":"#000000","sequenceNumberColor":"#000000","relationColor":"#000000","relationLabelColor":"#000000","attributeBackgroundColorOdd":"#FFFFFF","attributeBackgroundColorEven":"#FFFFFF","fontFamily":"Arial, sans-serif","fontSize":"14px"},"themeCSS":"text,tspan{font-family:Arial,sans-serif!important;font-size:14px!important} .actor-line{stroke:#000000!important;stroke-dasharray:5 4!important} .loopLine:not([style*=\"dasharray\"]){stroke-dasharray:none!important} .messageText,.labelText,.loopText,.noteText{fill:#000000!important} .entityBox,.attributeBoxOdd,.attributeBoxEven{fill:#FFFFFF!important;stroke:#000000!important}","sequence":{"mirrorActors":false,"diagramMarginX":12,"diagramMarginY":12,"actorMargin":36,"width":210,"height":80,"boxMargin":8,"boxTextMargin":6,"messageMargin":28,"noteMargin":8,"bottomMarginAdj":1,"fontFamily":"Arial, sans-serif","actorFontFamily":"Arial, sans-serif","messageFontFamily":"Arial, sans-serif","noteFontFamily":"Arial, sans-serif","actorFontSize":14,"messageFontSize":14,"noteFontSize":14,"wrap":true,"wrapPadding":8,"useMaxWidth":false},"flowchart":{"htmlLabels":false,"curve":"linear","nodeSpacing":20,"rankSpacing":35,"padding":12,"useMaxWidth":false},"er":{"useMaxWidth":false,"minEntityWidth":120,"entityPadding":10}}}%%
+%% STATUS: IMPLEMENTED
+%% USE CASE: WF-03 / BR-03 - Công bố điểm từ Mobile và xem điểm đã công bố trên Student Web
+%% SOURCE: lib/grades/gradebook_page.dart
+%% SOURCE: lib/grades/gradebook_controller.dart
+%% SOURCE: lib/lab2/classes.dart; lib/lab2/desktop_sync.dart
+%% SOURCE: backend/apps_script/Code.gs; backend/apps_script/Lab2Free.gs; backend/apps_script/StudentPortal.gs
+%% TEST: backend/test/mobile-gradebook.test.cjs; backend/test/student-portal.test.cjs
+sequenceDiagram
+    actor GV as Giảng viên
+    participant UI as LecturerGradebookPage
+    participant CTRL as GradebookController
+    participant API as Apps Script
+    participant DB as Google Sheets
+    participant WEB as Student Web
+    actor SV as Sinh viên
+    GV->>UI: Xác nhận công bố hoặc gửi lại
+    activate UI
+    UI->>CTRL: publish()
+    activate CTRL
+    CTRL->>CTRL: Kiểm canPublish và tạo hoặc tái dùng pendingPublish
+    Note over CTRL: Payload gồm classId, version, requestKey và studentIds
+    CTRL->>API: POST /exec qua lab2Call / portalCall với method publishGrades
+    activate API
+    API->>API: Xác thực giảng viên và kiểm quyền lớp
+    alt Không đủ quyền hoặc payload không hợp lệ
+        API-->>CTRL: JSON lỗi
+    else Đúng quyền và requestKey hợp lệ
+        API->>DB: lab2Read_(PortalPublications)
+        activate DB
+        DB-->>API: Các bản công bố
+        deactivate DB
+        alt Trùng classId và requestKey
+            API-->>CTRL: saved = true, publicationId cũ
+        else Lượt công bố mới
+            API->>API: portalVersion_ và kiểm roster
+            alt Version cũ hoặc roster thay đổi (BR-03)
+                API-->>CTRL: VERSION_CONFLICT hoặc ROSTER_CHANGED
+            else Version và roster hợp lệ
+                API->>DB: Đọc PortalGradeDrafts
+                DB-->>API: Điểm nháp
+                API->>API: Tạo snapshot theo sinh viên
+                API->>DB: lab2Write_ gọi Sheets.Spreadsheets.batchUpdate
+                activate DB
+                Note over API,DB: Ghi snapshot, bản công bố, con trỏ activePublicationId và audit cùng một batch
+                alt Batch thành công
+                    DB-->>API: Đã ghi
+                    API-->>CTRL: saved = true, publicationId mới
+                else Batch thất bại
+                    DB-->>API: Lỗi ghi
+                    API-->>CTRL: JSON lỗi
+                end
+                deactivate DB
+            end
+        end
+    end
+    deactivate API
+    alt Nhận publicationId
+        CTRL->>CTRL: Cập nhật bản công bố, tăng version cục bộ và xóa pendingPublish
+        CTRL-->>UI: Thành công, thông báo thay đổi trạng thái
+    else Lỗi hoặc chưa xác nhận được kết quả
+        CTRL-->>UI: Hiện lỗi và giữ pendingPublish
+    end
+    deactivate CTRL
+    deactivate UI
+    opt Sinh viên tự mở hoặc tải lại tab điểm
+        SV->>WEB: Mở Điểm đã công bố
+        WEB->>API: portalCall getMyPublishedGrades
+        activate API
+        API->>API: Xác thực sinh viên và kiểm quyền lớp
+        API->>DB: Đọc activePublicationId và tìm snapshot theo danh tính sinh viên
+        DB-->>API: Snapshot cá nhân hoặc không có bản ghi
+        API-->>WEB: Bản điểm cá nhân hoặc published = false
+        deactivate API
+        WEB-->>SV: Hiển thị điểm đã công bố hoặc trạng thái chưa có điểm
+    end
+%% Tải lại bảng điểm thành công sẽ xóa pendingPublish. Gửi lại trước khi tải lại dùng cùng requestKey.
+%% Desktop là client giảng viên dùng chung backend và dữ liệu. Sơ đồ tập trung vào lần công bố từ Mobile.

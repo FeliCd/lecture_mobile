@@ -1,0 +1,50 @@
+%% UML model of physical Google Sheets columns and logical references · WF-03
+%% Source: backend/apps_script/Lab2Free.gs (LAB2_TABLES), StudentPortal.gs
+classDiagram
+    direction LR
+    class PortalGradebooks {
+        <<sheet>>
+        ID classId
+        JSON components
+        Integer version
+        ID activePublicationId
+        ISODateTime updatedAt
+        Email updatedBy
+    }
+    class PortalGradeDrafts {
+        <<sheet>>
+        ID id
+        ID classId
+        ID studentId
+        JSON grades
+        String comment
+    }
+    class PortalPublications {
+        <<sheet>>
+        ID id
+        ID classId
+        Integer version
+        JSON components
+        ISODateTime publishedAt
+        Email publishedBy
+        String requestKey
+    }
+    class PortalPublishedGrades {
+        <<sheet>>
+        ID id
+        ID publicationId
+        ID studentId
+        JSON grades
+        String comment
+    }
+    PortalGradebooks "1" -- "0..*" PortalGradeDrafts : classId
+    PortalGradebooks "1" -- "0..*" PortalPublications : lịch sử theo classId
+    PortalGradebooks "0..1" -- "0..1" PortalPublications : activePublicationId
+    PortalPublications "1" -- "0..*" PortalPublishedGrades : publicationId
+    note for PortalGradebooks "Định danh logic: classId. activePublicationId để trống hoặc trỏ tới bản công bố cùng lớp."
+    note for PortalGradeDrafts "ID tạo từ cặp classId và studentId."
+    note for PortalPublications "Định danh logic: id. Tìm lượt gửi lại theo classId và requestKey."
+    note for PortalPublishedGrades "ID tạo từ cặp publicationId và studentId. Web truy xuất theo danh tính sinh viên."
+%% Kiểu dữ liệu ghi trên mô hình là kiểu logic mà Apps Script đọc và kiểm tra.
+%% Các liên kết là tham chiếu do Apps Script xử lý, theo phạm vi bốn sheet bảng điểm.
+

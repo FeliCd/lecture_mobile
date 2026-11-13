@@ -1,0 +1,173 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mxfile host="app.diagrams.net">
+  <diagram id="wf03-storage" name="Slide 15 - Storage Model">
+    <mxGraphModel dx="1200" dy="640" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="0" page="1" pageScale="1" pageWidth="1100" pageHeight="650" background="#FFFFFF" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Google Sheets Storage Model" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontFamily=Arial;fontColor=#000000;fontStyle=1;fontSize=24;" vertex="1" parent="1">
+          <mxGeometry x="64" y="21" width="970" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="book" value="PortalGradebooks" style="swimlane;horizontal=1;startSize=43;rounded=0;html=0;fillColor=#FFFFFF;swimlaneFillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=16;collapsible=0;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="65" y="80" width="265" height="215" as="geometry" />
+        </mxCell>
+        <mxCell id="book-0" value="classId: ID {key}" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="book">
+          <mxGeometry x="12" y="53" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="book-1" value="components: JSON" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="book">
+          <mxGeometry x="12" y="75" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="book-2" value="version: Integer" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="book">
+          <mxGeometry x="12" y="97" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="book-3" value="activePublicationId: ID [0..1]" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="book">
+          <mxGeometry x="12" y="119" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="book-4" value="updatedAt: ISO date-time" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="book">
+          <mxGeometry x="12" y="141" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="book-5" value="updatedBy: Email" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="book">
+          <mxGeometry x="12" y="163" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="publication" value="PortalPublications" style="swimlane;horizontal=1;startSize=43;rounded=0;html=0;fillColor=#FFFFFF;swimlaneFillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=16;collapsible=0;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="770" y="80" width="265" height="215" as="geometry" />
+        </mxCell>
+        <mxCell id="publication-0" value="id: ID {key}" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="publication">
+          <mxGeometry x="12" y="53" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="publication-1" value="classId: ID {ref}" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="publication">
+          <mxGeometry x="12" y="75" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="publication-2" value="version: Integer" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="publication">
+          <mxGeometry x="12" y="97" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="publication-3" value="components: JSON" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="publication">
+          <mxGeometry x="12" y="119" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="publication-4" value="publishedAt: ISO date-time" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="publication">
+          <mxGeometry x="12" y="141" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="publication-5" value="publishedBy: Email" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="publication">
+          <mxGeometry x="12" y="163" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="publication-6" value="requestKey: String" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="publication">
+          <mxGeometry x="12" y="185" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="draft" value="PortalGradeDrafts" style="swimlane;horizontal=1;startSize=43;rounded=0;html=0;fillColor=#FFFFFF;swimlaneFillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=16;collapsible=0;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="65" y="388" width="265" height="175" as="geometry" />
+        </mxCell>
+        <mxCell id="draft-0" value="id: ID {key}" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="draft">
+          <mxGeometry x="12" y="53" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="draft-1" value="classId: ID {ref}" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="draft">
+          <mxGeometry x="12" y="75" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="draft-2" value="studentId: ID {ref}" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="draft">
+          <mxGeometry x="12" y="97" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="draft-3" value="grades: JSON" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="draft">
+          <mxGeometry x="12" y="119" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="draft-4" value="comment: String" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="draft">
+          <mxGeometry x="12" y="141" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="published" value="PortalPublishedGrades" style="swimlane;horizontal=1;startSize=43;rounded=0;html=0;fillColor=#FFFFFF;swimlaneFillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.5;fontStyle=1;fontSize=16;collapsible=0;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="770" y="388" width="265" height="175" as="geometry" />
+        </mxCell>
+        <mxCell id="published-0" value="id: ID {key}" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="published">
+          <mxGeometry x="12" y="53" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="published-1" value="publicationId: ID {ref}" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="published">
+          <mxGeometry x="12" y="75" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="published-2" value="studentId: ID {ref}" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="published">
+          <mxGeometry x="12" y="97" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="published-3" value="grades: JSON" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="published">
+          <mxGeometry x="12" y="119" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="published-4" value="comment: String" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontSize=15;align=left;fontFamily=Arial;fontColor=#000000;" vertex="1" parent="published">
+          <mxGeometry x="12" y="141" width="235" height="21" as="geometry" />
+        </mxCell>
+        <mxCell id="history" parent="1" edge="1" source="book" target="publication" style="edgeStyle=none;rounded=0;html=0;startArrow=none;endArrow=none;strokeColor=#000000;strokeWidth=1.4;exitX=1;exitY=0.31;entryX=0;entryY=0.31;exitPerimeter=0;entryPerimeter=0;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="history-name" value="Publication history by classId" parent="history" style="edgeLabel;html=0;align=center;verticalAlign=middle;labelBackgroundColor=#FFFFFF;fontSize=14;fontFamily=Arial;fontColor=#000000;" vertex="1" connectable="0">
+          <mxGeometry x="0" relative="1" as="geometry">
+            <mxPoint x="0" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="history-left" value="1" parent="history" style="edgeLabel;html=0;align=center;verticalAlign=middle;labelBackgroundColor=#FFFFFF;fontSize=14;fontFamily=Arial;fontColor=#000000;" vertex="1" connectable="0">
+          <mxGeometry x="-0.89" relative="1" as="geometry">
+            <mxPoint x="0" y="-13" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="history-right" value="0..*" parent="history" style="edgeLabel;html=0;align=center;verticalAlign=middle;labelBackgroundColor=#FFFFFF;fontSize=14;fontFamily=Arial;fontColor=#000000;" vertex="1" connectable="0">
+          <mxGeometry x="0.89" relative="1" as="geometry">
+            <mxPoint x="0" y="-13" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="active" parent="1" edge="1" source="book" target="publication" style="edgeStyle=none;rounded=0;html=0;startArrow=none;endArrow=none;strokeColor=#000000;strokeWidth=1.4;exitX=1;exitY=0.67;entryX=0;entryY=0.67;exitPerimeter=0;entryPerimeter=0;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="active-name" value="Active publication by activePublicationId" parent="active" style="edgeLabel;html=0;align=center;verticalAlign=middle;labelBackgroundColor=#FFFFFF;fontSize=14;fontFamily=Arial;fontColor=#000000;" vertex="1" connectable="0">
+          <mxGeometry x="0" relative="1" as="geometry">
+            <mxPoint x="0" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="active-left" value="0..1" parent="active" style="edgeLabel;html=0;align=center;verticalAlign=middle;labelBackgroundColor=#FFFFFF;fontSize=14;fontFamily=Arial;fontColor=#000000;" vertex="1" connectable="0">
+          <mxGeometry x="-0.89" relative="1" as="geometry">
+            <mxPoint x="0" y="-13" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="active-right" value="0..1" parent="active" style="edgeLabel;html=0;align=center;verticalAlign=middle;labelBackgroundColor=#FFFFFF;fontSize=14;fontFamily=Arial;fontColor=#000000;" vertex="1" connectable="0">
+          <mxGeometry x="0.89" relative="1" as="geometry">
+            <mxPoint x="0" y="-13" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="drafts" parent="1" edge="1" source="book" target="draft" style="edgeStyle=none;rounded=0;html=0;startArrow=none;endArrow=none;strokeColor=#000000;strokeWidth=1.4;exitX=0.5;exitY=1;entryX=0.5;entryY=0;exitPerimeter=0;entryPerimeter=0;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="drafts-name" value="classId" parent="drafts" style="edgeLabel;html=0;align=center;verticalAlign=middle;labelBackgroundColor=#FFFFFF;fontSize=14;fontFamily=Arial;fontColor=#000000;" vertex="1" connectable="0">
+          <mxGeometry x="0" relative="1" as="geometry">
+            <mxPoint x="60" y="0" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="drafts-left" value="1" parent="drafts" style="edgeLabel;html=0;align=center;verticalAlign=middle;labelBackgroundColor=#FFFFFF;fontSize=14;fontFamily=Arial;fontColor=#000000;" vertex="1" connectable="0">
+          <mxGeometry x="-0.7" relative="1" as="geometry">
+            <mxPoint x="19" y="0" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="drafts-right" value="0..*" parent="drafts" style="edgeLabel;html=0;align=center;verticalAlign=middle;labelBackgroundColor=#FFFFFF;fontSize=14;fontFamily=Arial;fontColor=#000000;" vertex="1" connectable="0">
+          <mxGeometry x="0.7" relative="1" as="geometry">
+            <mxPoint x="24" y="0" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rows" parent="1" edge="1" source="publication" target="published" style="edgeStyle=none;rounded=0;html=0;startArrow=none;endArrow=none;strokeColor=#000000;strokeWidth=1.4;exitX=0.5;exitY=1;entryX=0.5;entryY=0;exitPerimeter=0;entryPerimeter=0;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rows-name" value="publicationId" parent="rows" style="edgeLabel;html=0;align=center;verticalAlign=middle;labelBackgroundColor=#FFFFFF;fontSize=14;fontFamily=Arial;fontColor=#000000;" vertex="1" connectable="0">
+          <mxGeometry x="0" relative="1" as="geometry">
+            <mxPoint x="60" y="0" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rows-left" value="1" parent="rows" style="edgeLabel;html=0;align=center;verticalAlign=middle;labelBackgroundColor=#FFFFFF;fontSize=14;fontFamily=Arial;fontColor=#000000;" vertex="1" connectable="0">
+          <mxGeometry x="-0.7" relative="1" as="geometry">
+            <mxPoint x="19" y="0" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="rows-right" value="0..*" parent="rows" style="edgeLabel;html=0;align=center;verticalAlign=middle;labelBackgroundColor=#FFFFFF;fontSize=14;fontFamily=Arial;fontColor=#000000;" vertex="1" connectable="0">
+          <mxGeometry x="0.7" relative="1" as="geometry">
+            <mxPoint x="24" y="0" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend" value="{key} Logical identifier     {ref} Logical reference" style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontFamily=Arial;fontColor=#000000;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="65" y="580" width="970" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="source" value="Source: LAB2_TABLES. Column types and references are enforced by Apps Script." style="text;html=0;strokeColor=none;fillColor=none;verticalAlign=middle;fontFamily=Arial;fontColor=#000000;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="65" y="605" width="970" height="22" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,40 @@
+%% UML class diagram · WF-03 · Mobile lecturer, shared Apps Script
+%% Sources: lib/grades/gradebook_page.dart, lib/grades/gradebook_controller.dart,
+%% lib/lab2/classes.dart, lib/lab2/repository.dart, lib/lab2/desktop_sync.dart,
+%% backend/apps_script/StudentPortal.gs.
+classDiagram
+    direction LR
+    class LecturerGradebookPage {
+        +String classId
+        +GradebookCall call
+        +createState()
+    }
+    class PageState["_LecturerGradebookPageState"] {
+        +GradebookController model
+        +initState()
+        +dispose()
+    }
+    class GradebookController {
+        +GradeRow? book
+        +GradeRow? pendingPublish
+        +load()
+        +save()
+        +publish()
+    }
+    class CampusRepository {
+        +call(name, input)
+    }
+    class DesktopSync {
+        +call(name, input)
+    }
+    class StudentPortal["StudentPortal.gs"] {
+        <<module>>
+        portalCall_(book, actor, method, d)
+    }
+    LecturerGradebookPage ..> PageState : createState
+    PageState *-- "1" GradebookController : model
+    GradebookController ..> CampusRepository : qua callback GradebookCall
+    CampusRepository ..> DesktopSync : shared mode
+    DesktopSync ..> StudentPortal : qua /exec
+    note for GradebookController "GradebookCall là typedef. Callback trong classes.dart nối controller với CampusRepository."
+
