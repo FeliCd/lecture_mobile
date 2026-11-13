@@ -27,7 +27,11 @@ void main() {
       final model = GradebookController(
         classId: 'c1',
         call: (method, data) async {
-          if (method == 'getGradebook') return initial;
+          if (method == 'getGradebook') {
+            return attempts < 2
+                ? initial
+                : {...initial, 'activePublicationId': 'p1', 'version': 2};
+          }
           writes.add({'method': method, ...data});
           if (method == 'saveGradebook') return {'saved': true, 'version': 1};
           if (method == 'publishGrades') {

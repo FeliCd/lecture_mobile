@@ -18,6 +18,7 @@ class GradebookController extends ChangeNotifier {
       (book?['components'] as List? ?? []).cast<GradeRow>();
   List<GradeRow> get students =>
       (book?['students'] as List? ?? []).cast<GradeRow>();
+  GradeRow? get publication => book?['publication'] as GradeRow?;
   bool get editable => book != null && !busy && pendingPublish == null;
   bool get canPublish =>
       book != null &&
@@ -51,6 +52,8 @@ class GradebookController extends ChangeNotifier {
           'VERSION_CONFLICT':
               'Bảng điểm đã thay đổi trên thiết bị khác. Hãy tải lại và kiểm tra phiên bản mới trước khi tiếp tục.',
           'ROSTER_CHANGED': 'Danh sách lớp đã thay đổi. Tải lại bảng điểm.',
+          'INVALID_PUBLICATION_STATE':
+              'Máy chủ không tìm thấy bản điểm đang công bố của lớp này.',
           'DATABASE_MAINTENANCE':
               'Hệ thống đang tạm dừng ghi dữ liệu. Hãy thử lại sau.',
           'RATE_LIMITED':
@@ -82,14 +85,19 @@ class GradebookController extends ChangeNotifier {
     }
   }
 
-  Future<bool> load() => _run(() async {
-    final value = await call('getGradebook', {'classId': classId});
+  Future<void> _loadBook() async {
+    final value = await call('getGradebook', {
+      'classId': classId,
+      'includePublication': true,
+    });
     if (_disposed) return;
     book = Map<String, dynamic>.from(jsonDecode(jsonEncode(value)) as Map);
     dirty = false;
     pendingPublish = null;
     revision++;
-  });
+  }
+
+  Future<bool> load() => _run(_loadBook);
   void setGrade(GradeRow student, String id, String value) {
     if (!editable) return;
     (student['grades'] as Map)[id] = value;
@@ -198,14 +206,8 @@ class GradebookController extends ChangeNotifier {
       'studentIds': students.map((s) => s['studentId']).toList(),
     };
     return _run(() async {
-      final response = await call(
-        'publishGrades',
-        Map<String, dynamic>.from(pendingPublish!),
-      );
-      if (_disposed) return;
-      book!['activePublicationId'] = response['publicationId'];
-      book!['version'] = (book!['version'] as num).toInt() + 1;
-      pendingPublish = null;
+      await call('publishGrades', Map<String, dynamic>.from(pendingPublish!));
+      if (!_disposed) await _loadBook();
     });
   }
 
@@ -218,6 +220,7 @@ class GradebookController extends ChangeNotifier {
       });
       if (_disposed) return;
       book!['activePublicationId'] = '';
+      book!.remove('publication');
       book!['version'] = (book!['version'] as num).toInt() + 1;
     });
   }

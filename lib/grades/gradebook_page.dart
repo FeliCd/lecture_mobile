@@ -157,6 +157,55 @@ class _LecturerGradebookPageState extends State<LecturerGradebookPage> {
     if (mounted) await model.publish();
   }
 
+  void viewPublishedGrades() {
+    final publication = model.publication!;
+    final components = (publication['components'] as List).cast<GradeRow>();
+    final students = (publication['students'] as List).cast<GradeRow>();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => CampusScaffold(
+          appBar: AppBar(title: const Text('Điểm đang công bố')),
+          body: ListView.builder(
+            padding: CampusSpace.pageInsets,
+            itemCount: students.length + 1,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return CampusInfoBanner(
+                  icon: Icons.visibility_outlined,
+                  title: widget.classLabel,
+                  subtitle: "Bản công bố phiên bản ${publication['version']}",
+                );
+              }
+              final student = students[index - 1];
+              final grades = student['grades'] as Map;
+              final comment = student['comment'] as String? ?? '';
+              return Card(
+                child: ExpansionTile(
+                  title: Text(student['fullName'] ?? student['studentId']),
+                  subtitle: Text(student['studentCode'] ?? ''),
+                  children: [
+                    for (final component in components)
+                      ListTile(
+                        title: Text(component['name']),
+                        trailing: Text(
+                          "${grades[component['id']] == '' ? '—' : grades[component['id']] ?? '—'} / ${component['maxScore']}",
+                        ),
+                      ),
+                    if (comment.isNotEmpty)
+                      ListTile(
+                        title: const Text('Nhận xét'),
+                        subtitle: Text(comment),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: model,
@@ -226,6 +275,11 @@ class _LecturerGradebookPageState extends State<LecturerGradebookPage> {
                         : 'Thử lại cùng lần công bố',
                   ),
                 ),
+                if (model.publication != null)
+                  OutlinedButton(
+                    onPressed: model.busy ? null : viewPublishedGrades,
+                    child: const Text('Xem điểm đang công bố'),
+                  ),
                 OutlinedButton(
                   onPressed:
                       model.editable &&

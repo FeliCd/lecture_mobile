@@ -1482,6 +1482,12 @@ async function portalBook_(book, classId) {
     const r = (await sharedRowsWhere_(book, 'PortalGradebooks', 'classId', classId))[0];
     return r || { classId, components: '[]', version: '0', activePublicationId: '', updatedAt: '', updatedBy: '' };
 }
+async function portalActivePublication_(book, state) {
+    const [publication] = await sharedRowsById_(book, 'PortalPublications', [state.activePublicationId]);
+    if (!publication || publication.classId !== state.classId)
+        throw Error('INVALID_PUBLICATION_STATE');
+    return publication;
+}
 async function portalRoster_(book, classId) {
     const ids = (await sharedRowsWhere_(book, 'Enrollments', 'classId', classId)).map(e => e.studentId);
     const students = (await sharedRowsById_(book, 'Students', ids));
@@ -1665,22 +1671,38 @@ async function portalCall_(book, actor, method, d) {
         const state = (await portalBook_(book, cls.classId));
         if (!state.activePublicationId)
             return { published: false };
-        const p = (await lab2Read_(book, 'PortalPublications')).find(p => p.id === state.activePublicationId && p.classId === cls.classId);
-        if (!p)
-            throw Error('INVALID_PUBLICATION_STATE');
-        const row = (await lab2Read_(book, 'PortalPublishedGrades')).find(r => r.publicationId === p.id && r.studentId === actor.entity.studentId);
+        const p = await portalActivePublication_(book, state);
+        const [row] = await sharedRowsById_(book, 'PortalPublishedGrades', [
+            lab2Hash_(p.id + '|' + actor.entity.studentId),
+        ]);
         if (!row)
             return { published: false };
+        if (row.publicationId !== p.id || row.studentId !== actor.entity.studentId)
+            throw Error('INVALID_PUBLICATION_STATE');
         return { published: true, publicationId: p.id, publishedAt: p.publishedAt, version: Number(p.version), components: JSON.parse(p.components), grades: JSON.parse(row.grades), comment: row.comment };
     }
     portalTeacher_(actor);
     const state = (await portalBook_(book, cls.classId)), roster = (await portalRoster_(book, cls.classId));
     if (method === 'getGradebook') {
-        const drafts = (await lab2Read_(book, 'PortalGradeDrafts')).filter(r => r.classId === cls.classId);
-        return { ...state, version: Number(state.version), components: JSON.parse(state.components), students: roster.map(s => {
+        const drafts = await sharedRowsWhere_(book, 'PortalGradeDrafts', 'classId', cls.classId);
+        const result = { ...state, version: Number(state.version), components: JSON.parse(state.components), students: roster.map(s => {
                 const r = drafts.find(r => r.studentId === s.studentId);
                 return { ...s, grades: r ? JSON.parse(r.grades) : {}, comment: r ? r.comment : '' };
             }) };
+        if (d.includePublication === true && state.activePublicationId) {
+            const p = await portalActivePublication_(book, state);
+            const rows = await sharedRowsWhere_(book, 'PortalPublishedGrades', 'publicationId', p.id);
+            const members = new Map(roster.map(student => [student.studentId, student]));
+            result.publication = {
+                version: Number(p.version), publishedAt: p.publishedAt, components: JSON.parse(p.components),
+                students: rows.map(row => {
+                    const student = members.get(row.studentId);
+                    return { studentId: row.studentId, fullName: student?.fullName,
+                        studentCode: student?.studentCode, grades: JSON.parse(row.grades), comment: row.comment };
+                }),
+            };
+        }
+        return result;
     }
     if (method === 'saveGradebook') {
         portalVersion_(state, d.version);
@@ -1697,14 +1719,16 @@ async function portalCall_(book, actor, method, d) {
         return { saved: true, version: Number(state.version) + 1 };
     }
     if (method === 'publishGrades') {
-        const key = portalKey_(d.requestKey), publications = (await lab2Read_(book, 'PortalPublications'));
-        const retry = publications.find(p => p.classId === cls.classId && p.requestKey === key);
+        const key = portalKey_(d.requestKey);
+        const publications = await sharedRowsWhere_(book, 'PortalPublications', 'requestKey', key);
+        const retry = publications.find(p => p.classId === cls.classId);
         if (retry)
             return { saved: true, publicationId: retry.id };
         portalVersion_(state, d.version);
         if (!Array.isArray(d.studentIds) || d.studentIds.length !== roster.length || new Set(d.studentIds).size !== roster.length || roster.some(s => !d.studentIds.includes(s.studentId)))
             throw Error('ROSTER_CHANGED');
-        const components = portalComponents_(JSON.parse(state.components)), drafts = (await lab2Read_(book, 'PortalGradeDrafts')).filter(r => r.classId === cls.classId);
+        const components = portalComponents_(JSON.parse(state.components));
+        const drafts = await sharedRowsWhere_(book, 'PortalGradeDrafts', 'classId', cls.classId);
         if (!roster.length)
             throw Error('EMPTY_ROSTER');
         const id = randomUUID(), now = new Date().toISOString();

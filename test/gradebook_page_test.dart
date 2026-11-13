@@ -48,6 +48,7 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(390, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final calls = <Map<String, dynamic>>[];
+      var published = false;
       await tester.pumpWidget(
         MaterialApp(
           home: LecturerGradebookPage(
@@ -55,11 +56,33 @@ void main() {
             classLabel: 'PRM393 · SE1',
             call: (method, data) async {
               calls.add({'method': method, ...data});
-              if (method == 'getGradebook') return fixture.book();
+              if (method == 'getGradebook') {
+                final draft = fixture.book();
+                if (!published) return draft;
+                expect(data['includePublication'], true);
+                return {
+                  ...draft,
+                  'version': 2,
+                  'activePublicationId': 'p1',
+                  'publication': {
+                    'version': 2,
+                    'components': draft['components'],
+                    'students': [
+                      {
+                        ...(draft['students'] as List).single as Map,
+                        'grades': {'quiz': 0},
+                      },
+                    ],
+                  },
+                };
+              }
               if (method == 'saveGradebook') {
                 return {'version': 1, 'saved': true};
               }
-              if (method == 'publishGrades') return {'publicationId': 'p1'};
+              if (method == 'publishGrades') {
+                published = true;
+                return {'publicationId': 'p1'};
+              }
               return {'saved': true};
             },
           ),
@@ -91,8 +114,16 @@ void main() {
       expect(calls.where((c) => c['method'] == 'publishGrades'), isEmpty);
       await tester.tap(find.widgetWithText(FilledButton, 'Công bố điểm'));
       await tester.pumpAndSettle();
-      expect(calls.last['method'], 'publishGrades');
+      expect(calls[calls.length - 2]['method'], 'publishGrades');
+      expect(calls.last['method'], 'getGradebook');
       expect(find.textContaining('Có bản đang công bố'), findsOneWidget);
+      await tester.tap(find.text('Xem điểm đang công bố'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Student'));
+      await tester.pumpAndSettle();
+      expect(find.text('0 / 10'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Thu hồi'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Thu hồi'));

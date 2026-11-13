@@ -92,6 +92,23 @@ test("mobile publishes the shared gradebook and Student Web sees only the publis
   const published = await portal(student, "getMyPublishedGrades", { classId });
   assert.equal(published.publicationId, publication.publicationId);
   assert.equal(published.grades.quiz, 0);
+  await portal(teacher, "saveGradebook", {
+    ...draft, version: 2,
+    students: students.map(row => ({ ...row, grades: { quiz: 7 } })),
+  });
+  const mobileBook = await mobilePortal("getGradebook", { classId, includePublication: true });
+  assert.equal(mobileBook.students.find(row => row.studentId === "s1").grades.quiz, 7);
+  assert.equal(mobileBook.publication.students.find(row => row.studentId === "s1").grades.quiz, 0);
+  assert.equal(mobileBook.publication.version, 2);
+  assert.equal((await portal(student, "getMyPublishedGrades", { classId })).grades.quiz, 0);
+  const desktopPublication = await portal(teacher, "publishGrades", {
+    ...payload, version: 3, requestKey: "publish-from-desktop-002",
+  });
+  const reloaded = await mobilePortal("getGradebook", { classId, includePublication: true });
+  assert.equal(reloaded.activePublicationId, desktopPublication.publicationId);
+  assert.equal(reloaded.publication.students.find(row => row.studentId === "s1").grades.quiz, 7);
+  await mobilePortal("revokeGrades", { classId, version: 4 });
+  assert.equal((await portal(student, "getMyPublishedGrades", { classId })).published, false);
   await assert.rejects(portal(student,"getGradebook",{classId}), /PERMISSION_DENIED/);
   await assert.rejects(portal(other,"getGradebook",{classId}), /PERMISSION_DENIED/);
 });
