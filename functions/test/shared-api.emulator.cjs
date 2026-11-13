@@ -74,18 +74,24 @@ test("desktop and mobile share attendance revisions, captured roster, and retry 
   assert.equal(snapshot.collections.classes.length, 1);
 });
 
-test("mobile saves grade drafts, Desktop publishes, and Student Web sees only the published snapshot", async () => {
+test("mobile publishes the shared gradebook and Student Web sees only the published snapshot", async () => {
   const classId = "c1";
-  const getGradebook = await mobile("portalCall", { method: "getGradebook", data: { classId } });
+  const mobilePortal = (method, data) => mobile("portalCall", { method, data });
+  const getGradebook = await mobilePortal("getGradebook", { classId });
   const students = getGradebook.students.map(row => ({ studentId: row.studentId, grades: { quiz: row.studentId === "s1" ? 0 : 10 }, comment: "" }));
   const draft = { classId, version: 0, students, components: [{ id: "quiz", name: "Quiz", maxScore: 10 }] };
   await assert.rejects(portal(teacher,"saveGradebook",draft,false), /DATABASE_MAINTENANCE/);
-  await mobile("portalCall", { method: "saveGradebook", data: draft });
+  await mobilePortal("saveGradebook", draft);
   assert.equal((await portal(student,"getMyPublishedGrades",{classId})).published, false);
-  const payload = { classId, version: 1, requestKey: "publish-from-desktop-001", studentIds: students.map(row => row.studentId) };
-  const publication = await portal(teacher,"publishGrades",payload);
-  assert.equal((await portal(teacher,"publishGrades",payload)).publicationId, publication.publicationId);
-  assert.equal((await portal(student,"getMyPublishedGrades",{classId})).grades.quiz, 0);
+  const payload = { classId, version: 1, requestKey: "publish-from-mobile-001", studentIds: students.map(row => row.studentId) };
+  const publication = await mobilePortal("publishGrades", payload);
+  assert.equal((await mobilePortal("publishGrades", payload)).publicationId, publication.publicationId);
+  const desktopBook = await portal(teacher, "getGradebook", { classId });
+  assert.equal(desktopBook.activePublicationId, publication.publicationId);
+  assert.equal(desktopBook.version, 2);
+  const published = await portal(student, "getMyPublishedGrades", { classId });
+  assert.equal(published.publicationId, publication.publicationId);
+  assert.equal(published.grades.quiz, 0);
   await assert.rejects(portal(student,"getGradebook",{classId}), /PERMISSION_DENIED/);
   await assert.rejects(portal(other,"getGradebook",{classId}), /PERMISSION_DENIED/);
 });

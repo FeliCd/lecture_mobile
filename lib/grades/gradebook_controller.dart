@@ -49,8 +49,14 @@ class GradebookController extends ChangeNotifier {
       if (!_disposed) {
         const messages = {
           'VERSION_CONFLICT':
-              'Bảng điểm đã thay đổi trên thiết bị khác. Bản sửa vẫn giữ; kiểm tra và tải lại trước khi lưu.',
+              'Bảng điểm đã thay đổi trên thiết bị khác. Hãy tải lại và kiểm tra phiên bản mới trước khi tiếp tục.',
           'ROSTER_CHANGED': 'Danh sách lớp đã thay đổi. Tải lại bảng điểm.',
+          'DATABASE_MAINTENANCE':
+              'Hệ thống đang tạm dừng ghi dữ liệu. Hãy thử lại sau.',
+          'RATE_LIMITED':
+              'Bạn đã gửi nhiều yêu cầu. Hãy đợi một phút rồi thử lại.',
+          'BACKEND_MOVED_TO_FIREBASE':
+              'Ứng dụng đang dùng máy chủ cũ. Hãy cập nhật ứng dụng để kết nối Firebase.',
           'INVALID_COMPONENTS': 'Kiểm tra tên và thang điểm của các cột.',
           'PERMISSION_DENIED': 'Bạn không có quyền quản lý điểm lớp này.',
           'FEATURE_DISABLED':
